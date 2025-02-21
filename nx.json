@@ -11,10 +11,7 @@
         },
         "test": {
             "dependsOn": ["^test"],
-            "outputs": [
-                "{workspaceRoot}/build/coverage-results/",
-                "{workspaceRoot}/build/test-results/"
-            ],
+            "outputs": ["{workspaceRoot}/build/coverage-results/", "{workspaceRoot}/build/test-results/"],
             "cache": true
         },
         "lint": {
@@ -26,7 +23,7 @@
         },
         "start": {
             "dependsOn": ["^start"]
-        }  
+        }
     },
     "defaultBase": "main",
     "plugins": [
@@ -50,5 +47,6 @@
                 "previewTargetName": "preview"
             }
         }
-    ]
+    ],
+    "useLegacyCache": true
 }
