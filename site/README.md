@@ -8,7 +8,7 @@ Ensure that the appropriate version of `node` and `npm` is available in your wor
 
 ### Personal Access Token for GitHub Packages
 
-To build the site locally, you will need to generate a personal access token and add it to your `.npmrc`.
+The theme that builds the branded documentation site is a private package. To build the site locally, you will need to generate a personal access token and add it to your `.npmrc`.
 
 ```
 //npm.pkg.github.com/:_authToken=ghp_<token goes here>
