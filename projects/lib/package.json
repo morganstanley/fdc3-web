@@ -24,7 +24,7 @@
     "devDependencies": {
         "@babel/preset-env": "^7.26.9",
         "@babel/preset-typescript": "^7.26.0",
-        "@finos/fdc3": "^2.2.0-alpha.3",
+        "@finos/fdc3": "^2.2.0-beta.1",
         "@morgan-stanley/ts-mocking-bird": "^1.2.0",
         "@types/eslint": "^8.56.10",
         "@types/eslint-scope": "^3.7.7",
@@ -56,7 +56,7 @@
         "typescript": "~5.6.2"
     },
     "peerDependencies": {
-        "@finos/fdc3": "^2.2.0-alpha.3"
+        "@finos/fdc3": "^2.2.0-beta.1"
     },
     "dependencies": {}
 }
