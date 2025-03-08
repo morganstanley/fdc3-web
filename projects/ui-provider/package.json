@@ -58,7 +58,7 @@
         "@finos/fdc3": "^2.2.0-alpha.3"
     },
     "dependencies": {
-        "lit": "^3.2.0",
+        "lit": "^3.2.1",
         "lit-element": "^4.1.0"
     }
 }
