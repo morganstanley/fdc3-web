@@ -13,8 +13,8 @@
         "start:server": "node server.js",
         "prebuild": "npm run clean",
         "build": "webpack",
-        "lint": "cross-env BUILD_TYPE=release eslint -c ../../.eslintrc.js --ext .ts,.js .",
-        "lint-fix": "eslint -c ../../.eslintrc.js --ext .ts,.js . --fix"
+        "lint": "cross-env BUILD_TYPE=release eslint -c ../../eslint.config.mjs --ext .ts,.js .",
+        "lint-fix": "eslint -c ../../eslint.config.mjs --ext .ts,.js . --fix"
     },
     "devDependencies": {
         "@babel/preset-env": "^7.26.9",
@@ -25,13 +25,13 @@
         "@types/estree": "^1.0.6",
         "@types/jest": "^29.5.14",
         "@types/node": "^20.17.24",
-        "@typescript-eslint/eslint-plugin": "^7.18.0",
-        "@typescript-eslint/parser": "^7.18.0",
+        "@typescript-eslint/eslint-plugin": "^8.27.0",
+        "@typescript-eslint/parser": "^8.27.0",
         "bootstrap": "^5.3.3",
         "concurrently": "^9.1.2",
         "copy-webpack-plugin": "^12.0.2",
-        "eslint": "^8.57.0",
-        "eslint-config-prettier": "^9.1.0",
+        "eslint": "^9.22.0",
+        "eslint-config-prettier": "^10.1.1",
         "eslint-plugin-import": "^2.31.0",
         "eslint-plugin-prefer-arrow": "^1.2.3",
         "eslint-plugin-prettier": "^5.2.3",

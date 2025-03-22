@@ -93,14 +93,16 @@ describe('RootMessagePublisher', () => {
             const instance = createInstance();
             await instance.initialise('mock-identity-url');
 
-            expect(mockDirectory.withFunction('registerNewInstance').withParameters('mock-identity-url')).wasCalledOnce;
+            expect(
+                mockDirectory.withFunction('registerNewInstance').withParameters('mock-identity-url'),
+            ).wasCalledOnce();
         });
 
         it('should call determineIdentity with the current window location if identityUrl is not provided', async () => {
             const instance = createInstance();
             await instance.initialise();
 
-            expect(mockDirectory.withFunction('registerNewInstance').withParameters('mock-location')).wasCalledOnce;
+            expect(mockDirectory.withFunction('registerNewInstance').withParameters('mock-location')).wasCalledOnce();
         });
 
         it('should set the rootAppIdentifier and return it', async () => {

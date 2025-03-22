@@ -170,7 +170,9 @@ export class IframeMessagingProvider implements IProxyMessagingProvider {
      */
     private onMessage(event: MessageEvent, resolve: (value: void | PromiseLike<void>) => void): void {
         if (event.data.type === 'WCP3Handshake') {
-            this.relayInitializeTimeout && clearTimeout(this.relayInitializeTimeout);
+            if (this.relayInitializeTimeout) {
+                clearTimeout(this.relayInitializeTimeout);
+            }
             this.relayConnected = true;
             this.consoleRef.log(
                 `Relay connected to iframe with implementation details: ${(<BrowserTypes.WebConnectionProtocol3Handshake>event.data).payload.fdc3Version}`,
