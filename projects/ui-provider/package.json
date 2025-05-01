@@ -31,7 +31,7 @@
         "@types/eslint-scope": "^3.7.7",
         "@types/estree": "^1.0.7",
         "@types/jest": "^29.5.14",
-        "@types/node": "^20.17.30",
+        "@types/node": "^20.17.32",
         "@typescript-eslint/eslint-plugin": "^8.29.0",
         "@typescript-eslint/parser": "^8.29.0",
         "cross-env": "^7.0.3",
