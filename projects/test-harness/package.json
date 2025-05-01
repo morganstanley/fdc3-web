@@ -17,8 +17,8 @@
         "lint-fix": "eslint -c ../../eslint.config.mjs --ext .ts,.js . --fix"
     },
     "devDependencies": {
-        "@babel/preset-env": "^7.26.9",
-        "@babel/preset-typescript": "^7.27.0",
+        "@babel/preset-env": "^7.27.1",
+        "@babel/preset-typescript": "^7.27.1",
         "@types/eslint": "^9.6.1",
         "@types/eslint-scope": "^3.7.7",
         "@types/estree": "^1.0.7",
