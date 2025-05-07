@@ -38,16 +38,16 @@ export class DefaultRootMessagingProvider implements IRootMessagingProvider {
      * @param message
      */
     public publish(message: IRootOutgoingMessageEnvelope): void {
-        message.channelIds.forEach(channelId => {
+        for (const channelId of message.channelIds) {
             const messageChannel = this.messageChannels[channelId];
 
             if (messageChannel == null) {
                 console.error(`Could not locate MessageChannel for channelId '${channelId}'`);
-                return;
+                continue;
             }
 
             messageChannel.postMessage(message.payload);
-        });
+        }
     }
 
     public subscribe(callback: (message: IRootIncomingMessageEnvelope) => void): void {
@@ -72,7 +72,9 @@ export class DefaultRootMessagingProvider implements IRootMessagingProvider {
 
             // listen to incoming messages on the new channel
             messageChannel.port1.addEventListener('message', message => {
-                this.callbacks.forEach(callback => callback({ payload: message.data, channelId }));
+                for (const callback of this.callbacks) {
+                    callback({ payload: message.data, channelId });
+                }
             });
 
             const sourceWindow = message.source;

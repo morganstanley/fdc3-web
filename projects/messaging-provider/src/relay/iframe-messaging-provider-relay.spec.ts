@@ -37,10 +37,19 @@ describe('IframeRelay', () => {
         stubAddEventListener = jest.fn((_: string, callback: (event: MessageEvent) => void) => {
             mockParentWindowCallback = callback;
         });
+        const queryParams = new URLSearchParams();
+        queryParams.set('channelId', mockedChannelId);
+
         mockedWindow = {
             addEventListener: stubAddEventListener,
             removeEventListener: jest.fn(),
             dispatchEvent: jest.fn(),
+            location: {
+                search: `?${queryParams.toString()}`,
+                host: 'localhost',
+                pathname: '/',
+                href: 'http://localhost/',
+            } as any as Location,
             parent: {
                 postMessage: jest.fn(),
             },
@@ -56,11 +65,6 @@ describe('IframeRelay', () => {
             onmessage: null,
             postMessage: jest.fn(),
         } as any as MessagePort;
-        const queryParams = new URLSearchParams();
-        queryParams.set('channelId', mockedChannelId);
-        mockedWindow.location = {
-            search: `?${queryParams.toString()}`,
-        } as any as Location;
         iframeRelay = new IframeRelay(mockedWindow, mockedConsole);
     });
 
@@ -101,9 +105,7 @@ describe('IframeRelay', () => {
     it('should initialize the relay and emit an error when the channel id is not found in the query parameters and undefined as constructor parameter', async () => {
         // Arrange
         mockedConsole.error = jest.fn();
-        mockedWindow.location = {
-            search: '',
-        } as any as Location;
+        mockedWindow.location.search = '';
 
         // Act
         try {

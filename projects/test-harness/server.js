@@ -28,6 +28,7 @@ function createServer(domain, folder, port) {
     const app = express();
     const folderPath = path.resolve(__dirname, folder);
     //allows all origins to access server resources
+    //TODO: add mapping from root domain to default apps folder to server default app from root domain as well as from secondary domains
     app.use(cors(), express.static(folderPath));
     app.listen(port, () =>
         console.log(`${domain} Server serving '${folderPath}' running at http://localhost:${port}`),
@@ -47,7 +48,7 @@ if (configFileName === './src/test-harness.config.json') {
 
     // Create servers for each domain
     let currentPort = basePort;
-    domains.forEach(domain => createServer(domain, `dist/${domain}`, currentPort++));
+    domains.forEach(domain => createServer(domain, `build`, currentPort++));
 }
 
 console.log(`\n\nFDC3 Test Harness url: http://localhost:${basePort}/root-app.html\n`);

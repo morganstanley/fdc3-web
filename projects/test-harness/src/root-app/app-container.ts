@@ -65,7 +65,9 @@ export class AppContainer extends LitElement {
      * @returns A string representing the CSS class to be applied.
      */
     private getOriginClass(): string {
-        return this.details?.url.includes('root')
+        const detailsUrl = this.details != null ? new URL(this.details.url) : undefined;
+
+        return detailsUrl?.host === window.location.host
             ? 'fth-app-same-origin border-primary-subtle'
             : 'fth-app-cross-origin border-warning-subtle';
     }

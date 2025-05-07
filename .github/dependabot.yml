@@ -1,0 +1,75 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    versioning-strategy: increase
+    directories:
+      - "/"
+      - "projects/*"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 10
+    pull-request-branch-name:
+      separator: "-"
+    ignore:
+      - dependency-name: "fs-extra"
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nx:
+        patterns:
+          - "nx"
+          - "@nx/*"
+      babel:
+        patterns:
+          - "@babel/*"
+      eslint:
+        patterns:
+          - "eslint"
+          - "eslint-*"
+          - "prettier"
+      ts-mocking-bird:
+        patterns:
+          - "@morgan-stanley/ts-mocking-bird"
+      jest:
+        patterns:
+          - "jest"
+          - "jest-*"
+      typescript:
+        patterns:
+          - "typescript"
+          - "tslib"
+          - "ts-jest"
+          - "ts-loader"
+          - "typedoc"
+      rxjs:
+        patterns:
+          - "rxjs"
+      types:
+        patterns:
+          - "@types/*"
+      typescript-eslint:
+        patterns:
+          - "@typescript-eslint/*"
+      finos-fdc3:
+        patterns:
+          - "@finos/fdc3"
+      webpack:
+        patterns:
+          - "webpack"
+      minor_versions:
+        dependency-type: "production"
+        update-types:
+          - 'minor'
+          - 'patch'
+      development_dependencies:
+        dependency-type: "development"
+        update-types:
+          - 'minor'
+          - 'patch'
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+    schedule:
+      interval: "monthly"

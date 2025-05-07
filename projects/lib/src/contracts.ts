@@ -88,6 +88,7 @@ export type EventMessage =
     | BrowserTypes.BroadcastEvent
     | BrowserTypes.IntentEvent
     | BrowserTypes.ChannelChangedEvent
+    | BrowserTypes.HeartbeatEvent
     | FDC3Event
     | PrivateChannelEvent;
 

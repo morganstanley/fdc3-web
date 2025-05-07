@@ -3,7 +3,7 @@ const baseConfig = require('../../jest.config');
 
 module.exports = {
     ...baseConfig,
-    collectCoverageFrom: ['./src/**/*.ts'],
+    collectCoverageFrom: ['./src/**/*.ts', '!./src/**/index.ts'],
     setupFilesAfterEnv: ['../test.ts'],
     coverageDirectory: path.join('../../build', 'coverage-results', 'lib'),
     reporters: [

@@ -5,7 +5,7 @@
             "appId": "app-1-root",
             "type": "web",
             "details": {
-                "url": "http://localhost:4300/app-1-root.html"
+                "url": "http://localhost:4300/app-a.html"
             },
             "interop": {
                 "intents": {
@@ -42,7 +42,7 @@
             "appId": "app-2-root",
             "type": "web",
             "details": {
-                "url": "http://localhost:4300/app-2-root.html"
+                "url": "http://localhost:4300/app-b.html"
             },
             "interop": {
                 "intents": {
@@ -74,7 +74,7 @@
             "appId": "app-1-domain-A",
             "type": "web",
             "details": {
-                "url": "http://localhost:4301/app-1-domain-A.html"
+                "url": "http://localhost:4301/app-a.html"
             },
             "interop": {
                 "intents": {
@@ -104,7 +104,7 @@
             "appId": "app-2-domain-A",
             "type": "web",
             "details": {
-                "url": "http://localhost:4301/app-2-domain-A.html"
+                "url": "http://localhost:4301/app-b.html"
             },
             "interop": {
                 "intents": {
@@ -144,7 +144,7 @@
             "appId": "app-1-domain-B",
             "type": "web",
             "details": {
-                "url": "http://localhost:4302/app-1-domain-B.html"
+                "url": "http://localhost:4302/app-a.html"
             },
             "interop": {
                 "intents": {
@@ -188,7 +188,7 @@
             "appId": "app-2-domain-B",
             "type": "web",
             "details": {
-                "url": "http://localhost:4302/app-2-domain-B.html"
+                "url": "http://localhost:4302/app-b.html"
             },
             "interop": {
                 "intents": {
@@ -223,7 +223,7 @@
             "appId": "app-1-domain-C",
             "type": "web",
             "details": {
-                "url": "http://localhost:4303/app-1-domain-C.html"
+                "url": "http://localhost:4303/app-a.html"
             },
             "interop": {
                 "intents": {
@@ -262,7 +262,7 @@
             "appId": "app-2-domain-C",
             "type": "web",
             "details": {
-                "url": "http://localhost:4303/app-2-domain-C.html"
+                "url": "http://localhost:4303/app-b.html"
             },
             "interop": {
                 "intents": {
@@ -296,7 +296,7 @@
             "appId": "app-1-domain-D",
             "type": "web",
             "details": {
-                "url": "http://localhost:4304/app-1-domain-D.html"
+                "url": "http://localhost:4304/app-a.html"
             },
             "interop": {
                 "intents": {
@@ -336,7 +336,7 @@
             "appId": "app-2-domain-D",
             "type": "web",
             "details": {
-                "url": "http://localhost:4304/app-2-domain-D.html"
+                "url": "http://localhost:4304/app-b.html"
             },
             "interop": {
                 "intents": {
@@ -366,7 +366,7 @@
             "appId": "app-1-domain-E",
             "type": "web",
             "details": {
-                "url": "http://localhost:4305/app-1-domain-E.html"
+                "url": "http://localhost:4305/app-a.html"
             },
             "interop": {
                 "intents": {
@@ -401,7 +401,7 @@
             "appId": "app-2-domain-E",
             "type": "web",
             "details": {
-                "url": "http://localhost:4305/app-2-domain-E.html"
+                "url": "http://localhost:4305/app-b.html"
             },
             "interop": {
                 "intents": {
@@ -425,45 +425,6 @@
                         "StartChat": [
                             "fdc3.contact",
                             "fdc3.message"
-                        ]
-                    }
-                }
-            }
-        },
-        {
-            "title": "test-lit-app.com",
-            "appId": "test-lit-app",
-            "type": "web",
-            "details": {
-                "url": "http://localhost:4306/test-lit-app.html"
-            },
-            "interop": {
-                "intents": {
-                    "listensFor": {
-                        "ViewAnalysis": {
-                            "contexts": [
-                                "fdc3.instrument",
-                                "fdc3.portfolio"
-                            ]
-                        },
-                        "ViewChart": {
-                            "contexts": [
-                                "fdc3.instrument"
-                            ]
-                        },
-                        "ViewHoldings": {
-                            "contexts": [
-                                "fdc3.portfolio"
-                            ]
-                        }
-                    },
-                    "raises": {
-                        "ViewResearch": [
-                            "fdc3.organization"
-                        ],
-                        "ViewNews": [
-                            "fdc3.contact",
-                            "fdc3.currency"
                         ]
                     }
                 }

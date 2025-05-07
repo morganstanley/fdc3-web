@@ -18,3 +18,25 @@ export const FDC3_PROVIDER = 'Morgan Stanley';
 export const DEFAULT_AGENT_DISCOVERY_TIMEOUT = 750;
 
 export const FDC3_READY_EVENT = 'fdc3Ready';
+
+/**
+ * Constants for Desktop Agent Keep Alive functionality
+ */
+export const HEARTBEAT = {
+    /**
+     * Interval between heartbeat checks in milliseconds
+     * 1500 milliseconds is a reasonable default for web applications
+     */
+    INTERVAL_MS: 1500,
+
+    /**
+     * Maximum number of failed heartbeat attempts before considering a proxy disconnected
+     */
+    MAX_TRIES: 3,
+
+    /**
+     * How long to wait for a heartbeat acknowledgment before considering it failed
+     * 500 milliseconds gives enough time for the proxy browser Window or Frame to process the heartbeat
+     */
+    TIMEOUT_MS: 500,
+} as const;

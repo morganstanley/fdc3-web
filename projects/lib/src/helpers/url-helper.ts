@@ -22,7 +22,9 @@ export function generateUUUrl<T extends Record<string, string>>(params: T, uuid?
     uuid = uuid ?? generateUUID();
     const url = new URL(`${UUURLBase}/${uuid}`);
 
-    Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
+    for (const [key, value] of Object.entries(params)) {
+        url.searchParams.append(key, value);
+    }
 
     //TODO: encrypt this string so other apps cannot read or modify the data we encode here.
     return btoa(url.toString());

@@ -61,6 +61,7 @@ const mockedResponseUuid = `mocked-response-uuid`;
 const mockedDate = new Date(2024, 1, 0, 0, 0, 0);
 
 const mockedChannelId = `mocked-channel-id`;
+const mockedHeartbeatEventUuid = 'mocked-heartbeat-event-uuid';
 
 // we run all these tests on DesktopAgentProxy and on DesktopAgentImpl as both are implemented the same
 const tests = [{ proxy: true }, { proxy: false }];
@@ -2293,5 +2294,71 @@ tests.forEach(({ proxy }) => {
                 params[0]({ payload: message }),
             );
         }
+
+        describe('heartbeat handling', () => {
+            it('should acknowledge heartbeat events', async () => {
+                createInstance();
+
+                const heartbeatEvent: BrowserTypes.HeartbeatEvent = {
+                    meta: {
+                        eventUuid: mockedHeartbeatEventUuid,
+                        timestamp: currentDate,
+                    },
+                    type: 'heartbeatEvent',
+                    payload: {},
+                };
+
+                postMessage(heartbeatEvent);
+
+                await wait();
+
+                // Verify acknowledgment was sent
+                expect(
+                    mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
+                        payload: {
+                            meta: {
+                                requestUuid: mockedRequestUuid,
+                                timestamp: currentDate,
+                                source: {
+                                    appId: mockedAppId,
+                                    instanceId: mockedInstanceId,
+                                },
+                            },
+                            payload: {
+                                heartbeatEventUuid: mockedHeartbeatEventUuid,
+                            },
+                            type: 'heartbeatAcknowledgementRequest',
+                        },
+                    }),
+                ).wasCalledOnce();
+            });
+
+            it('should ignore non-heartbeat events', async () => {
+                createInstance();
+
+                const otherEvent: BrowserTypes.AgentEventMessage = {
+                    meta: {
+                        eventUuid: 'test-event-uuid',
+                        timestamp: currentDate,
+                    },
+                    type: 'channelChangedEvent',
+                    payload: {
+                        newChannelId: 'test-channel',
+                    },
+                };
+
+                postMessage(otherEvent);
+
+                await wait();
+
+                // Verify no acknowledgment was sent
+                expect(
+                    mockMessagingProvider.withFunction('sendMessage').withParameters({
+                        isExpectedValue: message => message.payload.type === 'heartbeatAcknowledgementRequest',
+                        expectedDisplayValue: 'Heartbeat Acknowledgement Request',
+                    }),
+                ).wasNotCalled();
+            });
+        });
     });
 });

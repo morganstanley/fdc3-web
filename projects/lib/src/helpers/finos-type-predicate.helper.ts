@@ -109,6 +109,7 @@ export function isResponsePayloadError(value: any): value is BrowserTypes.Respon
     const responseError: BrowserTypes.ResponsePayloadError = value;
 
     switch (responseError) {
+        case 'ApiTimeout':
         case 'AccessDenied':
         case 'CreationFailed':
         case 'MalformedContext':
@@ -141,6 +142,7 @@ export function isFindInstancesErrors(value: any): value is BrowserTypes.FindIns
     const findInstanceError: BrowserTypes.FindInstancesErrors = value;
 
     switch (findInstanceError) {
+        case 'ApiTimeout':
         case 'MalformedContext':
         case 'DesktopAgentNotFound':
         case 'ResolverUnavailable':
@@ -165,6 +167,7 @@ export function isOpenError(value: any): value is BrowserTypes.OpenErrorResponse
     const openError: BrowserTypes.OpenErrorResponsePayload = value;
 
     switch (openError) {
+        case 'ApiTimeout':
         case 'AgentDisconnected':
         case 'AppNotFound':
         case 'AppTimeout':
@@ -250,6 +253,10 @@ export function isPrivateChannelDisconnectRequest(value: any): value is BrowserT
 
 export function isAddEventListenerRequest(value: any): value is BrowserTypes.AddEventListenerRequest {
     return isAppRequestMessage(value) && value.type === 'addEventListenerRequest';
+}
+
+export function isHeartbeatEvent(value: any): value is BrowserTypes.HeartbeatEvent {
+    return isAppEventMessage(value) && value.type === 'heartbeatEvent';
 }
 
 /**

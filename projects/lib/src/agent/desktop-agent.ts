@@ -13,6 +13,7 @@ import { AppDirectory } from '../app-directory';
 import { AppDirectoryApplication } from '../app-directory.contracts';
 import { ChannelFactory } from '../channel';
 import { ChannelMessageHandler } from '../channel/channel-message-handler';
+import { HEARTBEAT } from '../constants';
 import {
     AppIdentifierListenerPair,
     EventListenerKey,
@@ -74,6 +75,12 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
     private openStrategies: IOpenApplicationStrategy[];
     private rootMessagePublisher: IRootPublisher;
 
+    // Heartbeat tracking
+    private readonly heartbeatTimers: Map<FullyQualifiedAppIdentifier, ReturnType<typeof setInterval>> = new Map();
+    private readonly heartbeatRetries: Map<FullyQualifiedAppIdentifier, number> = new Map();
+    private readonly heartbeatTimeouts: Map<FullyQualifiedAppIdentifier, ReturnType<typeof setTimeout>> = new Map();
+    private readonly connectedProxies: Set<FullyQualifiedAppIdentifier> = new Set();
+
     constructor(params: RootDesktopAgentParams) {
         super({
             appIdentifier: params.appIdentifier,
@@ -95,6 +102,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         requestMessage: RequestMessage,
         sourceApp: FullyQualifiedAppIdentifier,
     ): Promise<void> {
+        // Start heartbeat monitoring when we receive any message from a proxy
+        this.startHeartbeat(sourceApp);
+
         switch (requestMessage.type) {
             case 'addIntentListenerRequest':
                 return this.onAddIntentListenerRequest(requestMessage, sourceApp);
@@ -160,13 +170,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             case 'privateChannelDisconnectRequest':
                 return this.channelMessageHandler.onPrivateChannelDisconnectRequest(requestMessage, sourceApp);
             case 'heartbeatAcknowledgementRequest':
-                //TODO: implement desktop agent
-                console.error(`${requestMessage.type} handling is not currently implemented`);
-                break;
+                return this.onHeartbeatAcknowledgementRequest(requestMessage, sourceApp);
         }
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     private async onRaiseIntentRequest(
         requestMessage: BrowserTypes.RaiseIntentRequest,
         source: FullyQualifiedAppIdentifier,
@@ -266,7 +274,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     private async onRaiseIntentForContext(
         requestMessage: BrowserTypes.RaiseIntentForContextRequest,
         source: FullyQualifiedAppIdentifier,
@@ -356,7 +364,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
     }
 
-    // https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#addintentlistener
+    // https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#addintentlistener
     private async onIntentResultRequest(
         requestMessage: BrowserTypes.IntentResultRequest,
         source: FullyQualifiedAppIdentifier,
@@ -425,7 +433,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Registers an app as an intent listener and publishes an AddIntentListenerResponse message
      */
@@ -485,10 +493,12 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             source,
         );
 
-        this.intentListenerCallbacks.forEach(callback => callback(source, requestMessage.payload.intent));
+        for (const callback of this.intentListenerCallbacks.values()) {
+            callback(source, requestMessage.payload.intent);
+        }
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Returns array of AppIdentifiers for all available instances of the given app
      */
@@ -523,7 +533,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     private async onGetInfoRequest(
         requestMessage: BrowserTypes.GetInfoRequest,
         source: FullyQualifiedAppIdentifier,
@@ -563,7 +573,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     private async onGetAppMetadataRequest(
         requestMessage: BrowserTypes.GetAppMetadataRequest,
         source: FullyQualifiedAppIdentifier,
@@ -596,7 +606,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Return AppIntent containing details of apps which handle given intent
      */
@@ -652,7 +662,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Add an event listener for a given event and app, and respond with the listenerUUID
      */
@@ -678,7 +688,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Remove event listener which source app has unsubscribed from
      */
@@ -707,7 +717,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Remove intent listener which source app has unsubscribed from
      */
@@ -736,7 +746,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     private async onFindIntentsByContextRequest(
         requestMessage: BrowserTypes.FindIntentsByContextRequest,
         source: FullyQualifiedAppIdentifier,
@@ -786,7 +796,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     private async onOpenRequest(
         requestMessage: BrowserTypes.OpenRequest,
         source: FullyQualifiedAppIdentifier,
@@ -953,5 +963,188 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             }),
             [fullyQualifiedAppIdentifier],
         );
+    }
+
+    /**
+     * Handle heartbeat acknowledgment from a proxy agent
+     * @param requestMessage The heartbeat acknowledgment request
+     * @param sourceApp The proxy agent that sent the acknowledgment
+     */
+    private onHeartbeatAcknowledgementRequest(
+        _requestMessage: BrowserTypes.HeartbeatAcknowledgementRequest,
+        sourceApp: FullyQualifiedAppIdentifier,
+    ): void {
+        // Reset retry count when we receive an acknowledgment
+        this.heartbeatRetries.set(sourceApp, 0);
+
+        // Clear the timeout timer
+        const timeoutTimer = this.heartbeatTimeouts.get(sourceApp);
+        if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+            this.heartbeatTimeouts.delete(sourceApp);
+        }
+    }
+
+    /**
+     * Start heartbeat monitoring for a proxy
+     * @param appId The app ID of the proxy to monitor
+     */
+    private startHeartbeat(appId: FullyQualifiedAppIdentifier): void {
+        // Ignore if the app ID is the same as the current app instance
+        // This prevents the heartbeat from being sent to itself
+        if (appInstanceEquals(appId, this.appIdentifier)) {
+            return;
+        }
+
+        if (this.heartbeatTimers.has(appId)) {
+            return; // Already monitoring this proxy
+        }
+
+        this.connectedProxies.add(appId);
+        this.heartbeatRetries.set(appId, 0);
+
+        const timer = setInterval(() => {
+            void this.sendHeartbeat(appId);
+        }, HEARTBEAT.INTERVAL_MS);
+
+        this.heartbeatTimers.set(appId, timer);
+
+        log('Starting keep-alive for proxy', 'info', appId);
+
+        // Send initial appId
+        void this.sendHeartbeat(appId);
+    }
+
+    /**
+     * Send a heartbeat to a proxy and wait for acknowledgment
+     * @param appId The app ID of the proxy to send heartbeat to
+     */
+    private async sendHeartbeat(appId: FullyQualifiedAppIdentifier): Promise<void> {
+        const retries = this.heartbeatRetries.get(appId) ?? 0;
+
+        if (retries >= HEARTBEAT.MAX_TRIES) {
+            this.handleProxyDisconnect(appId);
+            return;
+        }
+
+        try {
+            // Create a heartbeat event with proper structure
+            const heartbeatEvent = createEvent<BrowserTypes.HeartbeatEvent>('heartbeatEvent', {});
+
+            await this.rootMessagePublisher.publishEvent(heartbeatEvent, [appId]);
+
+            // Clear any existing timeout
+            const existingTimeout = this.heartbeatTimeouts.get(appId);
+            if (existingTimeout) {
+                clearTimeout(existingTimeout);
+            }
+
+            // Set new timeout for acknowledgment
+            const timeout = setTimeout(() => {
+                const currentRetries = this.heartbeatRetries.get(appId) ?? 0;
+                this.heartbeatRetries.set(appId, currentRetries + 1);
+                log(
+                    `Heartbeat acknowledgment timeout for proxy. Attempt ${currentRetries + 1}/${HEARTBEAT.MAX_TRIES}`,
+                    'warn',
+                    appId,
+                );
+            }, HEARTBEAT.TIMEOUT_MS);
+
+            this.heartbeatTimeouts.set(appId, timeout);
+        } catch (error) {
+            log(`Failed to send heartbeat to proxy ${JSON.stringify(appId)}`);
+            this.handleProxyDisconnect(appId);
+        }
+    }
+
+    /**
+     * Handles cleanup when a proxy disconnects, including timers, listeners, and channel subscriptions.
+     * @param appId The app ID of the disconnected proxy
+     */
+    private handleProxyDisconnect(appId: FullyQualifiedAppIdentifier): void {
+        log(`Proxy ${JSON.stringify(appId)} disconnected`);
+
+        // Clear timers
+        this.clearHeartbeatTimers(appId);
+
+        // Clean up intent listeners
+        this.cleanupIntentListeners(appId);
+
+        // Clean up event listeners
+        this.cleanupEventListeners(appId);
+
+        // Clean up intent listener callbacks
+        this.cleanupIntentListenerCallbacks(appId);
+
+        // Clean up channel subscriptions
+        this.channelMessageHandler.cleanupDisconnectedProxy(appId);
+    }
+
+    /**
+     * Clears heartbeat and timeout timers for a given proxy app.
+     * @param appId The app ID of the proxy
+     */
+    private clearHeartbeatTimers(appId: FullyQualifiedAppIdentifier): void {
+        const heartbeatTimer = this.heartbeatTimers.get(appId);
+        if (heartbeatTimer) {
+            clearInterval(heartbeatTimer);
+        }
+
+        const timeoutTimer = this.heartbeatTimeouts.get(appId);
+        if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+        }
+
+        this.heartbeatTimers.delete(appId);
+        this.heartbeatRetries.delete(appId);
+        this.heartbeatTimeouts.delete(appId);
+        this.connectedProxies.delete(appId);
+    }
+
+    /**
+     * Removes all intent listeners associated with a given proxy app.
+     * @param appId The app ID of the proxy
+     */
+    private cleanupIntentListeners(appId: FullyQualifiedAppIdentifier): void {
+        for (const [intent, listeners] of Object.entries(this.intentListeners)) {
+            const remainingListeners = listeners?.filter(listener => !appInstanceEquals(listener.appIdentifier, appId));
+            if (remainingListeners?.length) {
+                this.intentListeners[intent as Intent] = remainingListeners;
+            } else {
+                delete this.intentListeners[intent as Intent];
+            }
+        }
+    }
+
+    /**
+     * Removes all event listeners associated with a given proxy app.
+     * @param appId The app ID of the proxy
+     */
+    private cleanupEventListeners(appId: FullyQualifiedAppIdentifier): void {
+        for (const [eventType, listeners] of Object.entries(this.eventListeners)) {
+            const remainingListeners = listeners.filter(listener => !appInstanceEquals(listener.appIdentifier, appId));
+            if (remainingListeners.length) {
+                this.eventListeners[eventType as EventListenerKey] = remainingListeners;
+            } else {
+                delete this.eventListeners[eventType as EventListenerKey];
+            }
+        }
+    }
+
+    /**
+     * Removes all intent listener callbacks associated with a given proxy app.
+     * @param appId The app ID of the proxy
+     */
+    private cleanupIntentListenerCallbacks(appId: FullyQualifiedAppIdentifier): void {
+        const callbacksToRemove: string[] = [];
+        for (const [key, _] of this.intentListenerCallbacks) {
+            const decoded = decodeUUUrl(key);
+            if (decoded && decoded.uuid && appInstanceEquals(decoded.payload as FullyQualifiedAppIdentifier, appId)) {
+                callbacksToRemove.push(key);
+            }
+        }
+        for (const key of callbacksToRemove) {
+            this.intentListenerCallbacks.delete(key);
+        }
     }
 }

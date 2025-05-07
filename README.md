@@ -13,6 +13,91 @@ npm install @morgan-stanley/fdc3-web-ui-provider
 npm install @morgan-stanley/fdc3-web-messaging-provider
 ```
 
+## Usage
+
+Below are common usage patterns for the `@morgan-stanley/fdc3-web` library, including code examples for agent access, intents, channels, and App Directory setup. These examples are based on real usage in the test-harness app.
+
+### Accessing the FDC3 Agent
+
+#### In the Root Window
+```js
+import { DesktopAgentFactory, getAgent } from '@morgan-stanley/fdc3-web';
+import { AppResolverComponent } from '@morgan-stanley/fdc3-web-ui-provider';
+
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
+      appDirectoryUrls: ['http://localhost:4299'],
+      openStrategies: [{
+        canOpen: (params: OpenApplicationStrategyParams) => { /* define whether an app should open */ },
+        open: (params: OpenApplicationStrategyParams) => { /* define how an app should open */ }
+      }],
+    }),
+});
+```
+
+#### In a Proxy/Child Window
+```js
+import { getAgent } from '@morgan-stanley/fdc3-web';
+
+// This will attempt to establish a connection using the FDC3 Web Connection Protocol
+// given the URL of this Desktop Agent Proxy 
+const agent = await getAgent();
+```
+
+### Raising and Handling Intents
+
+#### Raise an Intent
+```js
+const context = { type: 'fdc3.instrument', id: { ticker: 'AAPL' } };
+const resolution = await agent.raiseIntent('ViewChart', context);
+```
+
+#### Add an Intent Listener
+```js
+await agent.addIntentListener('ViewChart', async context => {
+  // Handle the intent
+  console.log('Received context:', context);
+});
+```
+
+### Working with Channels
+
+#### Join a Channel
+```js
+const channel = await agent.getOrCreateChannel('myChannel');
+await channel.join();
+```
+
+#### Broadcast Context on a Channel
+```js
+await channel.broadcast({ type: 'fdc3.instrument', id: { ticker: 'MSFT' } });
+```
+
+#### Listen for Context on a Channel
+```js
+channel.addContextListener('fdc3.instrument', context => {
+  console.log('Received instrument context:', context);
+});
+```
+
+### App Directory Setup
+
+To enable app discovery and intent resolution, provide App Directory URLs when initializing the agent in the root window:
+
+```js
+const agent = await getAgent({
+  appDirectoryUrls: ['http://localhost:4299'],
+});
+
+// Fetch available applications
+import { getAppDirectoryApplications } from '@morgan-stanley/fdc3-web';
+const apps = await getAppDirectoryApplications('http://localhost:4299');
+```
+
+For more advanced usage, see the [test-harness](./projects/test-harness/README.md) example app.
+
 # Development Notes
 
 * `lib` - The actual implementation of the fdc3 code. This library will be published for use in other applications.

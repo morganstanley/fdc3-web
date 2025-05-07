@@ -91,7 +91,7 @@ export class ChannelMessageHandler {
         this.contextListenerCallbacks.forEach(callback => callback(source, contextType));
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagentl
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagentl
     public onGetUserChannelsRequest(
         requestMessage: BrowserTypes.GetUserChannelsRequest,
         source: FullyQualifiedAppIdentifier,
@@ -108,7 +108,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onGetCurrentChannelRequest(
         requestMessage: BrowserTypes.GetCurrentChannelRequest,
         source: FullyQualifiedAppIdentifier,
@@ -124,7 +124,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onJoinUserChannelRequest(
         requestMessage: BrowserTypes.JoinUserChannelRequest,
         source: FullyQualifiedAppIdentifier,
@@ -162,7 +162,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onLeaveCurrentChannelRequest(
         requestMessage: BrowserTypes.LeaveCurrentChannelRequest,
         source: FullyQualifiedAppIdentifier,
@@ -206,7 +206,7 @@ export class ChannelMessageHandler {
 
     /**
      * Publishes a ChannelChangedEvent to the origin app
-     * @param newChannelId is the channelId of the user channel the user has joined or null if the user is now not joined to a user channe;
+     * @param newChannelId is the channelId of the user channel the user has joined or null if the user is now not joined to a user channel;
      * @param messagingProvider is used to publish the event
      * @param source is the appIdentifier of the origin app
      */
@@ -219,7 +219,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#privatechannel
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#privatechannel
     public onPrivateChannelAddEventListenerRequest(
         requestMessage: BrowserTypes.PrivateChannelAddEventListenerRequest,
         source: FullyQualifiedAppIdentifier,
@@ -273,7 +273,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#privatechannel
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#privatechannel
     public onPrivateChannelUnsubscribeEventListenerRequest(
         requestMessage: BrowserTypes.PrivateChannelUnsubscribeEventListenerRequest,
         source: FullyQualifiedAppIdentifier,
@@ -303,7 +303,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onCreatePrivateChannelRequest(
         requestMessage: BrowserTypes.CreatePrivateChannelRequest,
         source: FullyQualifiedAppIdentifier,
@@ -337,7 +337,7 @@ export class ChannelMessageHandler {
         this.privateChannels[channelId]?.allowedList.push(app);
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onGetOrCreateChannelRequest(
         requestMessage: BrowserTypes.GetOrCreateChannelRequest,
         source: FullyQualifiedAppIdentifier,
@@ -384,7 +384,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onAddContextListenerRequest(
         requestMessage: BrowserTypes.AddContextListenerRequest,
         source: FullyQualifiedAppIdentifier,
@@ -418,7 +418,7 @@ export class ChannelMessageHandler {
         listeners.push({ contextType: requestMessage.payload.contextType, listenerUUID, source });
 
         //if channel is private channel, publish privateChannelOnAddContextListenerEvent to all apps listening for them on channel
-        //if message.payload.channelId == null, it is refering to the current user channel
+        //if message.payload.channelId == null, it is referring to the current user channel
         if (
             requestMessage.payload.channelId != null &&
             this.privateChannels[requestMessage.payload.channelId] != null
@@ -498,7 +498,7 @@ export class ChannelMessageHandler {
         }
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onContextListenerUnsubscribeRequest(
         requestMessage: BrowserTypes.ContextListenerUnsubscribeRequest,
         source: FullyQualifiedAppIdentifier,
@@ -580,7 +580,7 @@ export class ChannelMessageHandler {
         return this.privateChannelEventListeners[eventType]?.filter(predicate).map(listener => listener.source) ?? [];
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     public onBroadcastRequest(
         requestMessage: BrowserTypes.BroadcastRequest,
         source: FullyQualifiedAppIdentifier,
@@ -793,7 +793,7 @@ export class ChannelMessageHandler {
         );
     }
 
-    //https://deploy-preview-1191--fdc3.netlify.app/docs/next/api/specs/desktopAgentCommunicationProtocol#privatechannel
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#privatechannel
     public onPrivateChannelDisconnectRequest(
         requestMessage: BrowserTypes.PrivateChannelDisconnectRequest,
         source: FullyQualifiedAppIdentifier,
@@ -860,6 +860,133 @@ export class ChannelMessageHandler {
                 }),
                 appIdentifiers,
             );
+        }
+    }
+
+    /**
+     * Clean up all channel subscriptions for a disconnected proxy
+     * @param appId The app ID of the disconnected proxy
+     */
+    public cleanupDisconnectedProxy(appId: FullyQualifiedAppIdentifier): void {
+        // Remove the app from the currentUserChannels mapping if it exists.
+        this.removeFromCurrentUserChannels(appId);
+
+        // Clean up all context listeners associated with the disconnected app and publish unsubscribe events for private channels.
+        this.cleanupContextListeners(appId);
+
+        // Remove all private channel event listeners associated with the disconnected app.
+        this.cleanupEventListeners(appId);
+
+        // Clean up private channel context history and allowed list for the disconnected app.
+        this.cleanupPrivateChannels(appId);
+
+        // Clean up user channel context history for the disconnected app.
+        this.cleanupUserChannelContexts(appId);
+    }
+
+    /**
+     * Removes the app from the currentUserChannels mapping if present.
+     * @param appId The app ID of the disconnected proxy
+     */
+    private removeFromCurrentUserChannels(appId: FullyQualifiedAppIdentifier): void {
+        if (appId.instanceId) {
+            delete this.currentUserChannels[appId.instanceId];
+        }
+    }
+
+    /**
+     * Cleans up all context listeners associated with the disconnected app, and publishes unsubscribe events for private channels.
+     * @param appId The app ID of the disconnected proxy
+     */
+    private cleanupContextListeners(appId: FullyQualifiedAppIdentifier): void {
+        for (const [channelId, listeners] of Object.entries(this.contextListeners)) {
+            if (listeners) {
+                const removedListeners = listeners.filter(listener => appInstanceEquals(listener.source, appId));
+                const remainingListeners = listeners.filter(listener => !appInstanceEquals(listener.source, appId));
+
+                if (remainingListeners.length > 0) {
+                    this.contextListeners[channelId] = remainingListeners;
+                } else {
+                    delete this.contextListeners[channelId];
+                }
+
+                // Publish unsubscribe events for removed listeners on private channels
+                if (this.privateChannels[channelId]) {
+                    for (const listener of removedListeners) {
+                        this.publishPrivateChannelOnUnsubscribeEvent(channelId, listener);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Cleans up all private channel event listeners associated with the disconnected app.
+     * @param appId The app ID of the disconnected proxy
+     */
+    private cleanupEventListeners(appId: FullyQualifiedAppIdentifier): void {
+        for (const [eventType, listeners] of Object.entries(this.privateChannelEventListeners)) {
+            if (listeners) {
+                const remainingListeners = listeners.filter(listener => !appInstanceEquals(listener.source, appId));
+                if (remainingListeners.length > 0) {
+                    this.privateChannelEventListeners[eventType as keyof typeof this.privateChannelEventListeners] =
+                        remainingListeners;
+                } else {
+                    delete this.privateChannelEventListeners[
+                        eventType as keyof typeof this.privateChannelEventListeners
+                    ];
+                }
+            }
+        }
+    }
+
+    /**
+     * Cleans up private channel context history and allowed list for the disconnected app.
+     * @param appId The app ID of the disconnected proxy
+     */
+    private cleanupPrivateChannels(appId: FullyQualifiedAppIdentifier): void {
+        for (const [_, channel] of Object.entries(this.privateChannels)) {
+            if (channel) {
+                channel.contextHistory.byContext = Object.fromEntries(
+                    Object.entries(channel.contextHistory.byContext).filter(
+                        ([_, context]) => !context?.source || !appInstanceEquals(context.source, appId),
+                    ),
+                );
+
+                if (
+                    channel.contextHistory.mostRecent?.source &&
+                    appInstanceEquals(channel.contextHistory.mostRecent.source, appId)
+                ) {
+                    const remainingContexts = Object.values(channel.contextHistory.byContext);
+                    channel.contextHistory.mostRecent = remainingContexts[remainingContexts.length - 1] || undefined;
+                }
+
+                channel.allowedList = channel.allowedList.filter(app => !appInstanceEquals(app, appId));
+            }
+        }
+    }
+
+    /**
+     * Cleans up user channel context history for the disconnected app.
+     * @param appId The app ID of the disconnected proxy
+     */
+    private cleanupUserChannelContexts(appId: FullyQualifiedAppIdentifier): void {
+        for (const [_, channel] of Object.entries(this.userChannels)) {
+            if (channel) {
+                channel.contextHistory.byContext = Object.fromEntries(
+                    Object.entries(channel.contextHistory.byContext).filter(
+                        ([_, context]) => !context?.source || !appInstanceEquals(context.source, appId),
+                    ),
+                );
+
+                if (
+                    channel.contextHistory.mostRecent?.source &&
+                    appInstanceEquals(channel.contextHistory.mostRecent.source, appId)
+                ) {
+                    const remainingContexts = Object.values(channel.contextHistory.byContext);
+                    channel.contextHistory.mostRecent = remainingContexts[remainingContexts.length - 1] || undefined;
+                }
+            }
         }
     }
 }

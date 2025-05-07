@@ -131,7 +131,9 @@ export class RootMessagePublisher implements IRootPublisher {
     public publishResponseMessage(responseMessage: ResponseMessage, source: FullyQualifiedAppIdentifier): void {
         if (source.instanceId === this.rootAppIdentifier?.instanceId) {
             // the target of this response message is the root agent so pass it back as an incoming message and return
-            this.proxyResponseHandlers.forEach(callback => callback({ payload: responseMessage }));
+            for (const callback of this.proxyResponseHandlers) {
+                callback({ payload: responseMessage });
+            }
             return;
         }
 
@@ -167,7 +169,9 @@ export class RootMessagePublisher implements IRootPublisher {
     ): string[] {
         if (appIdentifiers.some(identifier => identifier.instanceId === this.rootAppIdentifier?.instanceId)) {
             // the target of this event is the root agent so pass it back as an incoming message and return
-            this.proxyResponseHandlers.forEach(callback => callback({ payload: message }));
+            for (const callback of this.proxyResponseHandlers) {
+                callback({ payload: message });
+            }
         }
 
         return appIdentifiers
@@ -201,7 +205,7 @@ export class RootMessagePublisher implements IRootPublisher {
         const source = optionalSource ?? this.lookupSource(message.channelId);
 
         if (source == null) {
-            console.error(`Could not resolve source for unknown channelId: ${message.channelId})`);
+            console.error(`Could not resolve source for unknown channelId: ${message.channelId}`);
             return;
         }
 

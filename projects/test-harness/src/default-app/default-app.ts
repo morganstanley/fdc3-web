@@ -12,6 +12,7 @@ import '../utils/list-component';
 import '../utils/header-component';
 import '../root-app/app-container';
 import '../styles.scss';
+import '@morgan-stanley/fdc3-web-ui-provider';
 import type {
     Channel,
     Context,
@@ -34,7 +35,6 @@ import {
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
 } from '@morgan-stanley/fdc3-web';
-import { ChannelSelectorComponent } from '@morgan-stanley/fdc3-web-ui-provider';
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, query, state } from 'lit/decorators.js';
 import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants';
@@ -55,8 +55,6 @@ import { getStandardIntents } from '../utils/fdc3';
 import { SelectComponent } from '../utils/select-component';
 
 const log = createLogger('DefaultApp');
-
-[ChannelSelectorComponent];
 
 /**
  * `DefaultApp` is a custom web component that serves as the default application.

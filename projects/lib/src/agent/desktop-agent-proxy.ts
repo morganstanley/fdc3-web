@@ -44,6 +44,7 @@ import {
     isFindIntentsByContextResponse,
     isGetAppMetadataResponse,
     isGetInfoResponse,
+    isHeartbeatEvent,
     isIntentEvent,
     isIntentListenerUnsubscribeResponse,
     isIntentResultResponse,
@@ -72,6 +73,13 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
 
         this.channelFactory = params.channelFactory;
         this.channels = this.channelFactory.createChannels(params.appIdentifier, this.messagingProvider);
+
+        // Set up heartbeat acknowledgment
+        this.addMessageCallback('heartbeat', message => {
+            if (isHeartbeatEvent(message)) {
+                this.acknowledgeHeartbeat(message);
+            }
+        });
     }
 
     public async addEventListener(type: FDC3EventTypes | null, handler: EventHandler): Promise<Listener> {
@@ -446,6 +454,16 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
                 }
             },
         };
+    }
+
+    private async acknowledgeHeartbeat(heartbeat: BrowserTypes.HeartbeatEvent): Promise<void> {
+        const ackMessage = createRequestMessage<BrowserTypes.HeartbeatAcknowledgementRequest>(
+            'heartbeatAcknowledgementRequest',
+            this.appIdentifier,
+            { heartbeatEventUuid: heartbeat.meta.eventUuid },
+        );
+
+        await this.publishRequestMessage(ackMessage);
     }
 }
 

@@ -30,19 +30,14 @@ export class SettingsPanel extends LitElement {
     public applications!: Promise<AppDirectoryApplication[]>;
 
     @state()
-    private appsToAdd: string[] = [];
+    private appDirectory: AppDirectoryApplication[] = [];
 
     @query('select-component')
     private appSelector!: SelectComponent;
 
     public connectedCallback(): void {
         super.connectedCallback();
-        //filter out apps in root domain as they are opened by default
-        this.applications.then(applications => {
-            this.appsToAdd = applications
-                .filter(application => !application.appId.includes('root'))
-                .map(app => app.appId);
-        });
+        this.applications.then(applications => (this.appDirectory = applications));
     }
 
     protected render(): TemplateResult {
@@ -64,7 +59,7 @@ export class SettingsPanel extends LitElement {
         return html`
             <div>
                 <label class="form-label">Select App:</label>
-                <select-component .items=${this.appsToAdd}></select-component>
+                <select-component .items=${this.appDirectory.map(app => app.appId)}></select-component>
             </div>
         `;
     }
@@ -89,7 +84,6 @@ export class SettingsPanel extends LitElement {
     private async onAddApp(): Promise<void> {
         const selectedApp = (await this.applications).find(app => app.appId === this.appSelector.value);
         if (!selectedApp) return;
-        this.appsToAdd = this.appsToAdd.filter(app => app !== selectedApp.appId);
         this.dispatchEvent(
             new CustomEvent<AddApp>('addApp', {
                 detail: {

@@ -13,7 +13,7 @@ import {
     BrowserTypes,
     type Channel,
     type Contact,
-    type DesktopAgent,
+    DesktopAgent,
     EventHandler,
     type Listener,
     OpenError,
@@ -24,6 +24,7 @@ import {
     Mock,
     proxyJestModule,
     registerMock,
+    reset,
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
@@ -32,6 +33,7 @@ import { AppDirectory } from '../app-directory';
 import { AppDirectoryApplication } from '../app-directory.contracts';
 import { ChannelFactory, Channels } from '../channel';
 import { ChannelMessageHandler } from '../channel/channel-message-handler';
+import { HEARTBEAT } from '../constants';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
@@ -209,6 +211,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             setupFunction('addToPrivateChannelAllowedList'),
             setupFunction('addListenerCallback'),
             setupFunction('removeListenerCallback'),
+            setupFunction('cleanupDisconnectedProxy'),
         );
         // setup before each to clear function call counts
         mockedHelpers.setup(
@@ -427,7 +430,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         context: contact,
                         intent: 'StartChat',
                         originatingApp: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                        raiseIntentRequestUuid: mockedGeneratedUurl,
+                        raiseIntentRequestUuid: 'mocked-generated-Uurl',
                     },
                     type: 'intentEvent',
                 };
@@ -749,6 +752,10 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                     return { uuid, payload };
                 });
+            });
+
+            afterEach(() => {
+                reset(mockedHelpers);
             });
 
             it(`should publish raiseIntentResultResponse to original source`, async () => {
@@ -2218,6 +2225,494 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 await postRequestMessage(privateChannelDisconnectRequest, source);
 
                 expect(mockChannelHandler.withFunction('onPrivateChannelDisconnectRequest')).wasCalledOnce();
+            });
+        });
+
+        describe('heartbeat functionality', () => {
+            const disconnectProxyTestTimeout = HEARTBEAT.INTERVAL_MS * (HEARTBEAT.MAX_TRIES + 2);
+
+            it('should start heartbeat monitoring when receiving any message', async () => {
+                createInstance();
+
+                const message: BrowserTypes.GetInfoRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: mockedDate,
+                        source,
+                    },
+                    type: 'getInfoRequest',
+                    payload: {},
+                };
+
+                await postRequestMessage(message, source);
+
+                // Should have sent initial heartbeat
+                const expectedHeartbeat: BrowserTypes.HeartbeatEvent = {
+                    type: 'heartbeatEvent',
+                    meta: {
+                        timestamp: currentDate,
+                        eventUuid: mockedEventUuid,
+                    },
+                    payload: {},
+                };
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedHeartbeat, [source]),
+                ).wasCalledOnce();
+
+                // Should have started heartbeat timer
+                await wait(HEARTBEAT.INTERVAL_MS);
+
+                // Should have sent second heartbeat
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedHeartbeat, [source]),
+                ).wasCalled(2);
+            });
+
+            it('should not start duplicate heartbeat monitoring for existing proxy', async () => {
+                createInstance();
+
+                // Start heartbeat monitoring
+                const message: BrowserTypes.GetInfoRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: mockedDate,
+                        source,
+                    },
+                    type: 'getInfoRequest',
+                    payload: {},
+                };
+
+                await postRequestMessage(message, source);
+
+                // Advance timer to trigger first heartbeat timeout
+                await wait(HEARTBEAT.INTERVAL_MS);
+
+                const expectedHeartbeat: BrowserTypes.HeartbeatEvent = {
+                    type: 'heartbeatEvent',
+                    meta: {
+                        timestamp: currentDate,
+                        eventUuid: mockedEventUuid,
+                    },
+                    payload: {},
+                };
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedHeartbeat, [source]),
+                ).wasCalled(2);
+
+                await postRequestMessage(message, source);
+
+                await wait(HEARTBEAT.INTERVAL_MS);
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedHeartbeat, [source]),
+                ).wasCalled(3);
+            });
+
+            it(
+                'should disconnect proxy after max retries',
+                async () => {
+                    createInstance();
+
+                    // Start heartbeat monitoring
+                    const message: BrowserTypes.GetInfoRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: mockedDate,
+                            source,
+                        },
+                        type: 'getInfoRequest',
+                        payload: {},
+                    };
+
+                    await postRequestMessage(message, source);
+
+                    // Advance timer multiple times to exceed max retries
+                    await wait(HEARTBEAT.INTERVAL_MS * (HEARTBEAT.MAX_TRIES + 1));
+
+                    // Should have stopped sending heartbeats
+                    const expectedHeartbeat: BrowserTypes.HeartbeatEvent = {
+                        type: 'heartbeatEvent',
+                        meta: {
+                            timestamp: currentDate,
+                            eventUuid: mockedEventUuid,
+                        },
+                        payload: {},
+                    };
+
+                    // Heartbeat should only have been sent 3 times not 4 because the disconnect occurred
+                    expect(
+                        mockRootPublisher
+                            .withFunction('publishEvent')
+                            .withParametersEqualTo(expectedHeartbeat, [source]),
+                    ).wasCalled(3);
+
+                    // Verify the message received a response (proxy is connected)
+                    expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+                },
+                disconnectProxyTestTimeout,
+            );
+
+            it('should handle heartbeat acknowledgments', async () => {
+                await createInstance();
+
+                const message: BrowserTypes.GetInfoRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: mockedDate,
+                        source,
+                    },
+                    type: 'getInfoRequest',
+                    payload: {},
+                };
+
+                await postRequestMessage(message, source);
+
+                await wait(HEARTBEAT.INTERVAL_MS);
+
+                const expectedHeartbeat: BrowserTypes.HeartbeatEvent = {
+                    type: 'heartbeatEvent',
+                    meta: {
+                        timestamp: currentDate,
+                        eventUuid: mockedEventUuid,
+                    },
+                    payload: {},
+                };
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedHeartbeat, [source]),
+                ).wasCalled(2);
+
+                const eventUuid = (
+                    mockRootPublisher
+                        .withFunction('publishEvent')
+                        .withParametersEqualTo(expectedHeartbeat, [source])
+                        .getMock().functionCallLookup.publishEvent?.[0][0] as BrowserTypes.HeartbeatEvent
+                ).meta.eventUuid;
+
+                const ackMessage: BrowserTypes.HeartbeatAcknowledgementRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: mockedDate,
+                        source,
+                    },
+                    type: 'heartbeatAcknowledgementRequest' as const,
+                    payload: {
+                        heartbeatEventUuid: eventUuid,
+                    },
+                };
+
+                await postRequestMessage(ackMessage, source);
+
+                await wait(HEARTBEAT.INTERVAL_MS);
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedHeartbeat, [source]),
+                ).wasCalled(3);
+            });
+
+            it(
+                'should handle heartbeat timeouts',
+                async () => {
+                    createInstance();
+
+                    const message: BrowserTypes.GetInfoRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: mockedDate,
+                            source,
+                        },
+                        type: 'getInfoRequest',
+                        payload: {},
+                    };
+
+                    await postRequestMessage(message, source);
+
+                    await wait(HEARTBEAT.INTERVAL_MS * (HEARTBEAT.MAX_TRIES + 1));
+
+                    const expectedHeartbeat: BrowserTypes.HeartbeatEvent = {
+                        type: 'heartbeatEvent',
+                        meta: {
+                            timestamp: currentDate,
+                            eventUuid: mockedEventUuid,
+                        },
+                        payload: {},
+                    };
+
+                    expect(
+                        mockRootPublisher
+                            .withFunction('publishEvent')
+                            .withParametersEqualTo(expectedHeartbeat, [source]),
+                    ).wasCalled(HEARTBEAT.MAX_TRIES);
+
+                    // Verify the proxy was disconnected and the resources were cleaned up
+                    expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+                },
+                disconnectProxyTestTimeout,
+            );
+
+            it(
+                'should verify that multiple proxies are managed independently for heartbeat',
+                async () => {
+                    // Create an instance of the desktop agent
+                    createInstance();
+
+                    // Define a second source
+                    const secondSource: FullyQualifiedAppIdentifier = {
+                        appId: 'second-app@mock-app-directory',
+                        instanceId: 'second-instance-id',
+                    };
+
+                    // Start heartbeat for first source
+                    const firstMessage: BrowserTypes.AddIntentListenerRequest = {
+                        meta: {
+                            requestUuid: 'first-request-uuid',
+                            timestamp: mockedDate,
+                            source,
+                        },
+                        type: 'addIntentListenerRequest',
+                        payload: {
+                            intent: 'intent',
+                        },
+                    };
+
+                    await postRequestMessage(firstMessage, source);
+
+                    // Start heartbeat for second source
+                    const secondMessage: BrowserTypes.AddIntentListenerRequest = {
+                        meta: {
+                            requestUuid: 'second-request-uuid',
+                            timestamp: mockedDate,
+                            source: secondSource,
+                        },
+                        type: 'addIntentListenerRequest',
+                        payload: {
+                            intent: 'intent',
+                        },
+                    };
+
+                    await postRequestMessage(secondMessage, secondSource);
+
+                    // Reset publisher to track heartbeat events separately
+                    mockRootPublisher.functionCallLookup.publishEvent = [];
+
+                    // Reset the cleanup disconnected proxy function
+                    mockChannelHandler.functionCallLookup.cleanupDisconnectedProxy = [];
+
+                    // Wait for one heartbeat interval
+                    await wait(HEARTBEAT.INTERVAL_MS);
+
+                    expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasNotCalled();
+
+                    expect(
+                        mockRootPublisher.withFunction('publishEvent').withParameters(
+                            {
+                                isExpectedValue: event => event.type === 'heartbeatEvent',
+                                expectedDisplayValue: 'Is a heartbeat event',
+                            },
+                            {
+                                isExpectedValue: targets =>
+                                    targets.some(target => helpersImport.appInstanceEquals(target, source)),
+                                expectedDisplayValue: 'for the first proxy',
+                            },
+                        ),
+                    ).wasCalledOnce();
+                    expect(
+                        mockRootPublisher.withFunction('publishEvent').withParameters(
+                            {
+                                isExpectedValue: event => event.type === 'heartbeatEvent',
+                                expectedDisplayValue: 'Is a heartbeat event',
+                            },
+                            {
+                                isExpectedValue: targets =>
+                                    targets.some(target => helpersImport.appInstanceEquals(target, secondSource)),
+                                expectedDisplayValue: 'for the second proxy',
+                            },
+                        ),
+                    ).wasCalledOnce();
+
+                    // Wait until one heartbeat before disconnecting
+                    await wait(HEARTBEAT.INTERVAL_MS);
+
+                    // Verify the proxy was disconnected and the resources were cleaned up
+                    expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasNotCalled();
+
+                    // Find heartbeat events for second proxy so we can send an acknowledgement
+                    // We will _not_ send an acknowledgement to the first proxy
+                    const secondProxyHeartbeatsAfterWait =
+                        mockRootPublisher.functionCallLookup.publishEvent?.filter(call => {
+                            const event = call[0] as EventMessage;
+                            const targets = call[1] as FullyQualifiedAppIdentifier[];
+                            return (
+                                event.type === 'heartbeatEvent' &&
+                                targets.some(target => helpersImport.appInstanceEquals(target, secondSource))
+                            );
+                        }) || [];
+
+                    const eventUuid = (secondProxyHeartbeatsAfterWait[0][0] as BrowserTypes.HeartbeatEvent).meta
+                        .eventUuid;
+
+                    const ackMessage: BrowserTypes.HeartbeatAcknowledgementRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: mockedDate,
+                            source: secondSource,
+                        },
+                        type: 'heartbeatAcknowledgementRequest' as const,
+                        payload: {
+                            heartbeatEventUuid: eventUuid,
+                        },
+                    };
+
+                    await postRequestMessage(ackMessage, secondSource);
+
+                    // Now wait once more so the first proxy can disconnect
+                    await wait(HEARTBEAT.INTERVAL_MS * 2);
+
+                    // Verify the proxy was disconnected and the resources were cleaned up
+                    expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+
+                    // Reset publisher to track new messages
+                    mockRootPublisher.functionCallLookup.publishResponseMessage = [];
+
+                    mockAppDirectory.setupFunction('resolveAppInstanceForIntent', () => Promise.resolve(source));
+
+                    // Try to send messages to both proxies
+                    const firstProxyCheckMessage: BrowserTypes.RaiseIntentRequest = {
+                        meta: {
+                            requestUuid: 'first-check',
+                            timestamp: currentDate,
+                            source: secondSource,
+                        },
+                        type: 'raiseIntentRequest',
+                        payload: {
+                            intent: 'intent',
+                            context: {
+                                type: 'context',
+                            },
+                            app: source,
+                        },
+                    };
+
+                    await postRequestMessage(firstProxyCheckMessage, source);
+
+                    mockAppDirectory.setupFunction('resolveAppInstanceForIntent', () => Promise.resolve(secondSource));
+
+                    const secondProxyCheckMessage: BrowserTypes.RaiseIntentRequest = {
+                        meta: {
+                            requestUuid: 'second-check',
+                            timestamp: currentDate,
+                            source: source,
+                        },
+                        type: 'raiseIntentRequest',
+                        payload: {
+                            intent: 'intent',
+                            context: {
+                                type: 'context',
+                            },
+                            app: secondSource,
+                        },
+                    };
+
+                    await postRequestMessage(secondProxyCheckMessage, secondSource);
+
+                    // First proxy should be disconnected (no responses), second should be connected
+                    expect(
+                        mockRootPublisher.withFunction('publishResponseMessage').withParameters(
+                            {
+                                isExpectedValue: responseMessage => responseMessage.type === 'raiseIntentResponse',
+                                expectedDisplayValue: 'Is an raiseIntent response',
+                            },
+                            {
+                                isExpectedValue: target => helpersImport.appInstanceEquals(target, source),
+                                expectedDisplayValue: 'for the first proxy',
+                            },
+                        ),
+                    ).wasNotCalled();
+                    expect(
+                        mockRootPublisher.withFunction('publishResponseMessage').withParameters(
+                            {
+                                isExpectedValue: responseMessage => responseMessage.type === 'raiseIntentResponse',
+                                expectedDisplayValue: 'Is an raiseIntent response',
+                            },
+                            {
+                                isExpectedValue: target => helpersImport.appInstanceEquals(target, secondSource),
+                                expectedDisplayValue: 'for the second proxy',
+                            },
+                        ),
+                    ).wasCalledOnce();
+                },
+                disconnectProxyTestTimeout + HEARTBEAT.INTERVAL_MS,
+            );
+
+            it('should handle when an exception is thrown when sending a heartbeat', async () => {
+                // Create an instance of the desktop agent
+                createInstance();
+
+                // Define a source
+                const source: FullyQualifiedAppIdentifier = {
+                    appId: 'app@mock-app-directory',
+                    instanceId: 'instance-id',
+                };
+
+                // Start heartbeat for source
+                const message: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: 'request-uuid',
+                        timestamp: mockedDate,
+                        source,
+                    },
+                    type: 'addIntentListenerRequest',
+                    payload: {
+                        intent: 'intent',
+                    },
+                };
+
+                mockRootPublisher.setupFunction('publishEvent', () => {
+                    throw new Error();
+                });
+
+                // Post the message
+                await postRequestMessage(message, source);
+
+                // Verify the proxy was disconnected and the resources were cleaned up
+                expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+            });
+
+            it('should not send heartbeats to itself when source is root agent', async () => {
+                createInstance();
+
+                const message: RequestMessage = {
+                    type: 'getInfoRequest',
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: appIdentifier, // Using root agent's identifier as source
+                    },
+                    payload: {},
+                };
+
+                await postRequestMessage(message, appIdentifier);
+
+                // Wait for enough time that a heartbeat would have been sent if it was going to be
+                await wait(HEARTBEAT.INTERVAL_MS + 100);
+
+                // Verify no heartbeat was sent
+                const expectedHeartbeat: BrowserTypes.HeartbeatEvent = {
+                    type: 'heartbeatEvent',
+                    payload: {},
+                    meta: {
+                        eventUuid: mockedGeneratedUuid,
+                        timestamp: mockedDate,
+                    },
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishEvent')
+                        .withParametersEqualTo(expectedHeartbeat, [appIdentifier]),
+                ).wasNotCalled();
             });
         });
     });

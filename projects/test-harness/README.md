@@ -7,7 +7,7 @@ To simulate the cross-origin scenarios it runs applications on different local p
 1. Raise and Handle Intent between applications.
 2. Enables dynamic addition of applications. When adding a new application, you can select the intents you wish to support and raise for the new app via the settings panel.
 3. A Resolver UI is provided to select an application when the raised intent is supported by multiple applications.
-4. Channel Selector (work in-progress)
+4. Channel Selector
 
 Applications are added to the root window by default. To add an application within a first-level app, select the target app by clicking on its header, then click on the `Add App` button to add the new application in the selected app.
 

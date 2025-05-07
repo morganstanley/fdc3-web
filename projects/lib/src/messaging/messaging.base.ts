@@ -83,7 +83,9 @@ export abstract class MessagingBase {
     }
 
     protected onMessage(envelope: IProxyIncomingMessageEnvelope): void {
-        this.incomingMessageCallbacks.forEach(callback => callback(envelope.payload));
+        for (const callback of this.incomingMessageCallbacks.values()) {
+            callback(envelope.payload);
+        }
     }
 
     private async subscribeToMessages(): Promise<void> {

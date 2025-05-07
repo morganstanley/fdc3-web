@@ -127,7 +127,13 @@ describe('DefaultRootMessagingProvider', () => {
             channelId: mockedGeneratedUuid,
         };
 
-        (mockMessagePortOne.functionCallLookup.addEventListener?.[0][1] as Function)({ data: expectedMessage.payload });
+        (
+            mockMessagePortOne.functionCallLookup.addEventListener?.[0][1] as unknown as ({
+                data,
+            }: {
+                data: any;
+            }) => void
+        )({ data: expectedMessage.payload });
 
         expect(callbackOne.withFunction('callback').withParametersEqualTo(expectedMessage)).wasCalledOnce();
         expect(callbackTwo.withFunction('callback').withParametersEqualTo(expectedMessage)).wasCalledOnce();
@@ -191,7 +197,15 @@ describe('DefaultRootMessagingProvider', () => {
     });
 
     function dispatchHelloMessage() {
-        (mockRootWindow.functionCallLookup.addEventListener?.[0][1] as Function)({
+        (
+            mockRootWindow.functionCallLookup.addEventListener?.[0][1] as unknown as ({
+                data,
+                source,
+            }: {
+                data: any;
+                source: any;
+            }) => void
+        )({
             data: helloMessage,
             source: mockProxyWindow.mock,
         });

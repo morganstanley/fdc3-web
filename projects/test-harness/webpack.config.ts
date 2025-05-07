@@ -1,20 +1,48 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 
 import 'webpack-dev-server';
 import { resolve } from 'path';
 import { Configuration } from 'webpack';
-import { applications } from './src/test-harness.config.json';
 
-const buildConfig = (id: string, entry: string, output: string, isDev: boolean): Configuration => {
+const buildConfig = (isRoot: boolean, isDev: boolean): Configuration => {
+    const entry = isRoot ? 'root-app' : 'default-app';
+
+    const plugins = isRoot
+        ? [
+              new HtmlWebpackPlugin({
+                  filename: `root-app.html`,
+                  template: resolve(__dirname, 'src', entry, `${entry}.html`),
+                  scriptLoading: 'defer',
+                  inject: 'body',
+              }),
+              new CopyPlugin({
+                  patterns: [{ from: resolve(__dirname, 'src', 'assets'), to: 'assets' }],
+              }),
+          ]
+        : [
+              // 2 HtmlWebpackPlugin - one to create html file for app A, one for app B
+              new HtmlWebpackPlugin({
+                  filename: `app-a.html`,
+                  template: resolve(__dirname, 'src', entry, `${entry}.html`),
+                  scriptLoading: 'defer',
+                  inject: 'body',
+              }),
+              new HtmlWebpackPlugin({
+                  filename: `app-b.html`,
+                  template: resolve(__dirname, 'src', entry, `${entry}.html`),
+                  scriptLoading: 'defer',
+                  inject: 'body',
+              }),
+          ];
+
     return {
         entry: {
-            [id]: resolve(__dirname, `./src/${entry}/${entry}.ts`),
+            [isRoot ? 'root-app' : 'default-app']: resolve(__dirname, `./src/${entry}/${entry}.ts`),
         },
         output: {
             filename: '[name].[contenthash].js',
-            path: resolve(__dirname, 'dist', output),
+            path: resolve(__dirname, 'build'),
         },
         resolve: {
             extensions: ['.ts', '.tsx', '.js'],
@@ -43,25 +71,7 @@ const buildConfig = (id: string, entry: string, output: string, isDev: boolean):
                 },
             ],
         },
-        plugins: [
-            new HtmlWebpackPlugin({
-                filename: `${id}.html`,
-                template: resolve(__dirname, 'src', entry, `${entry}.html`),
-                chunks: [id],
-                scriptLoading: 'defer',
-                inject: 'body',
-            }),
-            output === 'root' &&
-                new CopyPlugin({
-                    patterns: [
-                        { from: resolve(__dirname, 'src', 'assets'), to: 'assets' },
-                        {
-                            from: resolve(__dirname, '../messaging-provider/dist/fdc3-iframe-relay'),
-                            to: 'fdc3-iframe-relay',
-                        },
-                    ],
-                }),
-        ],
+        plugins,
         stats: {
             assets: true,
             colors: true,
@@ -78,18 +88,8 @@ module.exports = (env: Partial<Record<string, string | boolean>>, argv: Partial<
     const serve = (env['WEBPACK_SERVE'] ?? false) === true;
     const isDev = argv.mode === 'development';
 
-    const appConfigs = [{ appId: 'root-app' }, ...applications]
-        .filter(app => !serve || app.appId.includes('root'))
-        .map(app =>
-            app.appId === 'root-app'
-                ? buildConfig(app.appId, 'root-app', 'root', isDev)
-                : buildConfig(
-                      app.appId,
-                      app.appId === 'test-lit-app' ? 'test-lit-app' : 'default-app',
-                      app.appId.substring(app.appId.indexOf('-', 4) + 1),
-                      isDev,
-                  ),
-        );
+    const appConfigs = [buildConfig(true, isDev), buildConfig(false, isDev)];
+
     if (serve) {
         // we are running npm start-ui as a way to get quicker builds and auto browser refresh
         // when running npm start-ui alternate domains will NOT be available so cross domain testing will not work

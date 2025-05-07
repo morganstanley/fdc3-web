@@ -26,7 +26,9 @@ export class DefaultProxyMessagingProvider implements IProxyMessagingProvider {
         messagePort.start();
 
         messagePort.addEventListener('message', (event: MessageEvent) => {
-            this.callbacks.forEach(callback => callback({ payload: event.data }));
+            for (const callback of this.callbacks) {
+                callback({ payload: event.data });
+            }
         });
     }
 
