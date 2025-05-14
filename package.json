@@ -49,7 +49,7 @@
         "bootstrap": "^5.3.6",
         "copyfiles": "^2.4.1",
         "cors": "^2.8.5",
-        "esbuild": "^0.19.2",
+        "esbuild": "^0.25.0",
         "eslint": "9.23",
         "eslint-config-prettier": "10.1",
         "eslint-plugin-import": "^2.31.0",
