@@ -49,7 +49,7 @@
         "copyfiles": "^2.4.1",
         "cors": "^2.8.5",
         "esbuild": "^0.19.2",
-        "eslint": "9.23",
+        "eslint": "9.26",
         "eslint-config-prettier": "10.1",
         "eslint-plugin-import": "^2.31.0",
         "eslint-plugin-license-header": "^0.8.0",
