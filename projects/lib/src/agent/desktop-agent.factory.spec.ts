@@ -12,26 +12,30 @@ import {
     defineProperty,
     IMocked,
     Mock,
-    proxyJestModule,
+    proxyModule,
     registerMock,
     reset,
     setupFunction,
 } from '@morgan-stanley/ts-mocking-bird';
-import { AppDirectory } from '../app-directory';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppDirectory } from '../app-directory/index.js';
 import {
     FullyQualifiedAppIdentifier,
     IProxyMessagingProvider,
     IRootMessagingProvider,
     MessagingProviderFactory,
     UIProviderFactory,
-} from '../contracts';
-import * as helpersImport from '../helpers';
-import { RootMessagePublisher } from '../messaging';
-import { DesktopAgentImpl } from './desktop-agent';
-import { DesktopAgentFactory } from './desktop-agent.factory';
-import { DesktopAgentProxy } from './desktop-agent-proxy';
+} from '../contracts.js';
+import * as helpersImport from '../helpers/index.js';
+import { RootMessagePublisher } from '../messaging/index.js';
+import { DesktopAgentFactory } from './desktop-agent.factory.js';
+import { DesktopAgentImpl } from './desktop-agent.js';
+import { DesktopAgentProxy } from './desktop-agent-proxy.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = 'mocked-instance-id';
@@ -151,7 +155,7 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
 
         beforeEach(() => {
             mockPublisher = Mock.create<RootMessagePublisher>().setup(
-                setupFunction('initialise', () => Promise.resolve(appIdentifier)),
+                setupFunction('initialize', () => Promise.resolve(appIdentifier)),
                 setupFunction('addResponseHandler'),
             );
 
@@ -170,6 +174,7 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
 
             const agent = await instance.createRoot({
                 messagingProviderFactory: mockedFactory.mock.factory,
+                backoffRetry: { maxAttempts: 1, baseDelay: 100 },
             });
 
             expect(agent).toBeDefined();

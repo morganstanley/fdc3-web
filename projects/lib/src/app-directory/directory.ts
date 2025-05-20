@@ -14,16 +14,18 @@ import {
     type AppMetadata,
     type Context,
     type Intent,
+    LogLevel,
     OpenError,
     ResolveError,
 } from '@finos/fdc3';
-import { AppDirectoryApplication } from '../app-directory.contracts';
+import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import {
+    BackoffRetryParams,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
     IAppResolver,
     ResolveForContextResponse,
-} from '../contracts';
+} from '../contracts.js';
 import {
     createLogger,
     generateUUID,
@@ -33,9 +35,7 @@ import {
     isWebAppDetails,
     mapApplicationToMetadata,
     resolveAppIdentifier,
-} from '../helpers';
-
-const log = createLogger('AppDirectory');
+} from '../helpers/index.js';
 
 type IntentContextLookup = { intent: Intent; context: Context[] };
 type DirectoryEntry = { application?: AppDirectoryApplication; instances: string[] };
@@ -44,6 +44,8 @@ type DirectoryEntry = { application?: AppDirectoryApplication; instances: string
 const unknownAppDirectory = 'unknown-app-directory';
 
 export class AppDirectory {
+    private log = createLogger(AppDirectory, 'proxy');
+
     private readonly directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = {}; //indexed by appId
     private readonly instanceLookup: Partial<Record<string, Set<IntentContextLookup>>> = {}; //indexed by instanceId
 
@@ -53,10 +55,11 @@ export class AppDirectory {
     constructor(
         private readonly appResolverPromise: Promise<IAppResolver>,
         appDirectoryUrls?: string[],
+        backoffRetry?: BackoffRetryParams,
     ) {
         //assumes app directory is not modified while root desktop agent is active
         this.appDirectoryUrls = appDirectoryUrls ?? [];
-        this.loadDirectoryPromise = this.loadAppDirectory(this.appDirectoryUrls);
+        this.loadDirectoryPromise = this.loadAppDirectory(this.appDirectoryUrls, backoffRetry);
     }
 
     /**
@@ -148,7 +151,7 @@ export class AppDirectory {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
-        log('Registering new instance', 'debug', identityUrl);
+        this.log('Registering new instance', LogLevel.DEBUG, identityUrl);
         const application = await this.resolveAppIdentity(identityUrl);
 
         const identifier = application != null ? { appId: application.appId, instanceId: generateUUID() } : undefined;
@@ -209,7 +212,7 @@ export class AppDirectory {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
-        log('Resolving App Identity', 'debug', identityUrl);
+        this.log('Resolving App Identity', LogLevel.DEBUG, identityUrl);
 
         /**
          * This is a very simple check for now that just looks for a matching url.
@@ -226,7 +229,7 @@ export class AppDirectory {
             return matchingApp;
         }
 
-        log('No App Identity found', 'error', identityUrl, this.directory);
+        this.log('No App Identity found', LogLevel.ERROR, identityUrl, this.directory);
 
         return undefined;
     }
@@ -522,17 +525,17 @@ export class AppDirectory {
     /**
      * Fetches app data from given app directory urls and stores it in directory
      */
-    public async loadAppDirectory(appDirectoryUrls: string[]): Promise<void> {
-        log('Loading app directory', 'debug', appDirectoryUrls);
+    public async loadAppDirectory(appDirectoryUrls: string[], backoffRetry?: BackoffRetryParams): Promise<void> {
+        this.log('Loading app directory', LogLevel.DEBUG, appDirectoryUrls);
         if (appDirectoryUrls == null) {
             return;
         }
         await Promise.all(
             appDirectoryUrls.map(async url => {
                 try {
-                    const apps: AppDirectoryApplication[] | void = await getAppDirectoryApplications(url);
+                    const apps: AppDirectoryApplication[] | void = await getAppDirectoryApplications(url, backoffRetry);
 
-                    log(`Loaded app directory (${url})`, 'debug', apps);
+                    this.log(`Loaded app directory (${url})`, LogLevel.DEBUG, apps);
                     //add all returned apps to app directory using appId as key
                     //TODO: fix possible collisions between apps in different app directories with same appId
                     apps.forEach(app => {
@@ -545,12 +548,12 @@ export class AppDirectory {
                         };
                     });
                 } catch (err) {
-                    log(`Error loading app directory (${url})`, 'error', err);
+                    this.log(`Error loading app directory (${url})`, LogLevel.ERROR, err);
                 }
             }),
         );
 
-        log('All App directories loaded', 'info', this.directory);
+        this.log('All App directories loaded', LogLevel.INFO, this.directory);
     }
 
     /**

@@ -13,7 +13,7 @@ import {
     IProxyIncomingMessageEnvelope,
     IProxyMessagingProvider,
     IProxyOutgoingMessageEnvelope,
-} from '../contracts';
+} from '../contracts.js';
 
 /**
  * A getAgent standards compliant proxy messaging provider.

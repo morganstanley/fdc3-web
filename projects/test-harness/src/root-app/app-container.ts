@@ -26,7 +26,7 @@ export class AppContainer extends LitElement {
      * Renders the container's HTML structure, including the iframe that will contain the application.
      * @returns A TemplateResult that represents the component's HTML structure.
      */
-    protected render(): TemplateResult {
+    protected override render(): TemplateResult {
         return html`
             <div class="border border-3 h-100 position-relative ${this.getOriginClass()}">
                 <iframe
@@ -78,7 +78,7 @@ export class AppContainer extends LitElement {
      * @returns A string representing the URL to load the embedded application.
      */
 
-    protected createRenderRoot(): HTMLElement {
+    protected override createRenderRoot(): HTMLElement {
         return this;
     }
 }

@@ -32,15 +32,10 @@ updates:
       ts-mocking-bird:
         patterns:
           - "@morgan-stanley/ts-mocking-bird"
-      jest:
-        patterns:
-          - "jest"
-          - "jest-*"
       typescript:
         patterns:
           - "typescript"
           - "tslib"
-          - "ts-jest"
           - "ts-loader"
           - "typedoc"
       rxjs:

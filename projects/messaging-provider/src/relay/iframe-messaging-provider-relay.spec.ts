@@ -8,7 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { IframeRelay } from './iframe-messaging-provider-relay';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IframeRelay } from './iframe-messaging-provider-relay.js';
 
 const mockedChannelId = 'mocked-channel-id';
 
@@ -16,7 +17,7 @@ describe('IframeRelay', () => {
     let iframeRelay: IframeRelay;
     let mockedWindow: Window;
     let mockParentWindowCallback: (event: MessageEvent) => void;
-    let stubAddEventListener: jest.Mock;
+    let stubAddEventListener: ReturnType<typeof vi.fn>;
     let mockedConsole: Console;
     let mockedBroadcastChannel: BroadcastChannel;
     let mockedMessagePort: MessagePort;
@@ -34,7 +35,7 @@ describe('IframeRelay', () => {
     });
 
     beforeEach(() => {
-        stubAddEventListener = jest.fn((_: string, callback: (event: MessageEvent) => void) => {
+        stubAddEventListener = vi.fn((_: string, callback: (event: MessageEvent) => void) => {
             mockParentWindowCallback = callback;
         });
         const queryParams = new URLSearchParams();
@@ -42,8 +43,8 @@ describe('IframeRelay', () => {
 
         mockedWindow = {
             addEventListener: stubAddEventListener,
-            removeEventListener: jest.fn(),
-            dispatchEvent: jest.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
             location: {
                 search: `?${queryParams.toString()}`,
                 host: 'localhost',
@@ -51,19 +52,19 @@ describe('IframeRelay', () => {
                 href: 'http://localhost/',
             } as any as Location,
             parent: {
-                postMessage: jest.fn(),
+                postMessage: vi.fn(),
             },
         } as any as Window;
-        mockedConsole = jest.mocked(console);
+        mockedConsole = console;
 
         mockedBroadcastChannel = {
-            postMessage: jest.fn(),
+            postMessage: vi.fn(),
         } as any as BroadcastChannel;
-        jest.spyOn(window, 'BroadcastChannel').mockReturnValue(mockedBroadcastChannel);
+        vi.spyOn(window, 'BroadcastChannel').mockReturnValue(mockedBroadcastChannel);
 
         mockedMessagePort = {
             onmessage: null,
-            postMessage: jest.fn(),
+            postMessage: vi.fn(),
         } as any as MessagePort;
         iframeRelay = new IframeRelay(mockedWindow, mockedConsole);
     });
@@ -104,13 +105,13 @@ describe('IframeRelay', () => {
 
     it('should initialize the relay and emit an error when the channel id is not found in the query parameters and undefined as constructor parameter', async () => {
         // Arrange
-        mockedConsole.error = jest.fn();
+        mockedConsole.error = vi.fn();
         mockedWindow.location.search = '';
 
         // Act
         try {
             iframeRelay = new IframeRelay(mockedWindow, mockedConsole);
-            fail('Expected an error to be thrown');
+            throw new Error('Expected an error to be thrown');
         } catch (e) {
             // Assert
             expect(e).toBeInstanceOf(Error);
@@ -120,7 +121,7 @@ describe('IframeRelay', () => {
 
     it('should initialize the relay and emit an error when a message without port2 is posted', async () => {
         // Arrange
-        mockedConsole.error = jest.fn();
+        mockedConsole.error = vi.fn();
 
         // Act
         await iframeRelay.initializeRelay();
@@ -152,7 +153,7 @@ describe('IframeRelay', () => {
             const mockEvent = {
                 data: { type: 'fdc3-shutdown-channel' },
             };
-            mockedConsole.log = jest.fn();
+            mockedConsole.log = vi.fn();
 
             // Act
             mockedMessagePort.onmessage?.(mockEvent as any as MessageEvent);
@@ -207,7 +208,7 @@ describe('IframeRelay', () => {
             const mockEvent = {
                 data: { type: 'mocked-message-type' },
             };
-            mockedConsole.log = jest.fn();
+            mockedConsole.log = vi.fn();
 
             // Act
             mockedBroadcastChannel.onmessage?.(mockEvent as any as MessageEvent);

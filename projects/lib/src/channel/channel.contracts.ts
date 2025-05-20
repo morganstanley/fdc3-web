@@ -9,7 +9,7 @@
  * and limitations under the License. */
 
 import type { AppIdentifier, BrowserTypes, Channel, DesktopAgent, PrivateChannel } from '@finos/fdc3';
-import { IProxyMessagingProvider } from '../contracts';
+import { IProxyMessagingProvider } from '../contracts.js';
 
 /**
  * created to avoid circular dependencies

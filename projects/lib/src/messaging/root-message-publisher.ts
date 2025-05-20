@@ -8,9 +8,10 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes } from '@finos/fdc3';
-import { AppDirectory } from '../app-directory';
-import { AppDirectoryApplication } from '../app-directory.contracts';
+import { BrowserTypes, LogLevel } from '@finos/fdc3';
+import { AppDirectoryApplication } from '../app-directory.contracts.js';
+import { AppDirectory } from '../app-directory/index.js';
+import { IRootPublisher } from '../contracts.internal.js';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
@@ -21,8 +22,7 @@ import {
     IRootMessagingProvider,
     RequestMessage,
     ResponseMessage,
-} from '../contracts';
-import { IRootPublisher } from '../contracts.internal';
+} from '../contracts.js';
 import {
     createLogger,
     generateUUID,
@@ -30,12 +30,10 @@ import {
     getTimestamp,
     isNonEmptyArray,
     isWCPValidateAppIdentity,
-} from '../helpers';
+} from '../helpers/index.js';
 
-const log = createLogger('RootMessagePublisher');
-
-const PUBLISHER_NOT_INITIALISED = 'RootMessagePublisher not initialised before messages received.';
-const SEND_MESSAGE_INITIALISATION_ERROR = `sendMessage called before RootMessagePublisher has been initialised`;
+const PUBLISHER_NOT_INITIALIZED = 'RootMessagePublisher not initialized before messages received.';
+const SEND_MESSAGE_INITIALIZATION_ERROR = `sendMessage called before RootMessagePublisher has been initialized`;
 
 type RequestMessageHandler = (message: RequestMessage, source: FullyQualifiedAppIdentifier) => void;
 
@@ -46,6 +44,7 @@ type RequestMessageHandler = (message: RequestMessage, source: FullyQualifiedApp
 export class RootMessagePublisher implements IRootPublisher {
     private instanceIdToChannelId: Partial<Record<string, string>> = {};
     private channelIdToAppIdentifier: Partial<Record<string, FullyQualifiedAppIdentifier>> = {};
+    private log = createLogger(RootMessagePublisher, 'connection');
 
     private rootAppIdentifier: FullyQualifiedAppIdentifier | undefined;
 
@@ -95,19 +94,19 @@ export class RootMessagePublisher implements IRootPublisher {
 
     public sendMessage(message: IProxyOutgoingMessageEnvelope): void {
         if (this.rootAppIdentifier == null) {
-            throw new Error(SEND_MESSAGE_INITIALISATION_ERROR);
+            throw new Error(SEND_MESSAGE_INITIALIZATION_ERROR);
         }
 
         this.handleRequestMessage(message.payload, this.rootAppIdentifier);
     }
 
     /**
-     * Initialises the root agent's identity using the provided identity URL or the current window location.
+     * Initializes the root agent's identity using the provided identity URL or the current window location.
      * @param identityUrl - The URL to determine the root agent's identity.
      * @returns A promise that resolves to the fully qualified app identifier of the root agent.
      */
-    public async initialise(identityUrl?: string): Promise<FullyQualifiedAppIdentifier> {
-        log('Initialising', 'debug', { identityUrl });
+    public async initialize(identityUrl?: string): Promise<FullyQualifiedAppIdentifier> {
+        this.log('Initializing', LogLevel.DEBUG, { identityUrl });
 
         const { identifier } = await this.directory
             .registerNewInstance(identityUrl ?? this.windowRef.location.href)
@@ -115,7 +114,7 @@ export class RootMessagePublisher implements IRootPublisher {
                 throw new Error(err);
             });
 
-        log('Identity resolved', 'debug', { identifier });
+        this.log('Identity resolved', LogLevel.DEBUG, { identifier });
 
         this.rootAppIdentifier = identifier;
 
@@ -213,7 +212,7 @@ export class RootMessagePublisher implements IRootPublisher {
     }
 
     /**
-     * passes a request message to the root agent after verifying that the class has been properly initialised
+     * passes a request message to the root agent after verifying that the class has been properly initialized
      */
     private handleRequestMessage(
         message: RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity,
@@ -226,8 +225,8 @@ export class RootMessagePublisher implements IRootPublisher {
         }
 
         if (this.requestMessageHandler == null) {
-            console.log(PUBLISHER_NOT_INITIALISED, message);
-            throw new Error(PUBLISHER_NOT_INITIALISED);
+            console.log(PUBLISHER_NOT_INITIALIZED, message);
+            throw new Error(PUBLISHER_NOT_INITIALIZED);
         }
         this.requestMessageHandler(message, source);
     }
@@ -239,7 +238,7 @@ export class RootMessagePublisher implements IRootPublisher {
         validateMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity,
         channelId: string,
     ): Promise<FullyQualifiedAppIdentifier | undefined> {
-        log('Registering new instance', 'debug', { validateMessage, channelId });
+        this.log('Registering new instance', LogLevel.DEBUG, { validateMessage, channelId });
 
         const { identifier, application } = await this.directory.registerNewInstance(
             validateMessage.payload.identityUrl,

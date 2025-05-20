@@ -9,8 +9,8 @@
  * and limitations under the License. */
 
 import { BrowserTypes, Context } from '@finos/fdc3';
-import { WebAppDetails } from '../app-directory.contracts';
-import { FullyQualifiedAppId, FullyQualifiedAppIdentifier, IRootOutgoingMessageEnvelope } from '../contracts';
+import { WebAppDetails } from '../app-directory.contracts.js';
+import { FullyQualifiedAppId, FullyQualifiedAppIdentifier, IRootOutgoingMessageEnvelope } from '../contracts.js';
 
 export function isFullyQualifiedAppIdentifier(value: any): value is FullyQualifiedAppIdentifier {
     const appIdentifier = value as FullyQualifiedAppIdentifier;

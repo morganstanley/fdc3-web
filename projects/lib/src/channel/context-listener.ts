@@ -17,7 +17,7 @@ import type {
     ContextType,
     Listener,
 } from '@finos/fdc3';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts';
+import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
     isAddContextListenerResponse,
@@ -28,9 +28,9 @@ import {
     isGetCurrentChannelResponse,
     isGetCurrentContextResponse,
     resolveContextType,
-} from '../helpers';
-import { MessagingBase } from '../messaging';
-import { IChannelFactory } from './channel.contracts';
+} from '../helpers/index.js';
+import { MessagingBase } from '../messaging/index.js';
+import { IChannelFactory } from './channel.contracts.js';
 
 /**
 Listens to broadcast events.

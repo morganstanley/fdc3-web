@@ -9,7 +9,8 @@ import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import globals from 'globals';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import prettierConfig from './prettier.config.js';
+import prettierConfig from './prettier.config.mjs';
+import unusedImports from 'eslint-plugin-unused-imports';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,11 +30,11 @@ const ignores = globalIgnores(
     overrideIgnorePatterns != null
         ? overrideIgnorePatterns.split(',')
         : [
-              '**/dist/**/*',
-              '**/docs/**/*',
-              '**/node_modules/**/*',
-              ...(additionalIgnorePatterns != null ? additionalIgnorePatterns.split(',') : []),
-          ],
+            '**/dist/**/*',
+            '**/docs/**/*',
+            '**/node_modules/**/*',
+            ...(additionalIgnorePatterns != null ? additionalIgnorePatterns.split(',') : []),
+        ],
 );
 
 const apacheLicenseHeader = `/* Morgan Stanley makes this available to you under the Apache License,
@@ -72,6 +73,7 @@ const rules = {
     'import/no-duplicates': 'error', // removes duplicate imports
     'prettier/prettier': ['error', prettierConfig], // runs prettier
     'license-header/header': ['error', [apacheLicenseHeader]], // OSS license header
+    'unused-imports/no-unused-imports': 'error', // removes unused imports
 };
 
 if (typeof process.env.BUILD_TYPE === 'string' && process.env.BUILD_TYPE.toLowerCase() === 'release') {
@@ -97,6 +99,7 @@ export default defineConfig([
             'prefer-arrow': preferArrow,
             'simple-import-sort': simpleImportSort,
             'license-header': licenseHeader,
+            "unused-imports": unusedImports
         },
 
         languageOptions: {

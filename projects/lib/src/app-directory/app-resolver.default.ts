@@ -16,8 +16,8 @@ import {
     ResolveForContextPayload,
     ResolveForContextResponse,
     ResolveForIntentPayload,
-} from '../contracts';
-import { isFullyQualifiedAppIdentifier } from '../helpers';
+} from '../contracts.js';
+import { isFullyQualifiedAppIdentifier } from '../helpers/index.js';
 
 /**
  * If no IUIProvider is present then this class is used to resolve apps.

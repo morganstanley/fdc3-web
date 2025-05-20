@@ -9,4 +9,4 @@
  * and limitations under the License. */
 
 // do not export * as we have some internal reset functions
-export { getAgent } from './get-agent';
+export { getAgent } from './get-agent.js';

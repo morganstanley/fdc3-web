@@ -14,26 +14,20 @@ import {
     IRootIncomingMessageEnvelope,
     IRootOutgoingMessageEnvelope,
 } from '@morgan-stanley/fdc3-web';
-import * as fdc3Import from '@morgan-stanley/fdc3-web';
-import {
-    defineProperty,
-    IMocked,
-    Mock,
-    registerMock,
-    reset,
-    setupFunction,
-    setupProperty,
-} from '@morgan-stanley/ts-mocking-bird';
-import { RootWindowMessagingProvider } from './root-window-messaging-provider';
-
-/* eslint @typescript-eslint/no-var-requires: "off" */
-jest.mock('@morgan-stanley/fdc3-web', () =>
-    require('@morgan-stanley/ts-mocking-bird').proxyJestModule(require.resolve('@morgan-stanley/fdc3-web')),
-);
+import { defineProperty, IMocked, Mock, setupFunction, setupProperty } from '@morgan-stanley/ts-mocking-bird';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RootWindowMessagingProvider } from './root-window-messaging-provider.js';
 
 const channelOne = 'channelOne';
 const channelTwo = 'channelTwo';
 const mockedGeneratedUuid = `mocked-generated-Uuid`;
+
+vi.mock('@morgan-stanley/fdc3-web', () => {
+    return {
+        generateUUID: () => mockedGeneratedUuid,
+        ___moduleId: 'fdc3-web',
+    };
+});
 
 describe('RootWindowMessagingProvider', () => {
     let messagingProvider: RootWindowMessagingProvider;
@@ -46,9 +40,6 @@ describe('RootWindowMessagingProvider', () => {
 
     let sourceAppIdentifier: FullyQualifiedAppIdentifier;
 
-    // create once as import will only be evaluated and destructured once
-    const mockedFdc3 = Mock.create<typeof fdc3Import>();
-
     beforeEach(() => {
         sourceAppIdentifier = {
             appId: 'source-app-id',
@@ -56,14 +47,6 @@ describe('RootWindowMessagingProvider', () => {
         };
 
         mockConsole = Mock.create<Console>().setup(setupFunction('warn'), setupFunction('log'), setupFunction('error'));
-
-        mockedFdc3.setup(setupFunction('generateUUID', () => mockedGeneratedUuid));
-
-        registerMock(fdc3Import, mockedFdc3.mock);
-    });
-
-    afterAll(() => {
-        reset(fdc3Import);
     });
 
     describe('constructor', () => {
@@ -82,7 +65,7 @@ describe('RootWindowMessagingProvider', () => {
         it('should throw an error when unable to resolve window location basename', () => {
             // Arrange
             const mockedWindow: Window = {
-                addEventListener: jest.fn(),
+                addEventListener: vi.fn(),
                 location: {
                     href: 'http:',
                 },
@@ -91,7 +74,7 @@ describe('RootWindowMessagingProvider', () => {
             // Act
             try {
                 new RootWindowMessagingProvider(createMockChannel, mockConsole.mock, mockedWindow);
-                fail();
+                throw new Error('Test failed: should not reach here');
             } catch (e: any) {
                 expect(e.message).toEqual('Unable to resolve window location basename');
             }
@@ -99,12 +82,12 @@ describe('RootWindowMessagingProvider', () => {
     });
 
     describe('registerNewDesktopAgentProxyListener', () => {
-        let mockWindowMessageListener: jest.Mock<any, any>;
+        let mockWindowMessageListener: ReturnType<typeof vi.fn>;
         let mockedWindow: Window;
 
         beforeEach(() => {
             mockedWindow = {
-                addEventListener: jest.fn().mockImplementation((event, listener) => {
+                addEventListener: vi.fn().mockImplementation((event, listener) => {
                     if (event === 'message') {
                         mockWindowMessageListener = listener;
                     }
@@ -125,7 +108,7 @@ describe('RootWindowMessagingProvider', () => {
                     nonce: 'mocked-nonce',
                 },
                 source: {
-                    postMessage: jest.fn(),
+                    postMessage: vi.fn(),
                 },
                 origin: 'mocked-origin',
             };
@@ -314,7 +297,7 @@ describe('RootWindowMessagingProvider', () => {
     describe('when traceMessagingComms is enabled', () => {
         beforeEach(() => {
             const mockWindow = {
-                addEventListener: jest.fn(),
+                addEventListener: vi.fn(),
                 location: {
                     href: 'http://mocked-href/',
                     search: '?traceMessagingComms=true',

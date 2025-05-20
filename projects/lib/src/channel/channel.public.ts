@@ -9,10 +9,10 @@
  * and limitations under the License. */
 
 import type { BrowserTypes, Channel, Context, ContextHandler, DisplayMetadata, Listener } from '@finos/fdc3';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts';
-import { createRequestMessage, isBroadcastResponse, resolveContextType } from '../helpers';
-import { MessagingBase } from '../messaging';
-import { ContextListener } from './channel.contracts';
+import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
+import { createRequestMessage, isBroadcastResponse, resolveContextType } from '../helpers/index.js';
+import { MessagingBase } from '../messaging/index.js';
+import { ContextListener } from './channel.contracts.js';
 
 /**
  * Represents a context channel that applications can use to send and receive

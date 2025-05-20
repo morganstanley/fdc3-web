@@ -8,5 +8,5 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-export * from './app-resolver.component';
-export * from './channel-selector.component';
+export * from './app-resolver.component.js';
+export * from './channel-selector.component.js';

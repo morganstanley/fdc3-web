@@ -8,12 +8,13 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import './root-app.scss';
-import './settings-panel';
-import './app-container';
-import { AppIdentifier, Channel, Context, OpenError } from '@finos/fdc3';
+import './root-app.css';
+import './settings-panel.js';
+import './app-container.js';
+import { AppIdentifier, Channel, Context, LogLevel, OpenError } from '@finos/fdc3';
 import {
     AppDirectoryApplication,
+    BackoffRetryParams,
     createLogger,
     DesktopAgentFactory,
     FullyQualifiedAppIdentifier,
@@ -30,7 +31,7 @@ import {
 import { AppResolverComponent } from '@morgan-stanley/fdc3-web-ui-provider';
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants';
+import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants.js';
 import {
     type AddApp,
     AppOpenedContextType,
@@ -43,11 +44,14 @@ import {
     SelectableAppsRequestContextType,
     SelectableAppsResponseContextType,
     SelectAppContextType,
-} from '../contracts';
-
-const log = createLogger('RootApp');
+} from '../contracts.js';
 
 const appDirectoryUrls = ['http://localhost:4299'];
+
+const retryParams: BackoffRetryParams = {
+    maxAttempts: 5,
+    baseDelay: 500,
+};
 
 /**
  * `RootApp` is the entry point for the FDC3 Test Harness application.
@@ -56,6 +60,8 @@ const appDirectoryUrls = ['http://localhost:4299'];
  */
 @customElement('root-app')
 export class RootApp extends LitElement implements IOpenApplicationStrategy {
+    private log = createLogger(RootApp, 'proxy');
+
     @state()
     private appDetails: WebAppDetails[] = [];
 
@@ -66,7 +72,8 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
     private openedWindowChannel?: Channel;
 
-    private applications: Promise<AppDirectoryApplication[]>;
+    @state()
+    private applications: AppDirectoryApplication[] = [];
 
     constructor() {
         super();
@@ -77,24 +84,31 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
                     appDirectoryUrls: appDirectoryUrls, //passes in app directory web service base url
                     openStrategies: [this],
+                    backoffRetry: retryParams,
                 }),
         });
 
-        this.applications = Promise.allSettled(
-            appDirectoryUrls.map(appDirectoryUrl => {
-                const hostname = new URL(appDirectoryUrl).hostname;
-                return getAppDirectoryApplications(appDirectoryUrl)
-                    .then(
-                        applications =>
-                            applications
-                                .filter(app => app.appId !== 'test-harness-root-app') //test-harness-root-app is the container and so is always open
-                                .map(app => ({ ...app, appId: `${app.appId}@${hostname}` })), //make appIds fully qualified
-                    )
-                    .catch(() => []);
-            }),
-        ).then(results => results.filter(result => result.status === 'fulfilled').flatMap(result => result.value));
+        this.loadApplications();
+    }
+
+    private async loadApplications(): Promise<void> {
+        const directoryResults = await Promise.allSettled(appDirectoryUrls.map(url => this.loadAppDirectory(url)));
+
+        this.applications = directoryResults
+            .filter(result => result.status === 'fulfilled')
+            .flatMap(result => result.value);
 
         this.initApp();
+    }
+
+    private async loadAppDirectory(url: string): Promise<AppDirectoryApplication[]> {
+        const hostname = new URL(url).hostname;
+
+        const applications = await getAppDirectoryApplications(url, retryParams).catch(() => []);
+
+        return applications
+            .filter(app => app.appId !== 'test-harness-root-app') //test-harness-root-app is the container and so is always open
+            .map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
     public async canOpen(params: OpenApplicationStrategyParams): Promise<boolean> {
@@ -103,7 +117,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
     public async open(params: OpenApplicationStrategyParams): Promise<string> {
         if (isWebAppDetails(params.appDirectoryRecord.details)) {
-            log('Opening WebAppDetails', 'debug', params);
+            this.log('Opening WebAppDetails', LogLevel.DEBUG, params);
             const newWindow = (document.getElementById('openInWindow') as HTMLInputElement).checked;
 
             if (this.selectedApp != null) {
@@ -115,15 +129,15 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                     openRequestUuid: generateUUID(),
                 };
 
-                log('Raising OpenAppIntent', 'debug', openAppContext);
+                this.log('Raising OpenAppIntent', LogLevel.DEBUG, openAppContext);
 
                 params.agent.raiseIntent(OpenAppIntent, openAppContext, this.selectedApp);
 
                 return new Promise<string>((resolve, reject) => {
                     const timeout = setTimeout(() => {
-                        log(
+                        this.log(
                             'Timeout waiting for WindowProxy to be returned from proxy app',
-                            'error',
+                            LogLevel.ERROR,
                             params.appDirectoryRecord,
                         );
                         reject(`Timeout waiting for WindowProxy to be returned from proxy app`);
@@ -133,7 +147,11 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                         if (appOpenedContext.type === AppOpenedContextType) {
                             if (openAppContext.openRequestUuid === appOpenedContext.openRequestUuid) {
                                 clearTimeout(timeout);
-                                log('Received connectionAttemptUuid from proxy app', 'debug', appOpenedContext);
+                                this.log(
+                                    'Received connectionAttemptUuid from proxy app',
+                                    LogLevel.DEBUG,
+                                    appOpenedContext,
+                                );
 
                                 resolve(appOpenedContext.connectionAttemptUuid);
                             }
@@ -144,12 +162,12 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                 const details = params.appDirectoryRecord.details as WebAppDetails;
 
                 if (newWindow) {
-                    log('Opening app in new window', 'debug', details);
+                    this.log('Opening app in new window', LogLevel.DEBUG, details);
                     //open app in new window
                     const windowProxy = window.open(details.url, '_blank', 'popup');
 
                     if (windowProxy == null) {
-                        log('null window returned from window.open', 'error', params.appDirectoryRecord);
+                        this.log('null window returned from window.open', LogLevel.ERROR, params.appDirectoryRecord);
 
                         return Promise.reject(`Window was null`); // TODO: use an approved error type
                     }
@@ -169,13 +187,13 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                     //open app in iframe
                     this.appDetails = [...this.appDetails, details];
 
-                    log('Opening app in iframe', 'debug', details);
+                    this.log('Opening app in iframe', LogLevel.DEBUG, details);
 
                     return new Promise(resolve => {
                         // wait for iframe window to be created
                         this.iframeCreationCallbacks.set(details, (iframeWindow, app) => {
                             if (app === details && iframeWindow != null) {
-                                log('iframe window created', 'debug');
+                                this.log('iframe window created', LogLevel.DEBUG);
                                 const subscriber = subscribeToConnectionAttemptUuids(
                                     window,
                                     iframeWindow,
@@ -190,8 +208,6 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                     });
                 }
             }
-
-            return Promise.reject(`Window was null`); // TODO: use an approved error type
         }
 
         return Promise.reject(OpenError.ResolverUnavailable);
@@ -199,11 +215,9 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
     private async initApp(): Promise<void> {
         //open all apps in root domain by default
-        this.applications.then(applications =>
-            applications
-                .filter(application => application.appId.includes('root'))
-                .forEach(application => this.openAppInfo(application)),
-        );
+        this.applications
+            .filter(application => application.appId.includes('root'))
+            .forEach(application => this.openAppInfo(application));
 
         await this.subscribeToSelectedApp();
 
@@ -245,7 +259,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
      * Utilizes LitElement's `html` template literal tag for defining the structure of the component's HTML.
      * @returns {TemplateResult} The template result for the root app's main content.
      */
-    protected render(): TemplateResult {
+    protected override render(): TemplateResult {
         return html`
             <div class="vstack vh-100 overflow-hidden bg-dark-subtle" @click=${this.handleOutsideClick}>
                 ${this.renderHeader()}
@@ -288,7 +302,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
     private iframeCreationCallbacks = new Map<WebAppDetails, (window: WindowProxy, app: WebAppDetails) => void>();
 
     private handleNewIframe(event: CustomEvent<{ window: WindowProxy; app?: WebAppDetails }>): void {
-        log('iframe created', 'debug', {
+        this.log('iframe created', LogLevel.DEBUG, {
             app: event.detail.app,
             callback: event.detail.app != null ? this.iframeCreationCallbacks.get(event.detail.app) : undefined,
         });
@@ -343,7 +357,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         }
     }
 
-    protected createRenderRoot(): HTMLElement {
+    protected override createRenderRoot(): HTMLElement {
         return this;
     }
 }

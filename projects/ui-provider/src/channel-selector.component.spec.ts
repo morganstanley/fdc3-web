@@ -10,7 +10,8 @@
 
 import { Channel, DesktopAgent, EventHandler, FDC3ChannelChangedEvent, Listener } from '@finos/fdc3';
 import { IMocked, Mock, setupFunction, setupProperty } from '@morgan-stanley/ts-mocking-bird';
-import { ChannelSelectorComponent } from './channel-selector.component';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChannelSelectorComponent } from './channel-selector.component.js';
 
 const mockedChannelId = 'channel-two';
 
@@ -27,6 +28,7 @@ describe(`${ChannelSelectorComponent.name} (channel-selector.component)`, () => 
     let handlerCallbacks: EventHandler[];
 
     beforeEach(() => {
+        vi.useFakeTimers();
         mockDocument = document;
 
         channelOne = Mock.create<Channel>().setup(
@@ -70,6 +72,11 @@ describe(`${ChannelSelectorComponent.name} (channel-selector.component)`, () => 
                 return Promise.resolve(mockListener.mock);
             }),
         );
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.useRealTimers();
     });
 
     function createInstance(): ChannelSelectorComponent {
@@ -244,8 +251,8 @@ describe(`${ChannelSelectorComponent.name} (channel-selector.component)`, () => 
     });
 
     async function wait(delay: number = 50): Promise<void> {
-        return new Promise(resolve => {
-            setTimeout(() => resolve(), delay);
-        });
+        vi.advanceTimersByTime(delay);
+        // Force a flush of pending promises
+        await Promise.resolve();
     }
 });

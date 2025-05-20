@@ -8,21 +8,21 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AgentError, type DesktopAgent } from '@finos/fdc3';
-import { AppDirectory } from '../app-directory';
-import { DefaultResolver } from '../app-directory/app-resolver.default';
-import { ChannelFactory } from '../channel';
+import { AgentError, type DesktopAgent, LogLevel } from '@finos/fdc3';
+import { DefaultResolver } from '../app-directory/app-resolver.default.js';
+import { AppDirectory } from '../app-directory/index.js';
+import { ChannelFactory } from '../channel/index.js';
 import {
     IRootMessagingProvider,
     MessagingProviderFactory,
     ProxyDesktopAgentFactoryParams,
     RootDesktopAgentFactoryParams,
-} from '../contracts';
-import { createLogger, getWindow } from '../helpers';
-import { RootMessagePublisher } from '../messaging';
-import { DefaultRootMessagingProvider } from '../messaging-provider';
-import { DesktopAgentImpl } from './desktop-agent';
-import { DesktopAgentProxy } from './desktop-agent-proxy';
+} from '../contracts.js';
+import { createLogger, getWindow } from '../helpers/index.js';
+import { RootMessagePublisher } from '../messaging/index.js';
+import { DefaultRootMessagingProvider } from '../messaging-provider/index.js';
+import { DesktopAgentImpl } from './desktop-agent.js';
+import { DesktopAgentProxy } from './desktop-agent-proxy.js';
 
 /**
  * A factory to create an instance of DesktopAgent
@@ -48,7 +48,7 @@ export class DesktopAgentFactory {
      * @returns DesktopAgent
      */
     public async createRoot(factoryParams: RootDesktopAgentFactoryParams): Promise<DesktopAgent> {
-        const log = createLogger('DesktopAgentFactory.createRoot');
+        const log = createLogger(DesktopAgentFactory, 'proxy', factoryParams.logLevels);
 
         let agentResolve: (value: DesktopAgent) => void = () => {
             throw new Error(`agent Promise is not defined. Unable to update agent`);
@@ -63,24 +63,28 @@ export class DesktopAgentFactory {
 
         const messagingProvider = await this.constructRootMessagingProvider(factoryParams.messagingProviderFactory);
 
-        log('Messaging Provider constructed', 'debug');
+        log('Messaging Provider constructed', LogLevel.DEBUG);
 
-        const directory = new AppDirectory(appResolverPromise, factoryParams.appDirectoryUrls);
+        const directory = new AppDirectory(
+            appResolverPromise,
+            factoryParams.appDirectoryUrls,
+            factoryParams.backoffRetry,
+        );
         const rootMessagePublisher =
             this.rootMessagePublisherFactory != null
                 ? this.rootMessagePublisherFactory(messagingProvider, directory, window)
                 : new RootMessagePublisher(messagingProvider, directory, window);
 
         // retrieve the root agent details from the app directory
-        const appIdentifier = await rootMessagePublisher.initialise();
+        const appIdentifier = await rootMessagePublisher.initialize();
 
         if (appIdentifier == null) {
-            log('AppIdentifier could not be resolved', 'error');
+            log('AppIdentifier could not be resolved', LogLevel.ERROR);
             // app details could not be found
             return Promise.reject(AgentError.AccessDenied);
         }
 
-        log('AppIdentifier resolved', 'debug', appIdentifier);
+        log('AppIdentifier resolved', LogLevel.DEBUG, appIdentifier);
 
         const agent = new DesktopAgentImpl({
             appIdentifier,
@@ -90,7 +94,7 @@ export class DesktopAgentFactory {
             openStrategies: factoryParams.openStrategies,
         });
 
-        log('Agent constructed', 'debug', agent);
+        log('Root Agent constructed', LogLevel.DEBUG, agent);
 
         agentResolve(agent);
 
@@ -100,12 +104,16 @@ export class DesktopAgentFactory {
     }
 
     public async createProxy(factoryParams: ProxyDesktopAgentFactoryParams): Promise<DesktopAgent> {
+        const log = createLogger(DesktopAgentFactory, 'proxy', factoryParams.logLevels);
+        log('Creating proxy agent', LogLevel.DEBUG, factoryParams);
+
         const messagingProvider = await factoryParams.messagingProviderFactory();
 
         const agent = new DesktopAgentProxy({
             appIdentifier: factoryParams.appIdentifier,
             messagingProvider,
             channelFactory: new ChannelFactory(),
+            logLevels: factoryParams.logLevels,
         });
 
         this.updateWindow(agent);

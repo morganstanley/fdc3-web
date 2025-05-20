@@ -25,7 +25,7 @@ export class HeaderComponent extends LitElement {
     @property()
     public logoSrc!: string;
 
-    protected render(): TemplateResult {
+    protected override render(): TemplateResult {
         return html`
             <header class="navbar shadow-sm">
                 ${this.logoSrc ? html`<img src="${this.logoSrc}" height="40" width="40" />` : ''}
@@ -34,7 +34,7 @@ export class HeaderComponent extends LitElement {
         `;
     }
 
-    protected createRenderRoot(): HTMLElement {
+    protected override createRenderRoot(): HTMLElement {
         return this;
     }
 }

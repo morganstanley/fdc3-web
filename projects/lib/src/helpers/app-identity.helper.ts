@@ -9,7 +9,7 @@
  * and limitations under the License. */
 
 import type { AppIdentifier } from '@finos/fdc3';
-import { FullyQualifiedAppIdentifier } from '../contracts';
+import { FullyQualifiedAppIdentifier } from '../contracts.js';
 
 /**
  * compares two app identifiers and ensures that the app id and instance id are the same

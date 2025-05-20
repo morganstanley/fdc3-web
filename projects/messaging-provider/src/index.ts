@@ -8,5 +8,5 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-export * from './iframe-messaging-provider-factory';
-export * from './root-window-messaging-provider-factory';
+export * from './iframe-messaging-provider-factory.js';
+export * from './root-window-messaging-provider-factory.js';

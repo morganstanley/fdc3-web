@@ -9,14 +9,14 @@
  * and limitations under the License. */
 
 import type { BrowserTypes, Channel, PrivateChannel as FDC3PrivateChannel } from '@finos/fdc3';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts';
-import { IRootPublisher } from '../contracts.internal';
-import { IChannelFactory } from './channel.contracts';
-import { PrivateChannel } from './channel.private';
-import { PublicChannel } from './channel.public';
-import { ChannelMessageHandler } from './channel-message-handler';
-import { Channels } from './channels';
-import { ContextListener } from './context-listener';
+import { IRootPublisher } from '../contracts.internal.js';
+import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
+import { IChannelFactory } from './channel.contracts.js';
+import { PrivateChannel } from './channel.private.js';
+import { PublicChannel } from './channel.public.js';
+import { ChannelMessageHandler } from './channel-message-handler.js';
+import { Channels } from './channels.js';
+import { ContextListener } from './context-listener.js';
 
 export class ChannelFactory implements IChannelFactory {
     public createChannels(

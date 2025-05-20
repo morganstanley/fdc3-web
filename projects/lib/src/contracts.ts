@@ -16,10 +16,11 @@ import type {
     DesktopAgent,
     FDC3Event,
     FDC3EventTypes,
+    GetAgentLogLevels,
     Intent,
     PrivateChannelEvent,
 } from '@finos/fdc3';
-import { AppDirectoryApplication } from './app-directory.contracts';
+import { AppDirectoryApplication } from './app-directory.contracts.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -225,17 +226,34 @@ export interface IAppResolver {
  */
 export interface IUIProvider extends IAppResolver {}
 
+export type BackoffRetryParams = {
+    /**
+     * The maximum number of attempts to retry the connection. This includes the first attempt.
+     */
+    maxAttempts?: number;
+    /**
+     * The initial delay in milliseconds before the first retry attempt. This will increase exponentially with each attempt
+     */
+    baseDelay?: number;
+};
+
 export type RootDesktopAgentFactoryParams = {
     messagingProviderFactory?: MessagingProviderFactory<IRootMessagingProvider>;
     uiProvider?: UIProviderFactory;
     appDirectoryUrls?: string[];
     openStrategies?: IOpenApplicationStrategy[];
     identityUrl?: string;
+    /**
+     * retry parameters for the root agent to retry loading the app directory urls
+     */
+    backoffRetry?: BackoffRetryParams;
+    logLevels?: GetAgentLogLevels;
 };
 
 export type ProxyDesktopAgentFactoryParams = {
     appIdentifier: FullyQualifiedAppIdentifier;
     messagingProviderFactory: MessagingProviderFactory<IProxyMessagingProvider>;
+    logLevels?: GetAgentLogLevels;
 };
 
 export type OpenApplicationStrategyParams = {

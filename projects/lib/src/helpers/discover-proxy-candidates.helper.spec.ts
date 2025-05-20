@@ -9,7 +9,8 @@
  * and limitations under the License. */
 
 import { Mock } from '@morgan-stanley/ts-mocking-bird';
-import { discoverProxyCandidates } from './discover-proxy-candidates.helper';
+import { describe, expect, it } from 'vitest';
+import { discoverProxyCandidates } from './discover-proxy-candidates.helper.js';
 
 describe('discoverProxyCandidates', () => {
     it('should return the window opener when windowRef has an opener', () => {

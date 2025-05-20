@@ -9,7 +9,7 @@
  * and limitations under the License. */
 
 import { IProxyMessagingProvider } from '@morgan-stanley/fdc3-web';
-import { IframeMessagingProvider } from './iframe-messaging-provider';
+import { IframeMessagingProvider } from './iframe-messaging-provider.js';
 
 // There can only be one messaging provider per window
 let singletonIframeWindowMessagingProvider: IframeMessagingProvider | null = null;

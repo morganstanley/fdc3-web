@@ -9,14 +9,15 @@
  * and limitations under the License. */
 
 import { AppMetadata, BrowserTypes } from '@finos/fdc3';
-import { AppDirectoryApplication } from '../app-directory.contracts';
-import { FDC3_PROVIDER, FDC3_VERSION } from '../constants';
-import { FullyQualifiedAppIdentifier } from '../contracts';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppDirectoryApplication } from '../app-directory.contracts.js';
+import { FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
+import { FullyQualifiedAppIdentifier } from '../contracts.js';
 import {
     getAppDirectoryApplications,
     getImplementationMetadata,
     mapApplicationToMetadata,
-} from './app-directory-applications.helper';
+} from './app-directory-applications.helper.js';
 
 describe('app-directory-applications.helper', () => {
     describe('getAppDirectoryApplications', () => {
@@ -40,13 +41,13 @@ describe('app-directory-applications.helper', () => {
 
         beforeEach(() => {
             // Reset fetch mock before each test
-            global.fetch = jest.fn();
+            global.fetch = vi.fn();
         });
 
         it('should fetch applications from the app directory URL', async () => {
             // Mock successful fetch response
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                json: jest.fn().mockResolvedValueOnce({
+            (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+                json: vi.fn().mockResolvedValueOnce({
                     message: 'OK',
                     applications: mockApplications,
                 }),
@@ -63,8 +64,8 @@ describe('app-directory-applications.helper', () => {
 
         it('should return an empty array if the response message is not OK', async () => {
             // Mock failed fetch response
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                json: jest.fn().mockResolvedValueOnce({
+            (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+                json: vi.fn().mockResolvedValueOnce({
                     message: 'Error',
                     applications: null,
                 }),
@@ -81,8 +82,8 @@ describe('app-directory-applications.helper', () => {
 
         it('should return an empty array if applications is null', async () => {
             // Mock fetch response with null applications
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                json: jest.fn().mockResolvedValueOnce({
+            (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+                json: vi.fn().mockResolvedValueOnce({
                     message: 'OK',
                     applications: null,
                 }),
@@ -97,21 +98,47 @@ describe('app-directory-applications.helper', () => {
             expect(result).toEqual([]);
         });
 
-        it('should throw an error if fetch fails', async () => {
+        it('should throw an error if fetch fails with the default retry behavior', async () => {
             // Mock fetch error
             const mockError = new Error('Network error');
-            (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
+            (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(mockError);
 
             // Mock console.error to prevent test output noise
-            const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             // Verify the function throws the expected error
             await expect(getAppDirectoryApplications(mockAppDirectoryUrl)).rejects.toThrow(
-                'Error occurred when reading apps from app directory',
+                'Error occurred when reading apps from app directory after 3 attempts',
             );
 
             // Verify console.error was called with the original error
-            expect(consoleErrorSpy).toHaveBeenCalledWith(mockError);
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                `Max retries reached. Unable to fetch directory applications`,
+                { url: mockAppDirectoryUrl },
+            );
+
+            // Restore console.error
+            consoleErrorSpy.mockRestore();
+        });
+
+        it('should throw an error if fetch fails with 5 attempts', async () => {
+            // Mock fetch error
+            const mockError = new Error('Network error');
+            (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(mockError);
+
+            // Mock console.error to prevent test output noise
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            // Verify the function throws the expected error
+            await expect(getAppDirectoryApplications(mockAppDirectoryUrl, { maxAttempts: 5 })).rejects.toThrow(
+                'Error occurred when reading apps from app directory after 5 attempts',
+            );
+
+            // Verify console.error was called with the original error
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                `Max retries reached. Unable to fetch directory applications`,
+                { url: mockAppDirectoryUrl },
+            );
 
             // Restore console.error
             consoleErrorSpy.mockRestore();

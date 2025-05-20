@@ -8,10 +8,18 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AgentError, BrowserTypes, DesktopAgent, GetAgentParams, GetAgentType } from '@finos/fdc3';
-import { DesktopAgentFactory } from '../agent';
-import { DEFAULT_AGENT_DISCOVERY_TIMEOUT, FDC3_READY_EVENT } from '../constants';
-import { IProxyMessagingProvider } from '../contracts';
+import {
+    AgentError,
+    BrowserTypes,
+    DesktopAgent,
+    GetAgentLogLevels,
+    GetAgentParams,
+    GetAgentType,
+    LogLevel,
+} from '@finos/fdc3';
+import { DesktopAgentFactory } from '../agent/index.js';
+import { DEFAULT_AGENT_DISCOVERY_TIMEOUT, FDC3_READY_EVENT } from '../constants.js';
+import { IProxyMessagingProvider } from '../contracts.js';
 import {
     createLogger,
     discoverProxyCandidates,
@@ -19,10 +27,8 @@ import {
     generateValidateIdentityMessage,
     isWCPHandshake,
     isWCPSuccessResponse,
-} from '../helpers';
-import { DefaultProxyMessagingProvider } from '../messaging-provider';
-
-const log = createLogger('GetAgent');
+} from '../helpers/index.js';
+import { DefaultProxyMessagingProvider } from '../messaging-provider/index.js';
 
 /**
  * subsequent calls to getAgent just return this promise.
@@ -80,12 +86,23 @@ export const getAgent: GetAgentType = async (params?: GetAgentParams): Promise<D
     return agentPromise;
 };
 
+// Default loggers - will be configured with user options when getAgent is called
+let connectionLog = createLogger(getAgent, 'connection');
+let proxyLog = createLogger(getAgent, 'proxy');
+
 const getAgentImpl: GetAgentType = async (params?: GetAgentParams): Promise<DesktopAgent> => {
-    log(`getAgent called with params:`, 'debug', params);
+    // Configure logging based on params if available
+    if (params?.logLevels) {
+        // Create new loggers with custom settings
+        connectionLog = createLogger(getAgent, 'connection', params.logLevels);
+        proxyLog = createLogger(getAgent, 'proxy', params.logLevels);
+    }
+
+    proxyLog(`getAgent called with params:`, LogLevel.DEBUG, params);
 
     const existingAgent = await Promise.race([
         waitForPreloadAgent(params?.timeoutMs),
-        waitForProxyAgent(params?.identityUrl),
+        waitForProxyAgent(params?.identityUrl, params),
     ]);
 
     //TODO: look for details of existing agent in session storage
@@ -95,21 +112,21 @@ const getAgentImpl: GetAgentType = async (params?: GetAgentParams): Promise<Desk
     }
 
     if (typeof params?.failover === 'function') {
-        log(`calling failover function`, 'info');
+        proxyLog(`calling failover function`, LogLevel.INFO);
         // a failover function has been provided.
         const failoverResult = await params.failover(params);
 
         if (failoverResult instanceof Window) {
-            log(`failover function returned a window`, 'info');
+            proxyLog(`failover function returned a window`, LogLevel.INFO);
             return Promise.reject(`Failover Window result not currently supported`);
         }
 
-        log(`Failover function created agent`, 'info');
+        proxyLog(`Failover function created agent`, LogLevel.INFO);
 
         return failoverResult;
     }
 
-    log(`rejecting as no agent found and no failover function provided`, 'error');
+    proxyLog(`rejecting as no agent found and no failover function provided`, LogLevel.ERROR);
     return Promise.reject(AgentError.AgentNotFound);
 };
 
@@ -124,7 +141,7 @@ let onFdc3Ready: (() => void) | undefined;
  * It removes all event listeners and clears all timeouts
  */
 function cleanUp(): void {
-    log(`cleanUp called`, 'debug');
+    connectionLog(`cleanUp called`, LogLevel.DEBUG);
     if (fdc3ReadyTimeOut != null) {
         clearTimeout(fdc3ReadyTimeOut);
     }
@@ -148,7 +165,7 @@ function cleanUp(): void {
  * If no event is received then undefined is returned after the timeout which defaults to 750ms
  */
 function waitForPreloadAgent(optionalTimeout?: number): Promise<DesktopAgent | undefined> {
-    log(`waitForPreloadAgent called`, 'debug');
+    connectionLog(`waitForPreloadAgent called`, LogLevel.DEBUG);
     if (window.fdc3 != null) {
         return Promise.resolve(window.fdc3);
     }
@@ -158,7 +175,7 @@ function waitForPreloadAgent(optionalTimeout?: number): Promise<DesktopAgent | u
     return new Promise((resolve, reject) => {
         // timeout after 5 seconds if fdc3 ready event not fired
         fdc3ReadyTimeOut = setTimeout(() => {
-            log(`timed out looking for existing agent`, `info`);
+            connectionLog(`timed out looking for existing agent`, LogLevel.INFO);
             cleanUp();
             resolve(undefined);
         }, timeoutInMs) as any; // Typed as any as Typescript gets confused between nodejs types and browser types
@@ -169,7 +186,7 @@ function waitForPreloadAgent(optionalTimeout?: number): Promise<DesktopAgent | u
             if (window.fdc3 != null) {
                 resolve(window.fdc3);
             } else {
-                log(`reject as window.fdc3 is null when fdc3 ready fired`, 'error');
+                connectionLog(`reject as window.fdc3 is null when fdc3 ready fired`, LogLevel.ERROR);
 
                 reject(AgentError.AgentNotFound);
             }
@@ -185,22 +202,22 @@ let windowHelloListeners: ((event: MessageEvent) => void)[] | undefined;
 /**
  * Attempts to locate a parent DesktopAgent and establish communication with it
  */
-async function waitForProxyAgent(identityUrl?: string): Promise<DesktopAgent> {
-    log(`waitForProxyAgent called`, 'debug');
+async function waitForProxyAgent(identityUrl?: string, params?: GetAgentParams): Promise<DesktopAgent> {
+    connectionLog(`waitForProxyAgent called`, LogLevel.DEBUG);
     const candidates = discoverProxyCandidates();
 
     windowHelloListeners = [];
 
     const helloMessage = generateHelloMessage(identityUrl);
 
-    log(`${candidates.length} candidates found`, 'debug', candidates);
+    connectionLog(`${candidates.length} candidates found`, LogLevel.DEBUG, candidates);
 
     const messagePort = await Promise.race(candidates.map(candidate => attemptHandshake(helloMessage, candidate)));
-    log(`messagePort received`, 'debug');
+    connectionLog(`messagePort received`, LogLevel.DEBUG);
 
     cleanUp();
 
-    return createProxyAgent(helloMessage.meta.connectionAttemptUuid, messagePort);
+    return createProxyAgent(helloMessage.meta.connectionAttemptUuid, messagePort, identityUrl, params?.logLevels);
 }
 
 /**
@@ -210,8 +227,9 @@ async function createProxyAgent(
     connectionAttemptUuid: string,
     messagePort: MessagePort,
     identityUrl?: string,
+    logLevels?: GetAgentLogLevels,
 ): Promise<DesktopAgent> {
-    log(`createProxyAgent called`, 'debug', { connectionAttemptUuid, identityUrl });
+    connectionLog(`createProxyAgent called`, LogLevel.DEBUG, { connectionAttemptUuid, identityUrl });
     const messagingProvider = new DefaultProxyMessagingProvider(messagePort);
     const appValidationResponse = await performAppValidation(messagingProvider, connectionAttemptUuid, identityUrl);
 
@@ -221,9 +239,10 @@ async function createProxyAgent(
             instanceId: appValidationResponse.payload.instanceId,
         },
         messagingProviderFactory: () => Promise.resolve(messagingProvider),
+        logLevels: logLevels,
     });
 
-    log(`proxy agent created`, 'debug', proxyAgent);
+    connectionLog(`proxy agent created`, LogLevel.DEBUG, proxyAgent);
 
     return proxyAgent;
 }
@@ -236,7 +255,7 @@ function performAppValidation(
     connectionAttemptUuid: string,
     identityUrl?: string,
 ): Promise<BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse> {
-    log(`performAppValidation called`, 'debug', { connectionAttemptUuid, identityUrl });
+    connectionLog(`performAppValidation called`, LogLevel.DEBUG, { connectionAttemptUuid, identityUrl });
     const validateIdentityMessage = generateValidateIdentityMessage(connectionAttemptUuid, identityUrl);
 
     const responsePromise = new Promise<BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse>(
@@ -246,7 +265,7 @@ function performAppValidation(
                     isWCPSuccessResponse(message.payload) &&
                     validateIdentityMessage.meta.connectionAttemptUuid === message.payload.meta.connectionAttemptUuid
                 ) {
-                    log(`app validation response received`, 'debug', message.payload);
+                    connectionLog(`app validation response received`, LogLevel.DEBUG, message.payload);
                     resolve(message.payload);
                 }
                 //TODO: handle error response
@@ -283,7 +302,7 @@ function attemptHandshake(
                 event.data.meta.connectionAttemptUuid === helloMessage.meta.connectionAttemptUuid &&
                 event.ports[0] != null
             ) {
-                log(`handshake response received`, 'info');
+                connectionLog(`handshake response received`, LogLevel.INFO);
                 resolve(event.ports[0]);
             }
         };

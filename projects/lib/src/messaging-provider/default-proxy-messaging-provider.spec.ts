@@ -9,8 +9,9 @@
  * and limitations under the License. */
 
 import { any, IMocked, Mock, setupFunction, setupProperty } from '@morgan-stanley/ts-mocking-bird';
-import { IncomingMessageCallback, IProxyIncomingMessageEnvelope, IProxyOutgoingMessageEnvelope } from '../contracts';
-import { DefaultProxyMessagingProvider } from './default-proxy-messaging-provider';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { IncomingMessageCallback, IProxyIncomingMessageEnvelope, IProxyOutgoingMessageEnvelope } from '../contracts.js';
+import { DefaultProxyMessagingProvider } from './default-proxy-messaging-provider.js';
 
 describe('DefaultProxyMessagingProvider', () => {
     let mockMessagePort: IMocked<MessagePort>;

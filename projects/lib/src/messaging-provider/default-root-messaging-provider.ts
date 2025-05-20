@@ -13,8 +13,8 @@ import {
     IRootIncomingMessageEnvelope,
     IRootMessagingProvider,
     IRootOutgoingMessageEnvelope,
-} from '../contracts';
-import { generateHandshakeResponseMessage, generateUUID, isWCPHelloMessage } from '../helpers';
+} from '../contracts.js';
+import { generateHandshakeResponseMessage, generateUUID, isWCPHelloMessage } from '../helpers/index.js';
 
 /**
  * A getAgent standard compliant root messaging publisher

@@ -13,16 +13,20 @@ import {
     any,
     IMocked,
     Mock,
-    proxyJestModule,
+    proxyModule,
     registerMock,
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
-import { IncomingMessageCallback, IRootIncomingMessageEnvelope, IRootOutgoingMessageEnvelope } from '../contracts';
-import * as helpersImport from '../helpers';
-import { DefaultRootMessagingProvider } from './default-root-messaging-provider';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { IncomingMessageCallback, IRootIncomingMessageEnvelope, IRootOutgoingMessageEnvelope } from '../contracts.js';
+import * as helpersImport from '../helpers/index.js';
+import { DefaultRootMessagingProvider } from './default-root-messaging-provider.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedDate = new Date(2024, 1, 0, 0, 0, 0);
 const mockedGeneratedUuid = `mocked-generated-Uuid`;

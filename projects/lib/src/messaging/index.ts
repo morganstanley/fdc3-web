@@ -8,5 +8,5 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-export * from './messaging.base';
-export * from './root-message-publisher';
+export * from './messaging.base.js';
+export * from './root-message-publisher.js';

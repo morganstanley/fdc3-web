@@ -1,41 +1,24 @@
 {
     "$schema": "../../node_modules/nx/schemas/project-schema.json",
-    "name": "messaging-provider",
+    "name": "fdc3-web-messaging-provider",
     "projectType": "library",
     "targets": {
-        "build:relay": {
-            "executor": "@nx/webpack:webpack",
-            "options": {
-                "webpackConfig": "{projectRoot}/webpack.config.js",
-                "outputPath": "{projectRoot}/dist/",
-                "rootDir": "{projectRoot}"
-            }
+        "build": {
+            "executor": "@nx/js:tsc"
         },
-        "build:library": {
-            "executor": "@nx/js:tsc",
+        "generate-docs": {
+            "executor": "nx:run-commands",
             "options": {
-                "outputPath": "{projectRoot}/dist/",
-                "rootDir": "{projectRoot}/src",
-                "main": "{projectRoot}/dist/index.ts",
-                "tsConfig": "{projectRoot}/tsconfig.json",
-                "assets": [
-                    {
-                        "input": "{workspaceRoot}",
-                        "glob": ".npmignore",
-                        "output": "./"
-                    },
-                    {
-                        "input": "{projectRoot}",
-                        "glob": "package.json",
-                        "output": "./"
-                    },
-                    {
-                        "input": "{projectRoot}",
-                        "glob": "README.md",
-                        "output": "./"
-                    }
-                ]
-            }
+                "command": "npx typedoc {projectRoot}/src/index.ts --out docs/{projectName} --options typedoc.json --tsconfig {projectRoot}/tsconfig.lib.json"
+            },
+            "dependsOn": []
+        },
+        "type-check-specs": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "tsc -p {projectRoot}/tsconfig.spec.json --noEmit"
+            },
+            "dependsOn": []
         }
     }
 }

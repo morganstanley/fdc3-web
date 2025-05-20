@@ -8,8 +8,9 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { IframeMessagingProvider } from './iframe-messaging-provider';
-import { iframeMessagingProviderFactory } from './iframe-messaging-provider-factory';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { IframeMessagingProvider } from './iframe-messaging-provider.js';
+import { iframeMessagingProviderFactory } from './iframe-messaging-provider-factory.js';
 
 describe('iframeMessagingProviderFactory', () => {
     beforeAll(() => {
@@ -17,13 +18,13 @@ describe('iframeMessagingProviderFactory', () => {
         channelMock.prototype = {
             port1: {
                 onmessage: null,
-                start: jest.fn(),
-                close: jest.fn(),
-                postMessage: jest.fn(),
+                start: vi.fn(),
+                close: vi.fn(),
+                postMessage: vi.fn(),
             },
             port2: {
                 onmessage: null,
-                postMessage: jest.fn(),
+                postMessage: vi.fn(),
             },
         };
         channelMock.prototype.postMessage = function (data: any) {
@@ -33,11 +34,11 @@ describe('iframeMessagingProviderFactory', () => {
     });
 
     beforeEach(() => {
-        jest.spyOn(IframeMessagingProvider.prototype, 'initializeRelay').mockResolvedValue();
+        vi.spyOn(IframeMessagingProvider.prototype, 'initializeRelay').mockResolvedValue();
     });
 
     afterEach(() => {
-        jest.restoreAllMocks();
+        vi.restoreAllMocks();
     });
 
     it('should return the same instance when called multiple times with the same appIdentifier', async () => {

@@ -8,8 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-export * from './agent';
-export * from './contracts';
-export * from './helpers';
-export * from './get-agent';
-export * from './app-directory.contracts';
+export * from './agent/index.js';
+export * from './contracts.js';
+export * from './helpers/index.js';
+export * from './get-agent/index.js';
+export * from './app-directory.contracts.js';

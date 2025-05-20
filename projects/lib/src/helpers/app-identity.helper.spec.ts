@@ -9,7 +9,8 @@
  * and limitations under the License. */
 
 import type { AppIdentifier } from '@finos/fdc3';
-import { appInstanceEquals, resolveAppIdentifier } from './app-identity.helper';
+import { describe, expect, it } from 'vitest';
+import { appInstanceEquals, resolveAppIdentifier } from './app-identity.helper.js';
 
 describe(`app-identity.helper`, () => {
     describe(`${appInstanceEquals.name} (app-identity.helper)`, () => {

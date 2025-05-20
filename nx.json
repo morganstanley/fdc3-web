@@ -1,59 +1,117 @@
 {
     "$schema": "./node_modules/nx/schemas/nx-schema.json",
     "targetDefaults": {
-        "clean": {
-            "dependsOn": ["^clean"]
-        },
+        "clean": {},
         "build": {
-            "dependsOn": ["^build"],
-            "outputs": ["{workspaceRoot}/dist/"],
+            "dependsOn": [
+                "^build"
+            ],
             "cache": true
         },
         "test": {
-            "dependsOn": ["^test"],
-            "outputs": ["{workspaceRoot}/build/coverage-results/", "{workspaceRoot}/build/test-results/"],
             "cache": true
         },
         "lint": {
-            "dependsOn": ["^lint"],
             "cache": true
         },
         "generate-docs": {
-            "dependsOn": ["^generate-docs"]
+            "dependsOn": [
+                "^generate-docs"
+            ]
         },
-        "start": {
-            "dependsOn": ["^start"]
+        "typecheck-specs": {
+            "executor": "@nx/js:tsc",
+            "dependsOn": [
+                "^build"
+            ],
+            "options": {
+                "rootDir": "{projectRoot}/src",
+                "main": "index.ts",
+                "tsConfig": "{projectRoot}/tsconfig.spec.json"
+            }
+        },
+        "@nx/js:tsc": {
+            "dependsOn": [
+                "^build"
+            ],
+            "options": {
+                "outputPath": "{workspaceRoot}/dist/{projectName}",
+                "rootDir": "{projectRoot}/src",
+                "main": "index.ts",
+                "tsConfig": "{projectRoot}/tsconfig.lib.json",
+                "assets": [
+                    {
+                        "input": "{workspaceRoot}",
+                        "glob": ".npmignore",
+                        "output": "./"
+                    },
+                    {
+                        "input": "{projectRoot}",
+                        "glob": "package.json",
+                        "output": "./"
+                    },
+                    {
+                        "input": "{projectRoot}",
+                        "glob": "README.md",
+                        "output": "./"
+                    }
+                ]
+            }
+        },
+        "@nx/esbuild:esbuild": {
+            "cache": true,
+            "dependsOn": [
+                "^build"
+            ],
+            "inputs": [
+                "default",
+                "^default"
+            ]
         }
     },
     "defaultBase": "main",
     "release": {
         "version": {
-            "generatorOptions": {
-                "packageRoot": "projects/{projectName}/",
-                "currentVersionResolver": "git-tag"
-            }
+            "currentVersionResolver": "git-tag",
+            "preserveLocalDependencyProtocols": false,
+            "manifestRootsToUpdate": [
+                "projects/lib/",
+                "projects/messaging-provider/",
+                "projects/ui-provider/"
+            ]
         }
     },
     "plugins": [
         {
             "plugin": "@nx/eslint/plugin",
             "options": {
-                "targetName": "eslint:lint"
+                "targetName": "lint"
             }
         },
         {
-            "plugin": "@nx/jest/plugin",
+            "plugin": "@nx/vite/plugin",
             "options": {
-                "targetName": "jest:test"
+                "buildTargetName": "build",
+                "serveTargetName": "serve",
+                "previewTargetName": "preview",
+                "testTargetName": "test"
             }
         },
         {
-            "plugin": "@nx/webpack/plugin",
+            "plugin": "@nx/vite/plugin",
             "options": {
-                "buildTargetName": "webpack:build",
-                "serveTargetName": "webpack:serve",
-                "previewTargetName": "preview"
+                "buildTargetName": "build",
+                "previewTargetName": "preview",
+                "testTargetName": "test"
             }
         }
-    ]
+    ],
+    "generators": {
+        "@nx/web:application": {
+            "style": "css",
+            "linter": "eslint",
+            "unitTestRunner": "none",
+            "e2eTestRunner": "none"
+        }
+    }
 }

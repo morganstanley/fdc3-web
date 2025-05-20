@@ -10,7 +10,7 @@
 
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { ListComponentChange } from '../contracts';
+import type { ListComponentChange } from '../contracts.js';
 
 /**
  * `ListComponent` creates a list display, optionally with checkboxes.
@@ -29,7 +29,7 @@ export class ListComponent extends LitElement {
     @property()
     public checkbox!: boolean;
 
-    protected render(): TemplateResult {
+    protected override render(): TemplateResult {
         return html`
             <ul class="list-group w-100">
                 ${this.items?.map(
@@ -51,7 +51,7 @@ export class ListComponent extends LitElement {
         `;
     }
 
-    protected createRenderRoot(): HTMLElement {
+    protected override createRenderRoot(): HTMLElement {
         return this;
     }
 

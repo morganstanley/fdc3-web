@@ -12,25 +12,29 @@ import { BrowserTypes, ChannelError, Contact, Context, EventHandler, Listener, P
 import {
     IMocked,
     Mock,
-    proxyJestModule,
+    proxyModule,
     registerMock,
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
-import { HEARTBEAT } from '../constants';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HEARTBEAT } from '../constants.js';
+import { IRootPublisher } from '../contracts.internal.js';
 import {
     EventListenerLookup,
     EventMessage,
     FullyQualifiedAppIdentifier,
     IProxyMessagingProvider,
     ResponseMessage,
-} from '../contracts';
-import { IRootPublisher } from '../contracts.internal';
-import * as helpersImport from '../helpers';
-import { ChannelMessageHandler } from './channel-message-handler';
-import { recommendedChannels } from './default-channels';
+} from '../contracts.js';
+import * as helpersImport from '../helpers/index.js';
+import { ChannelMessageHandler } from './channel-message-handler.js';
+import { recommendedChannels } from './default-channels.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedTargetAppId = `mocked-target-app-id`;
 const mockedTargetInstanceId = `mocked-target-instance-id`;

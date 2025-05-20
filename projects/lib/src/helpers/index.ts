@@ -8,17 +8,17 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-export * from './timestamp.helper';
-export * from './uuid.helper';
-export * from './window.helper';
-export * from './type-predicate.helper';
-export * from './app-identity.helper';
-export * from './context.helper';
-export * from './url-helper';
-export * from './finos-type-predicate.helper';
-export * from './app-directory-applications.helper';
-export * from './get-host-manifest.helper';
-export * from './event-type.helper';
-export * from './messages.helper';
-export * from './discover-proxy-candidates.helper';
-export * from './log.helper';
+export * from './timestamp.helper.js';
+export * from './uuid.helper.js';
+export * from './window.helper.js';
+export * from './type-predicate.helper.js';
+export * from './app-identity.helper.js';
+export * from './context.helper.js';
+export * from './url-helper.js';
+export * from './finos-type-predicate.helper.js';
+export * from './app-directory-applications.helper.js';
+export * from './get-host-manifest.helper.js';
+export * from './event-type.helper.js';
+export * from './messages.helper.js';
+export * from './discover-proxy-candidates.helper.js';
+export * from './log.helper.js';

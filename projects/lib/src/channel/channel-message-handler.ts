@@ -9,8 +9,9 @@
  * and limitations under the License. */
 
 import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes } from '@finos/fdc3';
-import { EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts';
-import { IRootPublisher } from '../contracts.internal';
+import { IRootPublisher } from '../contracts.internal.js';
+import { EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
+import { convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
 import {
     appInstanceEquals,
     createEvent,
@@ -19,9 +20,8 @@ import {
     generateUUID,
     isContext,
     isNonEmptyArray,
-} from '../helpers';
-import { convertToPrivateChannelEventTypes } from '../helpers/event-type.helper';
-import { recommendedChannels } from './default-channels';
+} from '../helpers/index.js';
+import { recommendedChannels } from './default-channels.js';
 
 //uses 'allEvents' constant instead of null to signify app is listening to all events as null cannot be used as an index
 type PrivateChannelEventListenerKey = PrivateChannelEventTypes | 'allEvents';

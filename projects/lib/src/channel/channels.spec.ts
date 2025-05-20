@@ -21,11 +21,12 @@ import { ChannelError } from '@finos/fdc3';
 import {
     IMocked,
     Mock,
-    proxyJestModule,
+    proxyModule,
     registerMock,
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
@@ -33,14 +34,17 @@ import {
     IProxyOutgoingMessageEnvelope,
     Message,
     ResponseMessage,
-} from '../contracts';
-import { isGetCurrentChannelRequest } from '../helpers';
-import * as helpersImport from '../helpers';
-import { ContextListener } from './channel.contracts';
-import { Channels } from './channels';
-import { ChannelFactory } from './channels.factory';
+} from '../contracts.js';
+import * as helpersImport from '../helpers/index.js';
+import { isGetCurrentChannelRequest } from '../helpers/index.js';
+import { ContextListener } from './channel.contracts.js';
+import { ChannelFactory } from './channels.factory.js';
+import { Channels } from './channels.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = `mocked-instance-id`;
@@ -485,7 +489,7 @@ describe(`${Channels.name} (channels)`, () => {
 
             const instance = await createInstance();
 
-            expect(instance.getCurrentChannel()).resolves.toBe(expectedChannel);
+            await expect(instance.getCurrentChannel()).resolves.toBe(expectedChannel);
         });
     });
 
@@ -606,7 +610,7 @@ describe(`${Channels.name} (channels)`, () => {
         it(`should not do anything if no user channel is currently selected`, async () => {
             const instance = await createInstance();
 
-            expect(instance.broadcast(contact)).resolves.toBeUndefined();
+            await expect(instance.broadcast(contact)).resolves.toBeUndefined();
         });
     });
 
@@ -623,7 +627,7 @@ describe(`${Channels.name} (channels)`, () => {
             const listener = Mock.create<Listener>().mock;
             mockedContextListener.setupFunction('addContextListener', () => Promise.resolve(listener));
 
-            expect(instance.addContextListener('fdc3.action', mockHandler.mock.handler)).resolves.toBe(listener);
+            await expect(instance.addContextListener('fdc3.action', mockHandler.mock.handler)).resolves.toBe(listener);
 
             expect(mockedContextListener.withFunction('addContextListener')).wasCalledOnce();
         });

@@ -3,30 +3,73 @@
     "name": "test-harness",
     "projectType": "application",
     "targets": {
-        "build": {
-            "executor": "@nx/js:tsc",
+        "serve": {
+            "executor": "nx:run-commands",
             "options": {
-                "outputPath": "{projectRoot}/dist/",
-                "rootDir": "{projectRoot}/src",
-                "main": "index.ts",
-                "tsConfig": "{projectRoot}/tsconfig.json",
+                "commands": [
+                    {
+                        "command": "nx serve-node test-harness"
+                    },
+                    {
+                        "command": "nx serve-ui test-harness"
+                    }
+                ],
+                "parallel": true
+            }
+        },
+        "build": {
+            "dependsOn": [
+                "build-node",
+                "build-ui"
+            ]
+        },
+        "serve-ui": {
+            "executor": "@nx/vite:dev-server",
+            "options": {
+                "buildTarget": "build-ui",
+                "open": "index.html",
+                "port": 4200
+            }
+        },
+        "build-ui": {
+            "executor": "@nx/vite:build",
+            "dependsOn": [
+                "^build"
+            ],
+            "options": {
+                "outputPath": "build/{projectName}/ui",
+                "tsConfig": "{projectRoot}/tsconfig.app.json",
+                "sourceMap": true
+            }
+        },
+        "build-node": {
+            "executor": "@nx/esbuild:esbuild",
+            "options": {
+                "outputPath": "build/{projectName}/node",
+                "format": [
+                    "esm"
+                ],
+                "main": "{projectRoot}/src/server/index.ts",
+                "tsConfig": "{projectRoot}/tsconfig.server.json",
                 "assets": [
                     {
-                        "input": "{workspaceRoot}",
-                        "glob": ".npmignore",
-                        "output": "./"
-                    },
-                    {
-                        "input": "{projectRoot}",
-                        "glob": "package.json",
-                        "output": "./"
-                    },
-                    {
-                        "input": "{projectRoot}",
-                        "glob": "README.md",
-                        "output": "./"
+                        "glob": "**/*",
+                        "input": "{projectRoot}/src/server/assets",
+                        "output": "./assets"
                     }
                 ]
+            }
+        },
+        "serve-node": {
+            "continuous": true,
+            "executor": "@nx/js:node",
+            "defaultConfiguration": "development",
+            "dependsOn": [
+                "build-ui"
+            ],
+            "options": {
+                "buildTarget": "test-harness:build-node",
+                "runBuildTargetDependencies": false
             }
         }
     }

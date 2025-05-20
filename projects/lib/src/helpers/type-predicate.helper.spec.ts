@@ -8,13 +8,14 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
+import { describe, expect, it } from 'vitest';
 import {
     isChannel,
     isContext,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
     isNonEmptyArray,
-} from './type-predicate.helper';
+} from './type-predicate.helper.js';
 
 const defaultInvalidValues: unknown[] = ['', 'simpleString', [], {}, null, undefined];
 

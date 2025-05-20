@@ -9,20 +9,24 @@
  * and limitations under the License. */
 
 import type { BrowserTypes, EventHandler, Listener, PrivateChannel as FDC3PrivateChannel } from '@finos/fdc3';
-import { IMocked, Mock, proxyJestModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
+import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
     IProxyMessagingProvider,
     IProxyOutgoingMessageEnvelope,
     ResponseMessage,
-} from '../contracts';
-import * as helpersImport from '../helpers';
-import { PrivateChannel } from './channel.private';
-import { PublicChannel } from './channel.public';
-import { ChannelFactory } from './channels.factory';
+} from '../contracts.js';
+import * as helpersImport from '../helpers/index.js';
+import { PrivateChannel } from './channel.private.js';
+import { PublicChannel } from './channel.public.js';
+import { ChannelFactory } from './channels.factory.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = `mocked-instance-id`;

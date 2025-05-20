@@ -8,7 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { generateUUID } from './uuid.helper';
+import { describe, expect, it } from 'vitest';
+import { generateUUID } from './uuid.helper.js';
 
 describe(`${generateUUID.name} (uuid.helper)`, () => {
     it(`should generate a random string`, () => {

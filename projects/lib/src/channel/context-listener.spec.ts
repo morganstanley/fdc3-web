@@ -22,11 +22,12 @@ import { ChannelError } from '@finos/fdc3';
 import {
     IMocked,
     Mock,
-    proxyJestModule,
+    proxyModule,
     registerMock,
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
@@ -34,18 +35,21 @@ import {
     IProxyOutgoingMessageEnvelope,
     Message,
     ResponseMessage,
-} from '../contracts';
+} from '../contracts.js';
 import {
     isAddContextListenerRequest,
     isAddEventListenerRequest,
     isGetCurrentChannelRequest,
     isGetCurrentContextRequest,
-} from '../helpers';
-import * as helpersImport from '../helpers';
-import { ChannelFactory } from './channels.factory';
-import { ContextListener } from './context-listener';
+} from '../helpers/index.js';
+import * as helpersImport from '../helpers/index.js';
+import { ChannelFactory } from './channels.factory.js';
+import { ContextListener } from './context-listener.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = `mocked-instance-id`;
@@ -618,39 +622,6 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                 ).wasCalledOnce();
             });
 
-            if (!singleChannel) {
-                xit('should publish RemoveEventListenerRequest when unsubscribe is called', async () => {
-                    const instance = await createInstance(details);
-
-                    setupContextListenerResponse();
-                    if (!singleChannel) {
-                        setupAddEventListenerResponse();
-                        mockChannelSelection(mockedChannelId);
-                    }
-
-                    const listener = await instance.addContextListener('fdc3.contact', mockHandler.mock.handler);
-
-                    listener.unsubscribe();
-
-                    // It seems that the RemoveEventListenerRequest that we should be expecting here is not defined yet
-                    const expectedMessage: BrowserTypes.ContextListenerUnsubscribeRequest = {
-                        meta: createExpectedRequestMeta(),
-                        payload: {
-                            listenerUUID: contextListenerUuid,
-                        },
-                        type: 'contextListenerUnsubscribeRequest',
-                    };
-
-                    await wait();
-
-                    expect(
-                        mockMessagingProvider
-                            .withFunction('sendMessage')
-                            .withParametersEqualTo({ payload: expectedMessage }),
-                    ).wasCalledOnce();
-                });
-            }
-
             it('should no longer call ContextHandler function when unsubscribe has been called', async () => {
                 const instance = await createInstance(details);
 
@@ -731,7 +702,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
         it(`should return null if no channelId is set`, async () => {
             const instance = await createInstance();
 
-            expect(instance.getCurrentContext('fdc3.contact')).resolves.toBeNull();
+            await expect(instance.getCurrentContext('fdc3.contact')).resolves.toBeNull();
 
             await wait();
 

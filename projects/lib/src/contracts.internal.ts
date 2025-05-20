@@ -8,8 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AppDirectoryApplication } from './app-directory.contracts';
-import { EventMessage, FullyQualifiedAppIdentifier, IProxyMessagingProvider, ResponseMessage } from './contracts';
+import { AppDirectoryApplication } from './app-directory.contracts.js';
+import { EventMessage, FullyQualifiedAppIdentifier, IProxyMessagingProvider, ResponseMessage } from './contracts.js';
 
 /**
  * An interface used by the root agent for publishing messages to one or many proxy agents
@@ -27,5 +27,3 @@ export interface IRootPublisher extends IProxyMessagingProvider {
      */
     awaitAppIdentity(connectionAttemptUuid: string, app: AppDirectoryApplication): Promise<FullyQualifiedAppIdentifier>;
 }
-
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';

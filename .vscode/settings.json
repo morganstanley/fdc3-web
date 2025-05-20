@@ -1,8 +1,6 @@
 {
     "typescript.tsdk": "node_modules/typescript/lib",
     "window.title": "FDC3-WEB: ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}",
-    "detectIndentation": false,
-    "tabSize": 4,
     "editor.tabSize": 4,
     "editor.detectIndentation": false,
     "typescript.preferences.importModuleSpecifier": "relative",

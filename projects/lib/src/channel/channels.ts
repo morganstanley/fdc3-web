@@ -18,7 +18,7 @@ import type {
     Listener,
     PrivateChannel as FDC3PrivateChannel,
 } from '@finos/fdc3';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts';
+import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
     isCreatePrivateChannelResponse,
@@ -26,9 +26,9 @@ import {
     isGetUserChannelsResponse,
     isJoinUserChannelResponse,
     isLeaveCurrentChannelResponse,
-} from '../helpers';
-import { MessagingBase } from '../messaging';
-import { ContextListener, IChannelFactory } from './channel.contracts';
+} from '../helpers/index.js';
+import { MessagingBase } from '../messaging/index.js';
+import { ContextListener, IChannelFactory } from './channel.contracts.js';
 
 /**
  * addContextListener is omitted from this list so that we don't have to implement the deprecated function overload

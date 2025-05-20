@@ -8,8 +8,9 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { RootWindowMessagingProvider } from './root-window-messaging-provider';
-import { rootWindowMessagingProviderFactory } from './root-window-messaging-provider-factory';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { RootWindowMessagingProvider } from './root-window-messaging-provider.js';
+import { rootWindowMessagingProviderFactory } from './root-window-messaging-provider-factory.js';
 
 describe('rootWindowMessagingProviderFactory', () => {
     beforeAll(() => {

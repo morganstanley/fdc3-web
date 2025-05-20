@@ -9,8 +9,8 @@
  * and limitations under the License. */
 
 import { OpenError } from '@finos/fdc3';
-import { IOpenApplicationStrategy, OpenApplicationStrategyParams } from '../contracts';
-import { isWebAppDetails, subscribeToConnectionAttemptUuids } from '../helpers';
+import { IOpenApplicationStrategy, OpenApplicationStrategyParams } from '../contracts.js';
+import { isWebAppDetails, subscribeToConnectionAttemptUuids } from '../helpers/index.js';
 
 export class FallbackOpenStrategy implements IOpenApplicationStrategy {
     //window parameter is passed during testing

@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { ApplicationHostManifests } from '../app-directory.contracts';
+import { ApplicationHostManifests } from '../app-directory.contracts.js';
 
 export async function getHostManifest(
     manifests?: ApplicationHostManifests,

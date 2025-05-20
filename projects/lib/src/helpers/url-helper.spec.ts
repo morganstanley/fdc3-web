@@ -8,11 +8,15 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { Mock, proxyJestModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
-import { decodeUUUrl, generateUUUrl } from './url-helper';
-import * as helpersImport from './uuid.helper';
+import { Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodeUUUrl, generateUUUrl } from './url-helper.js';
+import * as helpersImport from './uuid.helper.js';
 
-jest.mock('./uuid.helper', () => proxyJestModule(require.resolve('./uuid.helper')));
+vi.mock('./uuid.helper.js', async () => {
+    const actual = await vi.importActual('./uuid.helper.js');
+    return proxyModule(actual);
+});
 
 const mockedGeneratedUuid = `mocked-generated-Uuid`;
 

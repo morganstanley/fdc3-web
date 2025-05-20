@@ -8,6 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
+import { BackoffRetryParams } from './contracts.js';
+
 export const FDC3_VERSION = '2.2.0';
 export const FDC3_PROVIDER = 'Morgan Stanley';
 
@@ -40,3 +42,8 @@ export const HEARTBEAT = {
      */
     TIMEOUT_MS: 500,
 } as const;
+
+export const defaultBackoffRetry: Required<BackoffRetryParams> = {
+    maxAttempts: 3,
+    baseDelay: 250,
+};

@@ -20,7 +20,7 @@ import {
 import { css, html, LitElement, TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { when } from 'lit/directives/when.js';
-import { ContextPopupState, IntentPopupState } from './contracts';
+import { ContextPopupState, IntentPopupState } from './contracts.js';
 
 @customElement('ms-app-resolver')
 export class AppResolverComponent extends LitElement implements IAppResolver {

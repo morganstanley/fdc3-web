@@ -10,7 +10,8 @@
 
 import type { BrowserTypes, Channel, Contact, Context, ContextHandler, Listener } from '@finos/fdc3';
 import { ChannelError } from '@finos/fdc3';
-import { IMocked, Mock, proxyJestModule, registerMock, setupFunction, toBe } from '@morgan-stanley/ts-mocking-bird';
+import { IMocked, Mock, proxyModule, registerMock, setupFunction, toBe } from '@morgan-stanley/ts-mocking-bird';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
@@ -18,15 +19,18 @@ import {
     IProxyOutgoingMessageEnvelope,
     Message,
     ResponseMessage,
-} from '../contracts';
-import { isBroadcastRequest } from '../helpers';
-import * as helpersImport from '../helpers';
-import { ContextListener } from './channel.contracts';
-import { PrivateChannel } from './channel.private';
-import { PublicChannel } from './channel.public';
-import { ChannelFactory } from './channels.factory';
+} from '../contracts.js';
+import { isBroadcastRequest } from '../helpers/index.js';
+import * as helpersImport from '../helpers/index.js';
+import { ContextListener } from './channel.contracts.js';
+import { PrivateChannel } from './channel.private.js';
+import { PublicChannel } from './channel.public.js';
+import { ChannelFactory } from './channels.factory.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = `mocked-instance-id`;
@@ -151,7 +155,7 @@ testPrivate.forEach(isPrivateImpl => {
 
                 const instance = await createInstance();
 
-                expect(instance.getCurrentContext('customContext')).resolves.toBe(context);
+                await expect(instance.getCurrentContext('customContext')).resolves.toBe(context);
                 expect(
                     mockContextListener.withFunction('getCurrentContext').withParameters('customContext'),
                 ).wasCalledOnce();
@@ -335,7 +339,9 @@ testPrivate.forEach(isPrivateImpl => {
 
                 const instance = await createInstance();
 
-                expect(instance.addContextListener('fdc3.contact', mockHandler.mock.handler)).resolves.toBe(listener);
+                await expect(instance.addContextListener('fdc3.contact', mockHandler.mock.handler)).resolves.toBe(
+                    listener,
+                );
                 expect(
                     (mockContextListener as IMocked<any>)
                         .withFunction('addContextListener')

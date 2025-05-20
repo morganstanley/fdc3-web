@@ -8,7 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { BrowserTypes } from '@finos/fdc3';
+import type { BrowserTypes, GetAgentLogLevels } from '@finos/fdc3';
+import { LogLevel } from '@finos/fdc3';
 import {
     FullyQualifiedAppIdentifier,
     HandshakeMessage,
@@ -17,20 +18,24 @@ import {
     Message,
     RequestMessage,
     ResponseMessage,
-} from '../contracts';
-import { generateUUID } from '../helpers';
+} from '../contracts.js';
+import { createLogger, generateUUID } from '../helpers/index.js';
 
 /**
  * Base class for anything that needs to send and receive request and response messages
  */
 export abstract class MessagingBase {
     protected readonly incomingMessageCallbacks: Map<string, (value: Message) => void>;
+    protected readonly log: (message: string, level?: LogLevel, ...optionalParams: any[]) => void;
 
     constructor(
         protected readonly appIdentifier: FullyQualifiedAppIdentifier,
         protected readonly messagingProvider: IProxyMessagingProvider,
+        protected readonly logLevels?: GetAgentLogLevels,
     ) {
         this.incomingMessageCallbacks = new Map<string, (value: Message) => void>();
+        this.log = createLogger(MessagingBase, 'proxy', logLevels);
+        this.log('MessagingBase constructor', LogLevel.DEBUG);
 
         this.subscribeToMessages();
     }
@@ -47,6 +52,7 @@ export abstract class MessagingBase {
     }
 
     protected async publishRequestMessage(message: RequestMessage): Promise<void> {
+        this.log('Publishing request message', LogLevel.DEBUG, message);
         this.messagingProvider.sendMessage({ payload: message });
     }
 
@@ -83,6 +89,14 @@ export abstract class MessagingBase {
     }
 
     protected onMessage(envelope: IProxyIncomingMessageEnvelope): void {
+        // Log heartbeat messages based on logging options
+        const isHeartbeat = envelope.payload?.type === 'heartbeatEvent';
+        if (isHeartbeat) {
+            this.log('Received heartbeat message', LogLevel.DEBUG, envelope.payload);
+        } else {
+            this.log('Received message', LogLevel.DEBUG, envelope.payload);
+        }
+
         for (const callback of this.incomingMessageCallbacks.values()) {
             callback(envelope.payload);
         }

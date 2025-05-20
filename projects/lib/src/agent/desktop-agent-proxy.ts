@@ -21,6 +21,7 @@ import {
     DesktopAgentDetails,
     EventHandler,
     FDC3EventTypes,
+    GetAgentLogLevels,
     ImplementationMetadata,
     Intent,
     IntentHandler,
@@ -29,8 +30,9 @@ import {
     Listener,
     PrivateChannel,
 } from '@finos/fdc3';
-import { ChannelFactory, Channels } from '../channel';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts';
+import { ChannelFactory, Channels } from '../channel/index.js';
+import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
+import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
     isAddEventListenerResponse,
@@ -54,14 +56,14 @@ import {
     isRaiseIntentResultResponse,
     resolveAppIdentifier,
     resolveContextType,
-} from '../helpers';
-import { convertToFDC3EventTypes } from '../helpers/event-type.helper';
-import { MessagingBase } from '../messaging';
+} from '../helpers/index.js';
+import { MessagingBase } from '../messaging/index.js';
 
 type ProxyDesktopAgentParams = {
     appIdentifier: FullyQualifiedAppIdentifier;
     messagingProvider: IProxyMessagingProvider;
     channelFactory: ChannelFactory;
+    logLevels?: GetAgentLogLevels;
 };
 
 export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
@@ -69,7 +71,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
     private channelFactory: ChannelFactory;
 
     constructor(params: ProxyDesktopAgentParams) {
-        super(params.appIdentifier, params.messagingProvider);
+        super(params.appIdentifier, params.messagingProvider, params.logLevels);
 
         this.channelFactory = params.channelFactory;
         this.channels = this.channelFactory.createChannels(params.appIdentifier, this.messagingProvider);

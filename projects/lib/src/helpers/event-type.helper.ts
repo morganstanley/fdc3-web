@@ -9,7 +9,7 @@
  * and limitations under the License. */
 
 import type { BrowserTypes, FDC3EventTypes, PrivateChannelEventTypes } from '@finos/fdc3';
-import { EventListenerKey } from '../contracts';
+import { EventListenerKey } from '../contracts.js';
 
 type PrivateChannelEventMessageTypes = Extract<
     BrowserTypes.EventMessageType,

@@ -9,7 +9,7 @@
  * and limitations under the License. */
 
 import { IRootMessagingProvider } from '@morgan-stanley/fdc3-web';
-import { RootWindowMessagingProvider } from './root-window-messaging-provider';
+import { RootWindowMessagingProvider } from './root-window-messaging-provider.js';
 
 // There can only be one messaging provider per window
 let singletonRootWindowMessagingProvider: RootWindowMessagingProvider | null = null;

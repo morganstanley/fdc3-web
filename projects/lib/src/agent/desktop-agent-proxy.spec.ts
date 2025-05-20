@@ -29,28 +29,32 @@ import { OpenError, ResolveError } from '@finos/fdc3';
 import {
     IMocked,
     Mock,
-    proxyJestModule,
+    proxyModule,
     registerMock,
     setupFunction,
     setupProperty,
     toBe,
 } from '@morgan-stanley/ts-mocking-bird';
-import { AppDirectory } from '../app-directory';
-import { ChannelFactory, Channels } from '../channel';
-import { ChannelMessageHandler } from '../channel/channel-message-handler';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppDirectory } from '../app-directory/index.js';
+import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
+import { ChannelFactory, Channels } from '../channel/index.js';
 import {
     EventMessage,
     FullyQualifiedAppIdentifier,
     IProxyMessagingProvider,
     IProxyOutgoingMessageEnvelope,
     ResponseMessage,
-} from '../contracts';
-import * as helpersImport from '../helpers';
-import { RootMessagePublisher } from '../messaging/';
-import { DesktopAgentImpl } from './desktop-agent';
-import { DesktopAgentProxy } from './desktop-agent-proxy';
+} from '../contracts.js';
+import * as helpersImport from '../helpers/index.js';
+import { RootMessagePublisher } from '../messaging/index.js';
+import { DesktopAgentImpl } from './desktop-agent.js';
+import { DesktopAgentProxy } from './desktop-agent-proxy.js';
 
-jest.mock('../helpers', () => proxyJestModule(require.resolve('../helpers')));
+vi.mock('../helpers/index.js', async () => {
+    const actual = await vi.importActual('../helpers/index.js');
+    return proxyModule(actual);
+});
 
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = `mocked-instance-id`;

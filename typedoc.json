@@ -1,0 +1,8 @@
+{
+    "includeVersion": true, // Include the project version in the documentation
+    "excludePrivate": true, // Exclude private members from the documentation
+    "excludeProtected": true, // Exclude protected members from the documentation
+    "excludeExternals": true, // Exclude external modules from the documentation
+    "theme": "default", // Theme for the documentation
+    "readme": "README.md" // Path to your README file for the documentation
+}
