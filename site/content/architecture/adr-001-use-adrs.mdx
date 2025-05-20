@@ -1,15 +1,16 @@
 ---
 type: ADR
 id: adr-001
-status: accepted
+status: Accepted
+scope: global
+deciders: github group
+date: 2021-06-01
 title: Use ADRs
 ---
 
 {/* Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License"). You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0. See the NOTICE file distributed with this work for additional information regarding copyright ownership. Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License. */}
 
-# Architecture Decision Record: Use ADRs
-
-## Context
+### Context
 
 ComposeUI has several very explicit goals that make the practice and
 discipline of architecture very important:
@@ -29,7 +30,7 @@ discipline of architecture very important:
   they still make sense, and if the motivating circumstances or
   conditions have changed.
 
-## Decision
+### Decision
 
 We will document every architecture-level decision for ComposeUI and its
 core modules with an
@@ -58,7 +59,7 @@ The workflow will be:
    removed or otherwise modified except for the annotation pointing to
    the new ADR.
 
-## Consequences
+### Consequences
 
 1. Developers must write an ADR and submit it for review before
    selecting an approach to any architectural decision -- that is, any
