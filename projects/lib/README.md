@@ -49,7 +49,7 @@ fdc3.subscribe('instrument', (context) => {
 
 To contribute to the FDC3 library and its plugins, follow these steps:
 
-1. Fork the repository on BitBucket.
+1. Fork the repository on GitHub.
 2. Clone the forked repository to your local machine.
 3. Install the required dependencies using `npm install`.
 4. Make your changes and ensure that the full build is executing successfully with `npm run build:release`.
