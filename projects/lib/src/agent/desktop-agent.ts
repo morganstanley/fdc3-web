@@ -851,9 +851,17 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
         this.proxyLog('OpenRequest application resolved', LogLevel.DEBUG, { application, source });
 
-        const validStrategies: IOpenApplicationStrategy[] = await Promise.all(
-            this.openStrategies.filter(async strategy => await this.canStrategyOpenApp(application, strategy)),
+        const strategyCanOpenResults = await Promise.all(
+            this.openStrategies.map(async strategy => {
+                const canOpen = await this.canStrategyOpenApp(application, strategy);
+
+                return { canOpen, strategy };
+            }),
         );
+
+        const validStrategies: IOpenApplicationStrategy[] = strategyCanOpenResults
+            .filter(({ canOpen }) => canOpen)
+            .map(({ strategy }) => strategy);
 
         if (validStrategies.length > 0) {
             const strategy = validStrategies[0];
