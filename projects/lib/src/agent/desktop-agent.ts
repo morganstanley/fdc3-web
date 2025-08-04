@@ -853,7 +853,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         const strategyCanOpenResults = await Promise.all(
             this.openStrategies.map(async strategy => {
-                const canOpen = await this.canStrategyOpenApp(application, strategy);
+                // if canOpen fails, do not use this strategy
+                const canOpen = await this.canStrategyOpenApp(application, strategy).catch(() => false);
 
                 return { canOpen, strategy };
             }),
@@ -866,84 +867,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         if (validStrategies.length > 0) {
             const strategy = validStrategies[0];
 
-            const { hostManifests, ...noManifests } = application;
-
-            //TODO: allow 15 seconds by default for application to open
-            try {
-                this.proxyLog('OpenRequest opening application', LogLevel.DEBUG, { application, source, strategy });
-
-                let openError: any;
-
-                const newAppConnectionAttemptUuid = await strategy
-                    .open({
-                        appDirectoryRecord: noManifests,
-                        agent: this,
-                        manifest: await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
-                            console.error(err),
-                        ),
-                    })
-                    .catch(err => {
-                        openError = err;
-                    });
-
-                if (newAppConnectionAttemptUuid == null || openError != null) {
-                    this.proxyLog('OpenRequest application failed to open', LogLevel.WARN, {
-                        application,
-                        source,
-                        newAppConnectionAttemptUuid,
-                        openError,
-                    });
-
-                    this.rootMessagePublisher.publishResponseMessage(
-                        createResponseMessage<BrowserTypes.OpenResponse>(
-                            'openResponse',
-                            { error: openError },
-                            requestMessage.meta.requestUuid,
-                            source,
-                        ),
-                        source,
-                    );
-
-                    return;
-                }
-
-                this.proxyLog('OpenRequest application opened', LogLevel.DEBUG, {
-                    application,
-                    source,
-                    newAppConnectionAttemptUuid,
-                });
-
-                const appIdentifier = await this.rootMessagePublisher.awaitAppIdentity(
-                    newAppConnectionAttemptUuid,
-                    application,
-                );
-
-                this.proxyLog('OpenRequest appIdentifier resolved', LogLevel.DEBUG, { appIdentifier, source });
-
-                this.rootMessagePublisher.publishResponseMessage(
-                    createResponseMessage<BrowserTypes.OpenResponse>(
-                        'openResponse',
-                        { appIdentifier },
-                        requestMessage.meta.requestUuid,
-                        source,
-                    ),
-                    source,
-                );
-
-                //pass given context object to opened application via contextListener
-                await this.passContextToOpenedApp(requestMessage, source, appIdentifier);
-            } catch (err) {
-                this.proxyLog('OpenRequest error opening application', LogLevel.ERROR, { application, source, err });
-                this.rootMessagePublisher.publishResponseMessage(
-                    createResponseMessage<BrowserTypes.OpenResponse>(
-                        'openResponse',
-                        { error: isOpenError(err) ? err : OpenError.ErrorOnLaunch },
-                        requestMessage.meta.requestUuid,
-                        source,
-                    ),
-                    source,
-                );
-            }
+            this.openAppWithStrategy(strategy, application, requestMessage, source);
         } else {
             this.proxyLog('OpenRequest no opening strategies found', LogLevel.ERROR, { source });
 
@@ -951,6 +875,92 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
                 createResponseMessage<BrowserTypes.OpenResponse>(
                     'openResponse',
                     { error: OpenError.ErrorOnLaunch },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+        }
+    }
+
+    private async openAppWithStrategy(
+        strategy: IOpenApplicationStrategy,
+        application: AppDirectoryApplication,
+        requestMessage: BrowserTypes.OpenRequest,
+        source: FullyQualifiedAppIdentifier,
+    ): Promise<void> {
+        const { hostManifests, ...noManifests } = application;
+
+        //TODO: allow 15 seconds by default for application to open
+        try {
+            this.proxyLog('OpenRequest opening application', LogLevel.DEBUG, { application, source, strategy });
+
+            let openError: any;
+
+            const newAppConnectionAttemptUuid = await strategy
+                .open({
+                    appDirectoryRecord: noManifests,
+                    agent: this,
+                    manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err =>
+                        console.error(err),
+                    ),
+                })
+                .catch(err => {
+                    openError = err;
+                });
+
+            if (newAppConnectionAttemptUuid == null || openError != null) {
+                this.proxyLog('OpenRequest application failed to open', LogLevel.WARN, {
+                    application,
+                    source,
+                    newAppConnectionAttemptUuid,
+                    openError,
+                });
+
+                this.rootMessagePublisher.publishResponseMessage(
+                    createResponseMessage<BrowserTypes.OpenResponse>(
+                        'openResponse',
+                        { error: openError },
+                        requestMessage.meta.requestUuid,
+                        source,
+                    ),
+                    source,
+                );
+
+                return;
+            }
+
+            this.proxyLog('OpenRequest application opened', LogLevel.DEBUG, {
+                application,
+                source,
+                newAppConnectionAttemptUuid,
+            });
+
+            const appIdentifier = await this.rootMessagePublisher.awaitAppIdentity(
+                newAppConnectionAttemptUuid,
+                application,
+            );
+
+            this.proxyLog('OpenRequest appIdentifier resolved', LogLevel.DEBUG, { appIdentifier, source });
+
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.OpenResponse>(
+                    'openResponse',
+                    { appIdentifier },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+
+            //pass given context object to opened application via contextListener
+            await this.passContextToOpenedApp(requestMessage, source, appIdentifier);
+        } catch (err) {
+            this.proxyLog('OpenRequest error opening application', LogLevel.ERROR, { application, source, err });
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.OpenResponse>(
+                    'openResponse',
+                    { error: isOpenError(err) ? err : OpenError.ErrorOnLaunch },
                     requestMessage.meta.requestUuid,
                     source,
                 ),

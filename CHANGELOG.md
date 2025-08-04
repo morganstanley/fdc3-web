@@ -1,6 +1,6 @@
 ## 0.3.3 (2025-08-04)
 
-This was a version bump only, there were no code changes.
+Fixed bugs around open strategies. Strategies that return `false` from `canOpen` are now correctly skipped and not used to open windows.
 
 ## 0.3.2 (2025-06-26)
 
