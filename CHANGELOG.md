@@ -1,3 +1,7 @@
+## 0.3.3 (2025-08-04)
+
+Fixed bugs around open strategies. Strategies that return `false` from `canOpen` are now correctly skipped and not used to open windows.
+
 ## 0.3.2 (2025-06-26)
 
  - Fixed a bug with `createRoot` that did not correctly pass the `identityUrl` to the `rootMessagePublisher`
