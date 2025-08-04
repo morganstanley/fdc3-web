@@ -872,13 +872,40 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             try {
                 this.proxyLog('OpenRequest opening application', LogLevel.DEBUG, { application, source, strategy });
 
-                const newAppConnectionAttemptUuid = await strategy.open({
-                    appDirectoryRecord: noManifests,
-                    agent: this,
-                    manifest: await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
-                        console.error(err),
-                    ),
-                });
+                let openError: any;
+
+                const newAppConnectionAttemptUuid = await strategy
+                    .open({
+                        appDirectoryRecord: noManifests,
+                        agent: this,
+                        manifest: await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
+                            console.error(err),
+                        ),
+                    })
+                    .catch(err => {
+                        openError = err;
+                    });
+
+                if (newAppConnectionAttemptUuid == null || openError != null) {
+                    this.proxyLog('OpenRequest application failed to open', LogLevel.WARN, {
+                        application,
+                        source,
+                        newAppConnectionAttemptUuid,
+                        openError,
+                    });
+
+                    this.rootMessagePublisher.publishResponseMessage(
+                        createResponseMessage<BrowserTypes.OpenResponse>(
+                            'openResponse',
+                            { error: openError },
+                            requestMessage.meta.requestUuid,
+                            source,
+                        ),
+                        source,
+                    );
+
+                    return;
+                }
 
                 this.proxyLog('OpenRequest application opened', LogLevel.DEBUG, {
                     application,
