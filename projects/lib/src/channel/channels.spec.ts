@@ -33,6 +33,7 @@ import {
     IProxyMessagingProvider,
     IProxyOutgoingMessageEnvelope,
     Message,
+    RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
 import * as helpersImport from '../helpers/index.js';
@@ -654,7 +655,7 @@ describe(`${Channels.name} (channels)`, () => {
     function awaitMessage<T extends Message>(predicate: (message: Message) => message is T): Promise<T> {
         return new Promise(resolve => {
             publishCallbacks.push(envelope => {
-                const message = envelope.payload;
+                const message = envelope.payload as RequestMessage;
                 if (predicate(message)) {
                     resolve(message);
                 }

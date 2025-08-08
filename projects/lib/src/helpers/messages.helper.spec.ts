@@ -18,6 +18,7 @@ import {
     createEvent,
     createRequestMessage,
     createResponseMessage,
+    generateGoodbyeMessage,
     generateHandshakeResponseMessage,
     generateHelloMessage,
     generateValidateIdentityMessage,
@@ -339,6 +340,17 @@ describe(`messages.helper`, () => {
                     instanceUuid,
                 },
                 type: 'WCP4ValidateAppIdentity',
+            });
+        });
+    });
+
+    describe('generateGoodbyeMessage', () => {
+        it('should create a validate goodbye message', () => {
+            const message = generateGoodbyeMessage();
+
+            expect(message).toEqual({
+                meta: { timestamp: mockedDate },
+                type: 'WCP6Goodbye',
             });
         });
     });

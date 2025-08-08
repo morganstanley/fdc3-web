@@ -117,7 +117,10 @@ export type IRootOutgoingMessageEnvelope = {
  * An incoming message to the root agent from a proxy
  */
 export interface IRootIncomingMessageEnvelope<
-    T extends RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity = RequestMessage,
+    T extends
+        | RequestMessage
+        | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+        | BrowserTypes.WebConnectionProtocol6Goodbye = RequestMessage,
 > {
     payload: T;
     /**
@@ -130,7 +133,10 @@ export interface IRootIncomingMessageEnvelope<
  * A Request message sent from a proxy agent. No target information is required as all request messages go to the root
  */
 export type IProxyOutgoingMessageEnvelope = {
-    payload: RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity;
+    payload:
+        | RequestMessage
+        | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+        | BrowserTypes.WebConnectionProtocol6Goodbye;
 };
 
 /**
@@ -151,7 +157,10 @@ export type IncomingMessageCallback<T extends IProxyIncomingMessageEnvelope | IR
  * Allows root agent to publish messages to and receive messages from proxy agents
  */
 export interface IRootMessagingProvider<
-    T extends RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity = RequestMessage,
+    T extends
+        | RequestMessage
+        | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+        | BrowserTypes.WebConnectionProtocol6Goodbye = RequestMessage,
 > {
     /**
      * Publishes a message to one of more target proxy agents
