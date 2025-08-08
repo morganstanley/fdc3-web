@@ -92,6 +92,7 @@ export class DesktopAgentFactory {
             directory: directory,
             channelFactory: new ChannelFactory(),
             openStrategies: factoryParams.openStrategies,
+            logLevels: factoryParams.logLevels,
         });
 
         log('Root Agent constructed', LogLevel.DEBUG, agent);

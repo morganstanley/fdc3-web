@@ -47,11 +47,13 @@ function getClassName(classOrFunction: ClassOrFunction): string {
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 type ClassOrFunction = { new (...args: any[]): any } | Function;
 
+export type LoggerFunction = (message: string, level?: LogLevel, ...optionalParams: any[]) => void;
+
 export function createLogger(
     classType: ClassOrFunction,
     messageType: MessageType,
     logLevels?: GetAgentLogLevels,
-): (message: string, level?: LogLevel, ...optionalParams: any[]) => void {
+): LoggerFunction {
     // Extract the class name to use as a preface
     const preface = getClassName(classType);
 
@@ -68,11 +70,7 @@ export function createLogger(
             }
         }
 
-        // Determine numeric level of current message
-        let messageLevel = LogLevel.INFO; // Default if not provided
-        if (level !== undefined) {
-            messageLevel = level;
-        }
+        const messageLevel = level ?? LogLevel.INFO; // Default if not provided
 
         // Skip if message level is higher than effective level or if level is NONE
         if (messageLevel > effectiveLogLevel || effectiveLogLevel === LogLevel.NONE) {
