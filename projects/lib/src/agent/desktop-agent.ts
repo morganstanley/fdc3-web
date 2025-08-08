@@ -1148,6 +1148,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         // Clean up channel subscriptions
         this.channelMessageHandler.cleanupDisconnectedProxy(appId);
+
+        this.directory.removeDisconnectedApp(appId);
     }
 
     /**

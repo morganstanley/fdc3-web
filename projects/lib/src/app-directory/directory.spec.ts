@@ -759,6 +759,42 @@ describe(`${AppDirectory.name} (directory)`, () => {
         });
     });
 
+    describe('removeDisconnectedApp', () => {
+        it('should remove a specific disconnected app instance from the directory', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'instanceOne', 'StartChat', []);
+            await registerApp(instance, mockedApplicationOne, 'instanceTwo', 'StartChat', []);
+
+            // Remove instanceOne
+            instance.removeDisconnectedApp({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            const appInstances = await instance.getAppInstances(mockedAppIdOne);
+            expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceTwo' }]);
+        });
+
+        it('should do nothing if app is not known to the directory', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'instanceOne', 'StartChat', []);
+
+            // Try to remove an unknown app
+            instance.removeDisconnectedApp({ appId: 'unknown-app-id', instanceId: 'instanceX' });
+
+            const appInstances = await instance.getAppInstances(mockedAppIdOne);
+            expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+        });
+
+        it('should do nothing if instanceId is not known for the app', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'instanceOne', 'StartChat', []);
+
+            // Try to remove an unknown instanceId
+            instance.removeDisconnectedApp({ appId: mockedAppIdOne, instanceId: 'unknown-instance-id' });
+
+            const appInstances = await instance.getAppInstances(mockedAppIdOne);
+            expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+        });
+    });
+
     async function registerApp(
         instance: AppDirectory,
         app: AppDirectoryApplication,

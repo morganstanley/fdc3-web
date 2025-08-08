@@ -197,6 +197,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 return mockedApplication;
             }),
+            setupFunction('removeDisconnectedApp'),
         );
         mockChannelHandler = Mock.create<ChannelMessageHandler>().setup(
             setupFunction('onGetUserChannelsRequest'),
@@ -2387,6 +2388,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                     // Verify the message received a response (proxy is connected)
                     expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+                    expect(mockAppDirectory.withFunction('removeDisconnectedApp')).wasCalledOnce();
                 },
                 disconnectProxyTestTimeout,
             );
