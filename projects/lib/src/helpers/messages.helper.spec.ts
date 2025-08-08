@@ -345,7 +345,7 @@ describe(`messages.helper`, () => {
     });
 
     describe('generateGoodbyeMessage', () => {
-        it('should create a validate goodbye message', () => {
+        it('should create a goodbye message', () => {
             const message = generateGoodbyeMessage();
 
             expect(message).toEqual({
