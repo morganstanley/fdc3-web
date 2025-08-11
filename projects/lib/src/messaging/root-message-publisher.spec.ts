@@ -43,7 +43,11 @@ const sourceAppId = `source-app-id`;
 
 describe('RootMessagePublisher', () => {
     let mockRootMessagingProvider: IMocked<
-        IRootMessagingProvider<RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity>
+        IRootMessagingProvider<
+            | RequestMessage
+            | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+            | BrowserTypes.WebConnectionProtocol6Goodbye
+        >
     >;
     let mockDirectory: IMocked<AppDirectory>;
     let mockWindowRef: IMocked<WindowProxy>;
@@ -56,7 +60,11 @@ describe('RootMessagePublisher', () => {
     beforeEach(() => {
         generateUuidResult = mockedRootGeneratedUuid;
         mockRootMessagingProvider = Mock.create<
-            IRootMessagingProvider<RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity>
+            IRootMessagingProvider<
+                | RequestMessage
+                | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+                | BrowserTypes.WebConnectionProtocol6Goodbye
+            >
         >().setup(setupFunction('subscribe'), setupFunction('publish'));
         mockRequestHandler = Mock.create();
         mockRequestHandler.setupFunction('handler');
@@ -69,6 +77,7 @@ describe('RootMessagePublisher', () => {
             setupFunction('registerNewInstance', () =>
                 Promise.resolve({ application: mockAppDirectoryApplication, identifier: rootAppIdentity }),
             ),
+            setupFunction('removeDisconnectedApp'),
         );
         mockWindowRef = Mock.create<WindowProxy>().setup(
             setupProperty('location', Mock.create<Location>().setup(setupProperty('href', 'mock-location')).mock),
@@ -272,6 +281,33 @@ describe('RootMessagePublisher', () => {
 
             // Clean up
             consoleError.mockRestore();
+        });
+
+        it('should remove the app from the directory if a goodbye message is received', async () => {
+            const instance = createInstance();
+            await instance.initialize();
+
+            const sourceApp: FullyQualifiedAppIdentifier = {
+                appId: sourceAppId,
+                instanceId: 'instanceOne',
+            };
+
+            await registerNewProxy(sourceApp, 'channelOne');
+
+            const requestMessage: BrowserTypes.WebConnectionProtocol6Goodbye = {
+                meta: {
+                    timestamp: mockedDate,
+                },
+                type: 'WCP6Goodbye',
+            };
+
+            // Simulate receiving a message with an unknown channelId
+            mockRootMessagingProvider.functionCallLookup.subscribe?.[0][0]({
+                payload: requestMessage,
+                channelId: 'channelOne',
+            });
+
+            expect(mockDirectory.withFunction('removeDisconnectedApp').withParameters(sourceApp)).wasCalledOnce();
         });
     });
 

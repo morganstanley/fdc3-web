@@ -164,6 +164,17 @@ tests.forEach(({ proxy }) => {
             expect(mockMessagingProvider.withFunction('addResponseHandler')).wasCalledOnce();
         });
 
+        it('should send goodbye message and log when pagehide event is not persisted', async () => {
+            await createInstance();
+
+            // Create a pagehide event with persisted = false
+            const event = new PageTransitionEvent('pagehide', { persisted: false });
+
+            window.dispatchEvent(event);
+
+            expect(mockMessagingProvider.withFunction('sendMessage')).wasCalledOnce();
+        });
+
         //https://fdc3.finos.org/docs/next/api/ref/DesktopAgent#addeventlistener
         describe('addEventListener', () => {
             let mockHandler: IMocked<{ handler: EventHandler }>;

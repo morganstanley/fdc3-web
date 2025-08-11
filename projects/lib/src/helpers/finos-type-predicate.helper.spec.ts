@@ -298,6 +298,11 @@ describe('finos-type-predicate.helper', () => {
         expect(typePredicates.isWCPHandshake(validMessage)).toBe(true);
     });
 
+    it('should identify valid WCP Goodbye messages', () => {
+        const validMessage = { type: 'WCP6Goodbye' };
+        expect(typePredicates.isWCPGoodbye(validMessage)).toBe(true);
+    });
+
     // Specific request message type tests
     const requestMessageTypes = [
         { func: typePredicates.isBroadcastRequest, type: 'broadcastRequest' },

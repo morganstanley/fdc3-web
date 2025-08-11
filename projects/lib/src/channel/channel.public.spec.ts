@@ -18,6 +18,7 @@ import {
     IProxyMessagingProvider,
     IProxyOutgoingMessageEnvelope,
     Message,
+    RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
 import { isBroadcastRequest } from '../helpers/index.js';
@@ -370,7 +371,7 @@ testPrivate.forEach(isPrivateImpl => {
         function awaitMessage<T extends Message>(predicate: (message: Message) => message is T): Promise<T> {
             return new Promise(resolve => {
                 sendMessageCallbacks.push(envelope => {
-                    const message = envelope.payload;
+                    const message = envelope.payload as RequestMessage;
                     if (predicate(message)) {
                         resolve(message);
                     }

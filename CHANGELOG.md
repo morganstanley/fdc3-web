@@ -1,3 +1,8 @@
+## 0.3.4 (2025-08-08)
+
+When handshake messages are not responded to by applications after 3 attempts that application is removed from the app resolver.
+When an application is closed a WCP6Goodbye message is sent to the root agent and the application is removed from the app resolver.
+
 ## 0.3.3 (2025-08-04)
 
 Fixed bugs around open strategies. Strategies that return `false` from `canOpen` are now correctly skipped and not used to open windows.

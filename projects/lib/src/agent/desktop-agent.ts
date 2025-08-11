@@ -11,6 +11,7 @@
 import {
     BrowserTypes,
     DesktopAgent,
+    GetAgentLogLevels,
     ImplementationMetadata,
     Intent,
     LogLevel,
@@ -47,6 +48,7 @@ import {
     isFullyQualifiedAppIdentifier,
     isOpenError,
     isResponsePayloadError,
+    LoggerFunction,
 } from '../helpers/index.js';
 import { RootMessagePublisher } from '../messaging/index.js';
 import { DesktopAgentProxy } from './desktop-agent-proxy.js';
@@ -59,6 +61,7 @@ type RootDesktopAgentParams = {
     channelFactory: ChannelFactory;
     openStrategies?: IOpenApplicationStrategy[];
     window?: Window; //used for testing FallbackOpenStrategy
+    logLevels?: GetAgentLogLevels;
 };
 
 /**
@@ -68,8 +71,8 @@ type RootDesktopAgentParams = {
  */
 export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent {
     // Create separate loggers for connection-related and proxy-related messages
-    private connectionLog = createLogger(DesktopAgentImpl, 'connection');
-    private proxyLog = createLogger(DesktopAgentImpl, 'proxy');
+    private connectionLog: LoggerFunction;
+    private proxyLog;
 
     private readonly intentListeners: Partial<Record<Intent, AppIdentifierListenerPair[]>> = {};
     //used when raising intents so desktop agent knows when chosen app has added required intentListener
@@ -97,6 +100,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             messagingProvider: params.rootMessagePublisher,
             channelFactory: params.channelFactory,
         });
+
+        this.connectionLog = createLogger(DesktopAgentImpl, 'connection', params.logLevels);
+        this.proxyLog = createLogger(DesktopAgentImpl, 'proxy', params.logLevels);
+
         this.rootMessagePublisher = params.rootMessagePublisher;
         params.rootMessagePublisher.requestMessageHandler = this.onRequestMessage.bind(this);
         this.directory = params.directory;
@@ -1141,6 +1148,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         // Clean up channel subscriptions
         this.channelMessageHandler.cleanupDisconnectedProxy(appId);
+
+        this.directory.removeDisconnectedApp(appId);
     }
 
     /**
