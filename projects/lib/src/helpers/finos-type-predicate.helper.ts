@@ -436,3 +436,7 @@ export function isWCPValidateAppIdentity(value: any): value is BrowserTypes.WebC
 export function isWCPHandshake(value: any): value is BrowserTypes.WebConnectionProtocol3Handshake {
     return (value as BrowserTypes.WebConnectionProtocol3Handshake).type === 'WCP3Handshake';
 }
+
+export function isWCPGoodbye(value: any): value is BrowserTypes.WebConnectionProtocol6Goodbye {
+    return (value as BrowserTypes.WebConnectionProtocol6Goodbye).type === 'WCP6Goodbye';
+}

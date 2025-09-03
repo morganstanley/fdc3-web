@@ -29,6 +29,7 @@ import {
     getImplementationMetadata,
     getTimestamp,
     isNonEmptyArray,
+    isWCPGoodbye,
     isWCPValidateAppIdentity,
 } from '../helpers/index.js';
 
@@ -60,7 +61,9 @@ export class RootMessagePublisher implements IRootPublisher {
 
     constructor(
         private rootMessagingProvider: IRootMessagingProvider<
-            RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+            | RequestMessage
+            | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+            | BrowserTypes.WebConnectionProtocol6Goodbye
         >,
         private directory: AppDirectory,
         private windowRef: WindowProxy,
@@ -97,7 +100,9 @@ export class RootMessagePublisher implements IRootPublisher {
             throw new Error(SEND_MESSAGE_INITIALIZATION_ERROR);
         }
 
-        this.handleRequestMessage(message.payload, this.rootAppIdentifier);
+        if (!isWCPGoodbye(message.payload)) {
+            this.handleRequestMessage(message.payload, this.rootAppIdentifier);
+        }
     }
 
     /**
@@ -193,15 +198,27 @@ export class RootMessagePublisher implements IRootPublisher {
      * Listens to incoming messages from the messaging provider that have been sent from proxy agents
      */
     private onMessage(
-        message: IRootIncomingMessageEnvelope<RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity>,
-        optionalSource?: FullyQualifiedAppIdentifier,
+        message: IRootIncomingMessageEnvelope<
+            | RequestMessage
+            | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+            | BrowserTypes.WebConnectionProtocol6Goodbye
+        >,
     ): void {
         if (isWCPValidateAppIdentity(message.payload)) {
             this.registerNewInstance(message.payload, message.channelId);
             return;
         }
 
-        const source = optionalSource ?? this.lookupSource(message.channelId);
+        const source = this.lookupSource(message.channelId);
+
+        if (isWCPGoodbye(message.payload)) {
+            if (source != null) {
+                this.log(`Goodbye message received from ${source.appId} (${source.instanceId})`, LogLevel.INFO);
+                this.directory.removeDisconnectedApp(source);
+            }
+
+            return;
+        }
 
         if (source == null) {
             console.error(`Could not resolve source for unknown channelId: ${message.channelId}`);
@@ -222,9 +239,7 @@ export class RootMessagePublisher implements IRootPublisher {
             // This should never happen but log a warning if it does
             console.warn(`Unexpected message of type ${message.type} received by RootMessagePublisher`);
             return;
-        }
-
-        if (this.requestMessageHandler == null) {
+        } else if (this.requestMessageHandler == null) {
             console.log(PUBLISHER_NOT_INITIALIZED, message);
             throw new Error(PUBLISHER_NOT_INITIALIZED);
         }

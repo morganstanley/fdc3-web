@@ -46,7 +46,7 @@ import {
     SelectAppContextType,
 } from '../contracts.js';
 
-const appDirectoryUrls = ['http://localhost:4299'];
+const appDirectoryUrls = ['http://localhost:4299/v2/apps'];
 
 const retryParams: BackoffRetryParams = {
     maxAttempts: 5,

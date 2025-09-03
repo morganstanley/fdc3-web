@@ -13,6 +13,7 @@ import { OpenError, ResolveError } from '@finos/fdc3';
 import {
     FullyQualifiedAppIdentifier,
     IAppResolver,
+    isFullyQualifiedAppIdentifier,
     ResolveForContextPayload,
     ResolveForContextResponse,
     ResolveForIntentPayload,
@@ -182,8 +183,21 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
             apps = apps.filter(app => app.appId === payload.appIdentifier?.appId);
         }
         //returns appIdentifier immediately if there is only one possible app instance
-        if (apps.length === 1 && apps[0].instanceId != null) {
-            return { appId: apps[0].appId, instanceId: apps[0].instanceId };
+        if (apps.length === 1) {
+            if (apps[0].instanceId != null) {
+                // return existing fully qualiofied app instance
+                return { appId: apps[0].appId, instanceId: apps[0].instanceId };
+            } else {
+                // open new instance of unqualified app
+                const newInstance = await agent.open(apps[0], payload.context);
+
+                if (isFullyQualifiedAppIdentifier(newInstance)) {
+                    return newInstance;
+                } else {
+                    //if instanceId is still null, error has occured, but this should be caught within open()
+                    return Promise.reject(OpenError.AppNotFound);
+                }
+            }
         }
         if (apps.length === 0) {
             return Promise.reject(OpenError.AppNotFound);
@@ -192,6 +206,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         const activeInstances = apps.filter(app => app.instanceId != null);
         //apps that can handle given intent
         const inactiveApps = apps.filter(app => app.instanceId == null);
+
         this._forIntentPopupState = { name: appIntent.intent.name, activeInstances, inactiveApps };
         this.togglePopup();
         //return Promise which will either resolve to appIntent containing FullyQualifiedAppIdentifier, or reject with error message

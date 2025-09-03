@@ -29,7 +29,7 @@ export async function getAppDirectoryApplicationsImpl(
     attempt = 1,
 ): Promise<AppDirectoryApplication[]> {
     try {
-        const response = await fetch(`${url}/v2/apps`).then(response => response.json()); // TODO: retry if initial fetch fails
+        const response = await fetch(`${url}`).then(response => response.json()); // TODO: retry if initial fetch fails
         if (response.message != 'OK' || response.applications == null) {
             //request has failed for this app directory url
             return [];

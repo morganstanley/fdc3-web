@@ -32,7 +32,7 @@ jobs:
           registry-url: https://registry.npmjs.org/
 
       - name: Install node modules and verify build
-        run: npm ci && npm run build-release
+        run: npm ci && npm run build:release
 
       - name: Publish FDC3 Library
         run: cd dist/fdc3-web && npm publish --provenance --access public

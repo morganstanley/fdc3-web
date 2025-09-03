@@ -600,6 +600,24 @@ export class AppDirectory {
 
         return directoryEntry.application;
     }
+
+    public removeDisconnectedApp(app: FullyQualifiedAppIdentifier): void {
+        delete this.instanceLookup[app.instanceId];
+
+        const fullyQualifiedId = isFullyQualifiedAppId(app.appId) ? app.appId : this.getFullyQualifiedAppId(app.appId);
+
+        if (fullyQualifiedId == null) {
+            //app is not known to desktop agent and cannot be looked up as no hostname is provided in appId
+            return;
+        }
+
+        const appInstances = this.directory[fullyQualifiedId];
+        const instanceIndex = appInstances?.instances?.indexOf(app.instanceId);
+
+        if (instanceIndex != null && instanceIndex >= 0) {
+            appInstances?.instances.splice(instanceIndex, 1);
+        }
+    }
 }
 
 //TODO: remove this

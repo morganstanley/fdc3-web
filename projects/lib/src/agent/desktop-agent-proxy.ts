@@ -28,6 +28,7 @@ import {
     IntentResolution,
     IntentResult,
     Listener,
+    LogLevel,
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
@@ -35,6 +36,7 @@ import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contrac
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
+    generateGoodbyeMessage,
     isAddEventListenerResponse,
     isAddIntentListenerResponse,
     isAppEventMessage,
@@ -80,6 +82,16 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
         this.addMessageCallback('heartbeat', message => {
             if (isHeartbeatEvent(message)) {
                 this.acknowledgeHeartbeat(message);
+            }
+        });
+
+        window.addEventListener('pagehide', async event => {
+            if (event.persisted === false) {
+                this.log('Page is being unloaded, cleaning up DesktopAgentProxy', LogLevel.DEBUG);
+
+                const message = generateGoodbyeMessage();
+
+                this.messagingProvider.sendMessage({ payload: message });
             }
         });
     }

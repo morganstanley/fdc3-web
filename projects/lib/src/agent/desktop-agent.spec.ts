@@ -197,6 +197,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 return mockedApplication;
             }),
+            setupFunction('removeDisconnectedApp'),
         );
         mockChannelHandler = Mock.create<ChannelMessageHandler>().setup(
             setupFunction('onGetUserChannelsRequest'),
@@ -1672,7 +1673,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
         describe(`openRequest`, () => {
             let mockOpenStrategy: IMocked<IOpenApplicationStrategy>;
-            let mockIncorrectOpenStrategy: IMocked<IOpenApplicationStrategy>;
+            let mockDisabledOpenStrategy: IMocked<IOpenApplicationStrategy>;
+            let mockErrorOpenStrategy: IMocked<IOpenApplicationStrategy>;
 
             beforeEach(() => {
                 mockOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
@@ -1680,7 +1682,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     setupFunction('canOpen', () => Promise.resolve(true)),
                     setupFunction('open', () => Promise.resolve(`mock-connection-attempt-uuid`)),
                 );
-                mockIncorrectOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                mockDisabledOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canOpen', () => Promise.resolve(false)),
+                    setupFunction('open', () => Promise.resolve(`mock-disabled-attempt-uuid`)),
+                );
+                mockErrorOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
                     setupProperty('manifestKey', 'mock-application'),
                     setupFunction('canOpen', () => Promise.resolve(true)),
                     setupFunction('open', () => Promise.reject(OpenError.ErrorOnLaunch)),
@@ -1717,6 +1724,33 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         manifest: mockedApplication.hostManifests?.['mock-application'],
                     }),
                 ).wasCalledOnce();
+
+                expect(mockDisabledOpenStrategy.withFunction('open')).wasNotCalled();
+            });
+
+            it(`should not call open on a strategy that returns false for canOpen`, async () => {
+                createInstance([mockDisabledOpenStrategy.mock, mockOpenStrategy.mock]);
+
+                const openMessage: BrowserTypes.OpenRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        app: { appId: mockedTargetAppId },
+                    },
+                    type: 'openRequest',
+                };
+
+                await postRequestMessage(openMessage, source);
+
+                const recordWithNoManifests = { ...mockedApplication };
+                delete recordWithNoManifests.hostManifests;
+
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
+
+                expect(mockDisabledOpenStrategy.withFunction('open')).wasNotCalled();
             });
 
             it(`should attempt to open app by opening app url in new browser window if no applicable strategy is passed to constructor`, async () => {
@@ -1885,7 +1919,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             });
 
             it(`should publish openResponse with OpenError.ErrorOnLaunch error message if specified application fails to launch correctly`, async () => {
-                createInstance([mockIncorrectOpenStrategy.mock]);
+                createInstance([mockErrorOpenStrategy.mock]);
 
                 const openMessage: BrowserTypes.OpenRequest = {
                     meta: {
@@ -2354,6 +2388,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                     // Verify the message received a response (proxy is connected)
                     expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+                    expect(mockAppDirectory.withFunction('removeDisconnectedApp')).wasCalledOnce();
                 },
                 disconnectProxyTestTimeout,
             );

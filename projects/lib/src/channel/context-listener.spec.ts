@@ -34,6 +34,7 @@ import {
     IProxyMessagingProvider,
     IProxyOutgoingMessageEnvelope,
     Message,
+    RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
 import {
@@ -1083,7 +1084,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
     function awaitMessage<T extends Message>(predicate: (message: Message) => message is T): Promise<T> {
         return new Promise(resolve => {
             publishCallbacks.push(envelope => {
-                const message = envelope.payload;
+                const message = envelope.payload as RequestMessage;
                 if (predicate(message)) {
                     resolve(message);
                 }

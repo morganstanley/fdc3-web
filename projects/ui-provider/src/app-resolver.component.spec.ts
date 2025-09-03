@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AppIdentifier, AppIntent, Context, DesktopAgent, IntentMetadata, ResolveError } from '@finos/fdc3';
+import { AppIdentifier, AppIntent, Context, DesktopAgent, IntentMetadata, OpenError, ResolveError } from '@finos/fdc3';
 import { IMocked, Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppResolverComponent } from './app-resolver.component.js';
@@ -51,6 +51,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                     appId: 'app-two',
                     instanceId: 'app-two-instance-one',
                 },
+                { appId: 'app-six' },
             ],
         };
         appIntentTwo = {
@@ -77,6 +78,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                 },
             ],
         };
+
         mockDesktopAgent = Mock.create<DesktopAgent>().setup(
             setupFunction('findIntent', (_intent, _context) => Promise.resolve(appIntent)),
             setupFunction('findIntentsByContext', _context => Promise.resolve([appIntent, appIntentTwo])),
@@ -98,6 +100,53 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
     }
 
     describe('resolveAppForIntent', () => {
+        it('should immediately return a fully qualified app if it is the only one with the correct id', async () => {
+            const instance = createInstance();
+
+            const appIdentifierPromise = instance.resolveAppForIntent({
+                intent: intent.name,
+                appIdentifier: { appId: 'app-two' },
+                context,
+            });
+
+            await expect(appIdentifierPromise).resolves.toEqual({
+                appId: 'app-two',
+                instanceId: 'app-two-instance-one',
+            });
+        });
+
+        it("should open a new instance of an app and return it's identifier if there is only 1 matching app", async () => {
+            const instance = createInstance();
+
+            mockDesktopAgent.setupFunction('open', (_name, _context) =>
+                Promise.resolve({ appId: 'app-six', instanceId: 'newInstance' }),
+            );
+
+            const appIdentifierPromise = instance.resolveAppForIntent({
+                intent: intent.name,
+                appIdentifier: { appId: 'app-six' },
+                context,
+            });
+
+            await expect(appIdentifierPromise).resolves.toEqual({
+                appId: 'app-six',
+                instanceId: 'newInstance',
+            });
+        });
+
+        it('should throw an error if there are no matching apps', async () => {
+            const instance = createInstance();
+
+            const appIdentifierPromise = instance.resolveAppForIntent({
+                intent: intent.name,
+                // you would not normally pass a fully qualified identifier but we want to make sure that it is returned if we do
+                appIdentifier: { appId: 'unknown-app-id' },
+                context,
+            });
+
+            await expect(appIdentifierPromise).rejects.toEqual(OpenError.AppNotFound);
+        });
+
         it('should add popup html to body with active instances and inactive apps that can handle given intent', () => {
             const instance = createInstance();
 
@@ -259,7 +308,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             await wait();
 
             expect(instance.forContextPopupState?.[intent.name].activeInstances.length).toEqual(3);
-            expect(instance.forContextPopupState?.[intent.name].inactiveApps.length).toEqual(1);
+            expect(instance.forContextPopupState?.[intent.name].inactiveApps.length).toEqual(2);
 
             expect(instance.forContextPopupState?.[intentTwo.name].activeInstances.length).toEqual(4);
             expect(instance.forContextPopupState?.[intentTwo.name].inactiveApps.length).toEqual(1);
@@ -286,7 +335,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await expect(
                 instance.resolveAppForContext({
-                    appIdentifier: { appId: 'app-four' },
+                    appIdentifier: { appId: 'app-five' },
                     context,
                 }),
             ).rejects.toBe(ResolveError.NoAppsFound);

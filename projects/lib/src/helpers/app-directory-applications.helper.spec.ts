@@ -56,7 +56,7 @@ describe('app-directory-applications.helper', () => {
             const result = await getAppDirectoryApplications(mockAppDirectoryUrl);
 
             // Verify fetch was called with the correct URL
-            expect(global.fetch).toHaveBeenCalledWith(`${mockAppDirectoryUrl}/v2/apps`);
+            expect(global.fetch).toHaveBeenCalledWith(`${mockAppDirectoryUrl}`);
 
             // Verify the returned applications match the mock data
             expect(result).toEqual(mockApplications);

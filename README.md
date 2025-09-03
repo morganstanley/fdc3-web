@@ -30,7 +30,7 @@ const agent = await getAgent({
   failover: () =>
     new DesktopAgentFactory().createRoot({
       uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
-      appDirectoryUrls: ['http://localhost:4299'],
+      appDirectoryUrls: ['http://localhost:4299/v2/apps'],
       openStrategies: [{
         canOpen: (params: OpenApplicationStrategyParams) => { /* define whether an app should open */ },
         open: (params: OpenApplicationStrategyParams) => { /* define how an app should open */ }
@@ -101,12 +101,12 @@ To enable app discovery and intent resolution, provide App Directory URLs when i
 
 ```js
 const agent = await getAgent({
-  appDirectoryUrls: ['http://localhost:4299'],
+  appDirectoryUrls: ['http://localhost:4299/v2/apps'],
 });
 
 // Fetch available applications
 import { getAppDirectoryApplications } from '@morgan-stanley/fdc3-web';
-const apps = await getAppDirectoryApplications('http://localhost:4299');
+const apps = await getAppDirectoryApplications('http://localhost:4299/v2/apps');
 ```
 
 For more advanced usage, see the [test-harness](./projects/test-harness/README.md) example app.
@@ -159,7 +159,7 @@ npm run test
 npm run lint 
 
 # Run a full build (Compile, Tests, Lint)
-npm run build-release
+npm run build:release
 
 # test a single project
 npx nx test fdc3-web 

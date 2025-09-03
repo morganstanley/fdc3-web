@@ -137,6 +137,15 @@ export function generateValidateIdentityMessage(
     };
 }
 
+export function generateGoodbyeMessage(): BrowserTypes.WebConnectionProtocol6Goodbye {
+    return {
+        type: 'WCP6Goodbye',
+        meta: {
+            timestamp: getTimestamp(),
+        },
+    };
+}
+
 /**
  * Listens to hello messages on the provided window and calls the provided callback with the connectionAttemptUuid
  * If the connection fails and is re-attempted a second connection attempt will be passed to the callback

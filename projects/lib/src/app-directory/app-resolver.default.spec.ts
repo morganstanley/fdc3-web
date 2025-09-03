@@ -8,8 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier, AppIntent, DesktopAgent, Intent } from '@finos/fdc3';
-import { ResolveError } from '@finos/fdc3';
+import type { AppIdentifier, AppIntent, Context, DesktopAgent, Intent } from '@finos/fdc3';
+import { OpenError, ResolveError } from '@finos/fdc3';
 import { IMocked, Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ResolveForContextPayload, ResolveForIntentPayload } from '../contracts.js';
@@ -65,7 +65,7 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                 }
             });
 
-            it(`should return app if only 1 app present with correct id`, async () => {
+            it(`should return app if only 1 fully qualified app present with correct id`, async () => {
                 const instance = createInstance();
 
                 const payload = createIntentPayload(appsInPayload, [
@@ -77,6 +77,54 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                     appId: mockedTargetAppId,
                     instanceId: mockedTargetInstanceId,
                 });
+
+                if (appsInPayload) {
+                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
+                } else {
+                    expect(
+                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
+                    ).wasCalledOnce();
+                }
+            });
+
+            it(`should open a new app instance if only 1 matching app has no instance id`, async () => {
+                const instance = createInstance();
+
+                const newInstanceId = 'new-instance-id';
+                mockAgent.setupFunction('open', () =>
+                    Promise.resolve({ appId: mockedTargetAppId, instanceId: newInstanceId }),
+                );
+
+                const payload = createIntentPayload(appsInPayload, [
+                    { appId: mockedTargetAppId },
+                    { appId: 'another-app-id' },
+                ]);
+
+                await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({
+                    appId: mockedTargetAppId,
+                    instanceId: newInstanceId,
+                });
+
+                if (appsInPayload) {
+                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
+                } else {
+                    expect(
+                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
+                    ).wasCalledOnce();
+                }
+            });
+
+            it('should return an error if an attempt to open a new app instance fails', async () => {
+                const instance = createInstance();
+
+                mockAgent.setupFunction('open', () => Promise.resolve({ appId: mockedTargetAppId }));
+
+                const payload = createIntentPayload(appsInPayload, [
+                    { appId: mockedTargetAppId },
+                    { appId: 'another-app-id' },
+                ]);
+
+                await expect(instance.resolveAppForIntent(payload)).rejects.toEqual(OpenError.AppNotFound);
 
                 if (appsInPayload) {
                     expect(mockAgent.withFunction('findIntent')).wasNotCalled();
@@ -265,6 +313,22 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                 }
             });
 
+            it('should return an error if no intent found', async () => {
+                const instance = createInstance();
+
+                const payload = createContextPayload(appsInPayload, [], { type: 'unknownContext' });
+
+                await expect(instance.resolveAppForContext(payload)).rejects.toEqual(ResolveError.NoAppsFound);
+
+                if (appsInPayload) {
+                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
+                } else {
+                    expect(
+                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
+                    ).wasCalledOnce();
+                }
+            });
+
             it(`should not select only app if appId is defined and does not match`, async () => {
                 const instance = createInstance();
 
@@ -286,9 +350,10 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
             function createContextPayload(
                 appsInPayload: boolean,
                 intents: { intent: Intent; apps: AppIdentifier[] }[],
+                context: Context = { type: 'contact' },
             ): ResolveForContextPayload {
                 const payload: ResolveForContextPayload = {
-                    context: { type: 'contact' },
+                    context: context,
                     appIdentifier: {
                         appId: mockedTargetAppId,
                     },
@@ -303,7 +368,9 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                     payload.appIntents = appIntents;
                 }
 
-                mockAgent.setupFunction('findIntentsByContext', () => Promise.resolve(appIntents));
+                mockAgent.setupFunction('findIntentsByContext', contextParam =>
+                    Promise.resolve(contextParam.type === context.type ? appIntents : []),
+                );
 
                 return payload;
             }

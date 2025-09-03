@@ -8,8 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier, DesktopAgent } from '@finos/fdc3';
-import { ResolveError } from '@finos/fdc3';
+import type { AppIdentifier, Context, DesktopAgent } from '@finos/fdc3';
+import { OpenError, ResolveError } from '@finos/fdc3';
 import {
     FullyQualifiedAppIdentifier,
     IAppResolver,
@@ -33,8 +33,9 @@ export class DefaultResolver implements IAppResolver {
 
         const appIntent = payload.appIntent ?? (await agent.findIntent(payload.intent, payload.context));
 
-        const appIdentifier = await this.findSingleMatchingApp(payload.appIdentifier, appIntent.apps);
-        return appIdentifier;
+        const singleInstance = await this.findSingleMatchingApp(payload.appIdentifier, appIntent.apps);
+
+        return this.openNewInstance(singleInstance, agent, payload.context);
     }
 
     public async resolveAppForContext(payload: ResolveForContextPayload): Promise<ResolveForContextResponse> {
@@ -54,18 +55,42 @@ export class DefaultResolver implements IAppResolver {
         const appIdentifier = await this.findSingleMatchingApp(payload.appIdentifier, Object.values(appsLookup));
         const appIntent = intents.find(appIntent => appIntent.apps.includes(appIdentifier));
         if (appIntent != null) {
-            return { intent: appIntent.intent.name, app: appIdentifier };
+            return this.openNewInstance(appIdentifier, agent, payload.context).then(appInstance => ({
+                intent: appIntent.intent.name,
+                app: appInstance,
+            }));
         }
         return Promise.reject(ResolveError.NoAppsFound);
+    }
+
+    /**
+     * If the app is not an app instance a new instance will be opened and returned.
+     * If it is a fully qualified app it will be returned as is.
+     */
+    private async openNewInstance(
+        app: AppIdentifier,
+        agent: DesktopAgent,
+        context?: Context,
+    ): Promise<FullyQualifiedAppIdentifier> {
+        if (isFullyQualifiedAppIdentifier(app)) {
+            return app;
+        } else {
+            const newInstance = await agent.open(app, context);
+
+            if (isFullyQualifiedAppIdentifier(newInstance)) {
+                return newInstance;
+            } else {
+                //if instanceId is still null, error has occured, but this should be caught within open()
+                return Promise.reject(OpenError.AppNotFound);
+            }
+        }
     }
 
     private async findSingleMatchingApp(
         identifier: AppIdentifier | undefined,
         apps: AppIdentifier[],
-    ): Promise<FullyQualifiedAppIdentifier> {
-        const matchingApps = apps
-            .filter(isFullyQualifiedAppIdentifier)
-            .filter(knownApp => identifier?.appId == null || knownApp.appId === identifier.appId);
+    ): Promise<AppIdentifier> {
+        const matchingApps = apps.filter(knownApp => identifier?.appId == null || knownApp.appId === identifier.appId);
 
         if (matchingApps.length === 1 && matchingApps[0] != null) {
             return matchingApps[0];
