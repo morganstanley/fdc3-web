@@ -36,15 +36,9 @@ jobs:
 
       - name: Publish FDC3 Library
         run: cd dist/fdc3-web && npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish Messaging Provider Library
         run: cd dist/fdc3-web-messaging-provider && npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish UI Provider Library
         run: cd dist/fdc3-web-ui-provider && npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
