@@ -2,43 +2,42 @@ name: Create Release
 permissions: read-all
 
 on:
-  release:
-    types: [ published ]
-  workflow_dispatch:
+    release:
+        types: [published]
+    workflow_dispatch:
 
 jobs:
-  build:
-    name: Create Release
-    runs-on: ubuntu-latest
+    build:
+        name: Create Release
+        runs-on: ubuntu-latest
 
-    env:
-        NODE_VERSION: '22'
-        NODE_OPTIONS:  "--max_old_space_size=4096"
-  
-    permissions:
-      id-token: write
-      
-    steps:
+        env:
+            NODE_VERSION: '24'
+            NODE_OPTIONS: '--max_old_space_size=4096'
 
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
+        permissions:
+            id-token: write
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '22.x'
-          registry-url: https://registry.npmjs.org/
+        steps:
+            - name: Checkout
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+              with:
+                  fetch-depth: 0
 
-      - name: Install node modules and verify build
-        run: npm ci && npm run build:release
+            - name: Setup Node
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  registry-url: https://registry.npmjs.org/
 
-      - name: Publish FDC3 Library
-        run: cd dist/fdc3-web && npm publish --provenance --access public
+            - name: Install node modules and verify build
+              run: npm ci && npm run build:release
 
-      - name: Publish Messaging Provider Library
-        run: cd dist/fdc3-web-messaging-provider && npm publish --provenance --access public
+            - name: Publish FDC3 Library
+              run: cd dist/fdc3-web && npm publish --provenance --access public
 
-      - name: Publish UI Provider Library
-        run: cd dist/fdc3-web-ui-provider && npm publish --provenance --access public
+            - name: Publish Messaging Provider Library
+              run: cd dist/fdc3-web-messaging-provider && npm publish --provenance --access public
+
+            - name: Publish UI Provider Library
+              run: cd dist/fdc3-web-ui-provider && npm publish --provenance --access public
