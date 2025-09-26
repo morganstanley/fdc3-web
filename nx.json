@@ -39,6 +39,8 @@
                 "rootDir": "{projectRoot}/src",
                 "main": "index.ts",
                 "tsConfig": "{projectRoot}/tsconfig.lib.json",
+                "generatePackageJson": false,
+                "clean": true,
                 "assets": [
                     {
                         "input": "{workspaceRoot}",
