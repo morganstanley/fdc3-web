@@ -1,3 +1,7 @@
+## 0.3.5 (2025-09-26)
+
+Fixed generated package.json by removing incorrect module entry
+
 ## 0.3.4 (2025-08-08)
 
 When handshake messages are not responded to by applications after 3 attempts that application is removed from the app resolver.
