@@ -34,7 +34,6 @@ import {
 } from '../helpers/index.js';
 
 const PUBLISHER_NOT_INITIALIZED = 'RootMessagePublisher not initialized before messages received.';
-const SEND_MESSAGE_INITIALIZATION_ERROR = `sendMessage called before RootMessagePublisher has been initialized`;
 
 type RequestMessageHandler = (message: RequestMessage, source: FullyQualifiedAppIdentifier) => void;
 
@@ -46,8 +45,6 @@ export class RootMessagePublisher implements IRootPublisher {
     private instanceIdToChannelId: Partial<Record<string, string>> = {};
     private channelIdToAppIdentifier: Partial<Record<string, FullyQualifiedAppIdentifier>> = {};
     private log = createLogger(RootMessagePublisher, 'connection');
-
-    private rootAppIdentifier: FullyQualifiedAppIdentifier | undefined;
 
     /**
      * Used for passing requests from incoming messages received from proxy agents (or from the root agent itself) to the request handler function in desktop-agent
@@ -66,7 +63,6 @@ export class RootMessagePublisher implements IRootPublisher {
             | BrowserTypes.WebConnectionProtocol6Goodbye
         >,
         private directory: AppDirectory,
-        private windowRef: WindowProxy,
     ) {
         rootMessagingProvider.subscribe(message => this.onMessage(message));
     }
@@ -96,34 +92,9 @@ export class RootMessagePublisher implements IRootPublisher {
     }
 
     public sendMessage(message: IProxyOutgoingMessageEnvelope): void {
-        if (this.rootAppIdentifier == null) {
-            throw new Error(SEND_MESSAGE_INITIALIZATION_ERROR);
-        }
-
         if (!isWCPGoodbye(message.payload)) {
-            this.handleRequestMessage(message.payload, this.rootAppIdentifier);
+            this.handleRequestMessage(message.payload, this.directory.rootAppIdentifier);
         }
-    }
-
-    /**
-     * Initializes the root agent's identity using the provided identity URL or the current window location.
-     * @param identityUrl - The URL to determine the root agent's identity.
-     * @returns A promise that resolves to the fully qualified app identifier of the root agent.
-     */
-    public async initialize(identityUrl?: string): Promise<FullyQualifiedAppIdentifier> {
-        this.log('Initializing', LogLevel.DEBUG, { identityUrl });
-
-        const { identifier } = await this.directory
-            .registerNewInstance(identityUrl ?? this.windowRef.location.href)
-            .catch(err => {
-                throw new Error(err);
-            });
-
-        this.log('Identity resolved', LogLevel.DEBUG, { identifier });
-
-        this.rootAppIdentifier = identifier;
-
-        return identifier;
     }
 
     /**
@@ -133,7 +104,7 @@ export class RootMessagePublisher implements IRootPublisher {
      * @param source - The identifier of the source app instance.
      */
     public publishResponseMessage(responseMessage: ResponseMessage, source: FullyQualifiedAppIdentifier): void {
-        if (source.instanceId === this.rootAppIdentifier?.instanceId) {
+        if (source.instanceId === this.directory.rootAppIdentifier.instanceId) {
             // the target of this response message is the root agent so pass it back as an incoming message and return
             for (const callback of this.proxyResponseHandlers) {
                 callback({ payload: responseMessage });
@@ -171,7 +142,7 @@ export class RootMessagePublisher implements IRootPublisher {
         appIdentifiers: [FullyQualifiedAppIdentifier, ...FullyQualifiedAppIdentifier[]],
         message: EventMessage | ResponseMessage,
     ): string[] {
-        if (appIdentifiers.some(identifier => identifier.instanceId === this.rootAppIdentifier?.instanceId)) {
+        if (appIdentifiers.some(identifier => identifier.instanceId === this.directory.rootAppIdentifier.instanceId)) {
             // the target of this event is the root agent so pass it back as an incoming message and return
             for (const callback of this.proxyResponseHandlers) {
                 callback({ payload: message });
@@ -179,7 +150,7 @@ export class RootMessagePublisher implements IRootPublisher {
         }
 
         return appIdentifiers
-            .filter(identifier => identifier.instanceId != this.rootAppIdentifier?.instanceId)
+            .filter(identifier => identifier.instanceId != this.directory.rootAppIdentifier.instanceId)
             .map(source => {
                 const channelId = this.lookupChannelId(source);
 

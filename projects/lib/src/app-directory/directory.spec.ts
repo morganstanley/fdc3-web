@@ -101,13 +101,27 @@ describe(`${AppDirectory.name} (directory)`, () => {
         registerMock(helpersImport, mockedHelpers.mock);
     });
 
-    function createInstance(appDirectoryUrls?: string[], backoffRetry?: BackoffRetryParams): AppDirectory {
-        return new AppDirectory(Promise.resolve(mockResolver.mock), appDirectoryUrls, backoffRetry);
+    function createInstance(
+        appDirectoryUrls?: string[],
+        backoffRetry?: BackoffRetryParams,
+        appId = 'mock-root-app-id',
+    ): AppDirectory {
+        return new AppDirectory(appId, Promise.resolve(mockResolver.mock), appDirectoryUrls, backoffRetry);
     }
 
     it(`should create`, () => {
         const instance = createInstance();
         expect(instance).toBeDefined();
+
+        expect(instance.rootAppIdentifier.appId).toEqual('mock-root-app-id@localhost');
+        expect(typeof instance.rootAppIdentifier.instanceId).toBe('string');
+    });
+
+    it(`should create with fully qualified app id`, () => {
+        const instance = createInstance(undefined, undefined, 'fully-qualified-app-id@some-domain');
+
+        expect(instance.rootAppIdentifier.appId).toEqual('fully-qualified-app-id@some-domain');
+        expect(typeof instance.rootAppIdentifier.instanceId).toBe('string');
     });
 
     describe(`resolveAppInstanceForIntent`, () => {

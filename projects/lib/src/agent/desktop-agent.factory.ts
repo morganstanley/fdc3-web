@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AgentError, type DesktopAgent, LogLevel } from '@finos/fdc3';
+import { type DesktopAgent, LogLevel } from '@finos/fdc3';
 import { DefaultResolver } from '../app-directory/app-resolver.default.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { ChannelFactory } from '../channel/index.js';
@@ -39,7 +39,6 @@ export class DesktopAgentFactory {
         private rootMessagePublisherFactory?: (
             messagingProvider: IRootMessagingProvider,
             directory: AppDirectory,
-            window: WindowProxy,
         ) => RootMessagePublisher,
     ) {}
 
@@ -66,28 +65,20 @@ export class DesktopAgentFactory {
         log('Messaging Provider constructed', LogLevel.DEBUG);
 
         const directory = new AppDirectory(
+            factoryParams.rootAppId,
             appResolverPromise,
             factoryParams.appDirectoryUrls,
             factoryParams.backoffRetry,
         );
         const rootMessagePublisher =
             this.rootMessagePublisherFactory != null
-                ? this.rootMessagePublisherFactory(messagingProvider, directory, window)
-                : new RootMessagePublisher(messagingProvider, directory, window);
+                ? this.rootMessagePublisherFactory(messagingProvider, directory)
+                : new RootMessagePublisher(messagingProvider, directory);
 
-        // retrieve the root agent details from the app directory
-        const appIdentifier = await rootMessagePublisher.initialize(factoryParams.identityUrl);
-
-        if (appIdentifier == null) {
-            log('AppIdentifier could not be resolved', LogLevel.ERROR);
-            // app details could not be found
-            return Promise.reject(AgentError.AccessDenied);
-        }
-
-        log('AppIdentifier resolved', LogLevel.DEBUG, appIdentifier);
+        log('Root App Identifier', LogLevel.DEBUG, directory.rootAppIdentifier);
 
         const agent = new DesktopAgentImpl({
-            appIdentifier,
+            appIdentifier: directory.rootAppIdentifier,
             rootMessagePublisher,
             directory: directory,
             channelFactory: new ChannelFactory(),
