@@ -1,3 +1,16 @@
+## 0.4.0 (2025-10-01)
+
+Root app id is no longer resolved from the app directory but instead is passed in to the root app constructor:
+
+```ts
+getAgent({
+    failover: () =>
+        new DesktopAgentFactory().createRoot({
+            rootAppId: 'test-harness-root-app' // can also pass a fully qualified id: test-harness-root-app@host.com
+        }),
+});
+```
+
 ## 0.3.5 (2025-09-26)
 
 Fixed generated package.json by removing incorrect module entry
