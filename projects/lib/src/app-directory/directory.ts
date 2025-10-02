@@ -53,13 +53,22 @@ export class AppDirectory {
     private loadDirectoryPromise: Promise<void>;
 
     constructor(
+        rootAppId: string,
         private readonly appResolverPromise: Promise<IAppResolver>,
         appDirectoryUrls?: string[],
         backoffRetry?: BackoffRetryParams,
     ) {
+        this._rootAppIdentifier = this.generateRootAppIdentifier(rootAppId);
+
         //assumes app directory is not modified while root desktop agent is active
         this.appDirectoryUrls = appDirectoryUrls ?? [];
         this.loadDirectoryPromise = this.loadAppDirectory(this.appDirectoryUrls, backoffRetry);
+    }
+
+    private _rootAppIdentifier: FullyQualifiedAppIdentifier;
+
+    public get rootAppIdentifier(): FullyQualifiedAppIdentifier {
+        return this._rootAppIdentifier;
     }
 
     /**
@@ -617,6 +626,13 @@ export class AppDirectory {
         if (instanceIndex != null && instanceIndex >= 0) {
             appInstances?.instances.splice(instanceIndex, 1);
         }
+    }
+
+    private generateRootAppIdentifier(rootAppId: string): FullyQualifiedAppIdentifier {
+        const fullyQualifiedAppId = isFullyQualifiedAppId(rootAppId)
+            ? rootAppId
+            : `${rootAppId}@${window.location.hostname}`;
+        return { appId: fullyQualifiedAppId, instanceId: generateUUID() };
     }
 }
 

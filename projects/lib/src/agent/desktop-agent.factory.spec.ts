@@ -37,6 +37,8 @@ vi.mock('../helpers/index.js', async () => {
     return proxyModule(actual);
 });
 
+const mockRootAppId = 'mock-root-app-id@localhost';
+
 const mockedAppId = `mocked-app-id`;
 const mockedInstanceId = 'mocked-instance-id';
 const appIdentifier: FullyQualifiedAppIdentifier = { appId: mockedAppId, instanceId: mockedInstanceId };
@@ -61,11 +63,7 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
 
     let defaultRootMessagingProviderFactory: MessagingProviderFactory<IRootMessagingProvider> | undefined;
     let rootMessagePublisherFactory:
-        | ((
-              messagingProvider: IRootMessagingProvider,
-              directory: AppDirectory,
-              window: WindowProxy,
-          ) => RootMessagePublisher)
+        | ((messagingProvider: IRootMessagingProvider, directory: AppDirectory) => RootMessagePublisher)
         | undefined;
 
     function createInstance(): DesktopAgentFactory {
@@ -154,10 +152,7 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
         let mockPublisher: IMocked<RootMessagePublisher>;
 
         beforeEach(() => {
-            mockPublisher = Mock.create<RootMessagePublisher>().setup(
-                setupFunction('initialize', () => Promise.resolve(appIdentifier)),
-                setupFunction('addResponseHandler'),
-            );
+            mockPublisher = Mock.create<RootMessagePublisher>().setup(setupFunction('addResponseHandler'));
 
             mockedMessagingProvider = Mock.create<IRootMessagingProvider>();
 
@@ -169,12 +164,25 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
             rootMessagePublisherFactory = () => mockPublisher.mock;
         });
 
-        it(`should create agent`, async () => {
+        it(`should create agent with defined messaging provider factory`, async () => {
             const instance = createInstance();
 
             const agent = await instance.createRoot({
+                rootAppId: mockRootAppId,
                 messagingProviderFactory: mockedFactory.mock.factory,
                 backoffRetry: { maxAttempts: 1, baseDelay: 100 },
+            });
+
+            expect(agent).toBeDefined();
+
+            expect(agent).toBeInstanceOf(DesktopAgentImpl);
+        });
+
+        it(`should create agent without defined messaging provider factory`, async () => {
+            const instance = new DesktopAgentFactory();
+
+            const agent = await instance.createRoot({
+                rootAppId: mockRootAppId,
             });
 
             expect(agent).toBeDefined();
@@ -188,6 +196,7 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
             const mockUiProviderFactory = Mock.create<{ factory: UIProviderFactory }>().setup(setupFunction('factory'));
 
             const agent = await instance.createRoot({
+                rootAppId: mockRootAppId,
                 messagingProviderFactory: mockedFactory.mock.factory,
                 uiProvider: mockUiProviderFactory.mock.factory,
             });
@@ -201,7 +210,10 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
         it(`should dispatch a ready event if window.fdc3 agent is not already set`, async () => {
             const instance = createInstance();
 
-            await instance.createRoot({ messagingProviderFactory: mockedFactory.mock.factory });
+            await instance.createRoot({
+                rootAppId: mockRootAppId,
+                messagingProviderFactory: mockedFactory.mock.factory,
+            });
 
             expect(mockedWindow.withFunction('dispatchEvent')).wasCalledOnce();
         });
@@ -210,7 +222,10 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
             mockedWindow.setupProperty('fdc3', {} as any);
             const instance = createInstance();
 
-            await instance.createRoot({ messagingProviderFactory: mockedFactory.mock.factory });
+            await instance.createRoot({
+                rootAppId: mockRootAppId,
+                messagingProviderFactory: mockedFactory.mock.factory,
+            });
 
             expect(mockedWindow.withFunction('dispatchEvent')).wasNotCalled();
         });
@@ -218,7 +233,10 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
         it(`should set window.fdc3 if it is not already set`, async () => {
             const instance = createInstance();
 
-            await instance.createRoot({ messagingProviderFactory: mockedFactory.mock.factory });
+            await instance.createRoot({
+                rootAppId: mockRootAppId,
+                messagingProviderFactory: mockedFactory.mock.factory,
+            });
 
             expect(mockedWindow.withSetter('fdc3')).wasCalledOnce();
         });
@@ -227,7 +245,10 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
             mockedWindow.setupProperty('fdc3', {} as any);
             const instance = createInstance();
 
-            await instance.createRoot({ messagingProviderFactory: mockedFactory.mock.factory });
+            await instance.createRoot({
+                rootAppId: mockRootAppId,
+                messagingProviderFactory: mockedFactory.mock.factory,
+            });
 
             expect(mockedWindow.withSetter('fdc3')).wasNotCalled();
         });

@@ -247,6 +247,10 @@ export type BackoffRetryParams = {
 };
 
 export type RootDesktopAgentFactoryParams = {
+    /**
+     * Either a fully qualified appId (appId@hostname) or an unqualified appId (appId only). If an unqualified appId is provided the hostname of the current window will be used to create a fully qualified appId
+     */
+    rootAppId: string;
     messagingProviderFactory?: MessagingProviderFactory<IRootMessagingProvider>;
     uiProvider?: UIProviderFactory;
     appDirectoryUrls?: string[];

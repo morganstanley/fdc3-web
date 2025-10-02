@@ -81,6 +81,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         getAgent({
             failover: () =>
                 new DesktopAgentFactory().createRoot({
+                    rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
                     appDirectoryUrls: appDirectoryUrls, //passes in app directory web service base url
                     openStrategies: [this],
@@ -106,9 +107,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
         const applications = await getAppDirectoryApplications(url, retryParams).catch(() => []);
 
-        return applications
-            .filter(app => app.appId !== 'test-harness-root-app') //test-harness-root-app is the container and so is always open
-            .map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
+        return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
     public async canOpen(params: OpenApplicationStrategyParams): Promise<boolean> {
