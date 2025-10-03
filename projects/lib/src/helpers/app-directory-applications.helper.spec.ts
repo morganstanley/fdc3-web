@@ -12,7 +12,7 @@ import { AppMetadata, BrowserTypes } from '@finos/fdc3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
-import { FullyQualifiedAppIdentifier } from '../contracts.js';
+import { FullyQualifiedAppIdentifier, LocalAppDirectory } from '../contracts.js';
 import {
     getAppDirectoryApplications,
     getImplementationMetadata,
@@ -268,7 +268,7 @@ describe('app-directory-applications.helper', () => {
 
     describe('mapLocalAppDirectory', () => {
         it('should map a single local app entry to a fully qualified application', () => {
-            const local = [
+            const local: LocalAppDirectory = [
                 {
                     appId: 'app1',
                     title: 'Local App 1',
@@ -276,7 +276,7 @@ describe('app-directory-applications.helper', () => {
                 },
             ];
 
-            const result = mapLocalAppDirectory(local as any);
+            const result = mapLocalAppDirectory(local);
 
             expect(result).toHaveLength(1);
             expect(result[0]).toEqual({
@@ -285,21 +285,6 @@ describe('app-directory-applications.helper', () => {
                 type: 'web',
                 details: { url: 'https://app1.example.com/path' },
             });
-        });
-
-        it('should fallback to appId for title when title is missing', () => {
-            const local = [
-                {
-                    appId: 'no-title-app',
-                    url: 'http://localhost:3000',
-                },
-            ];
-
-            const result = mapLocalAppDirectory(local as any);
-
-            expect(result).toHaveLength(1);
-            expect(result[0].title).toBe('no-title-app');
-            expect(result[0].appId).toBe('no-title-app@localhost');
         });
     });
 

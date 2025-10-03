@@ -39,7 +39,7 @@ function mapLocalApp(local: LocalAppDirectoryEntry): FullyQualifiedAppDirectoryA
 
     return {
         appId: fullyQualifiedAppId,
-        title: local.title ?? local.appId,
+        title: local.title,
         type: 'web',
         details: { url: local.url },
     };

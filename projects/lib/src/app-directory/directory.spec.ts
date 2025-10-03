@@ -757,8 +757,8 @@ describe(`${AppDirectory.name} (directory)`, () => {
         it(`should add locally defined app directories`, async () => {
             const instance = createInstance([
                 [
-                    { appId: 'localAppIdOne', url: 'http://my-app.com/path' },
-                    { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My App' },
+                    { appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' },
+                    { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' },
                 ],
                 mockedAppDirectoryUrl,
             ]);
@@ -779,12 +779,12 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
                 appId: 'localAppIdOne@my-app.com',
-                title: 'localAppIdOne',
+                title: 'My First App',
             });
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toEqual({
                 appId: 'localAppIdTwo@my-app.com',
-                title: 'My App',
+                title: 'My Other App',
             });
         });
     });
@@ -808,7 +808,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
         it(`should return undefined if app is not known to desktop agent`, async () => {
             const instance = createInstance();
 
-            const app = await instance.getAppDirectoryApplication(mockedAppIdOne);
+            const app = await instance.getAppDirectoryApplication('unknown-app-id');
 
             expect(app).toBeUndefined();
         });
