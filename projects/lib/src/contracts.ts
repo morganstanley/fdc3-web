@@ -249,7 +249,7 @@ export type BackoffRetryParams = {
 export type LocalAppDirectoryEntry = {
     appId: string;
     url: string;
-    title?: string;
+    title: string;
 };
 
 export type LocalAppDirectory = LocalAppDirectoryEntry[];
