@@ -17,6 +17,8 @@ import {
     getAppDirectoryApplications,
     getImplementationMetadata,
     mapApplicationToMetadata,
+    mapLocalAppDirectory,
+    mapUrlToFullyQualifiedAppId,
 } from './app-directory-applications.helper.js';
 
 describe('app-directory-applications.helper', () => {
@@ -261,6 +263,55 @@ describe('app-directory-applications.helper', () => {
             expect(result.instanceId).toBe(mockAppIdentifier.instanceId);
             expect(result.appId).not.toBe(mockAppMetadata.appId);
             expect(result.instanceId).not.toBe(mockAppMetadata.instanceId);
+        });
+    });
+
+    describe('mapLocalAppDirectory', () => {
+        it('should map a single local app entry to a fully qualified application', () => {
+            const local = [
+                {
+                    appId: 'app1',
+                    title: 'Local App 1',
+                    url: 'https://app1.example.com/path',
+                },
+            ];
+
+            const result = mapLocalAppDirectory(local as any);
+
+            expect(result).toHaveLength(1);
+            expect(result[0]).toEqual({
+                appId: 'app1@app1.example.com',
+                title: 'Local App 1',
+                type: 'web',
+                details: { url: 'https://app1.example.com/path' },
+            });
+        });
+
+        it('should fallback to appId for title when title is missing', () => {
+            const local = [
+                {
+                    appId: 'no-title-app',
+                    url: 'http://localhost:3000',
+                },
+            ];
+
+            const result = mapLocalAppDirectory(local as any);
+
+            expect(result).toHaveLength(1);
+            expect(result[0].title).toBe('no-title-app');
+            expect(result[0].appId).toBe('no-title-app@localhost');
+        });
+    });
+
+    describe('mapUrlToFullyQualifiedAppId', () => {
+        it('should handle subdomains', () => {
+            expect(mapUrlToFullyQualifiedAppId('https://sub.domain.example.co.uk/path', 'svc')).toBe(
+                'svc@sub.domain.example.co.uk',
+            );
+        });
+
+        it('should produce hostnames without ports', () => {
+            expect(mapUrlToFullyQualifiedAppId('http://localhost.com:8080/foo', 'app')).toBe('app@localhost.com');
         });
     });
 });

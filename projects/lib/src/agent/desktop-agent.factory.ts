@@ -67,7 +67,7 @@ export class DesktopAgentFactory {
         const directory = new AppDirectory(
             factoryParams.rootAppId,
             appResolverPromise,
-            factoryParams.appDirectoryUrls,
+            factoryParams.appDirectoryEntries,
             factoryParams.backoffRetry,
         );
         const rootMessagePublisher =
