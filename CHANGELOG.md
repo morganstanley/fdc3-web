@@ -11,6 +11,8 @@ getAgent({
 });
 ```
 
+This makes it possible to run the container app without an app directory as this is no longer required to resolve the appId.
+
 ## 0.3.5 (2025-09-26)
 
 Fixed generated package.json by removing incorrect module entry
