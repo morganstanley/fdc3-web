@@ -429,14 +429,6 @@
                     }
                 }
             }
-        },
-        {
-            "title": "FDC3 Workbench",
-            "appId": "fdc3-workbench",
-            "type": "web",
-            "details": {
-                "url": "https://fdc3.finos.org/toolbox/fdc3-workbench/"
-            }
         }
     ]
 }

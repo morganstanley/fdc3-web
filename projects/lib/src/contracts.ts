@@ -246,6 +246,14 @@ export type BackoffRetryParams = {
     baseDelay?: number;
 };
 
+export type LocalAppDirectoryEntry = {
+    appId: string;
+    url: string;
+    title?: string;
+};
+
+export type LocalAppDirectory = LocalAppDirectoryEntry[];
+
 export type RootDesktopAgentFactoryParams = {
     /**
      * Either a fully qualified appId (appId@hostname) or an unqualified appId (appId only). If an unqualified appId is provided the hostname of the current window will be used to create a fully qualified appId
@@ -253,7 +261,7 @@ export type RootDesktopAgentFactoryParams = {
     rootAppId: string;
     messagingProviderFactory?: MessagingProviderFactory<IRootMessagingProvider>;
     uiProvider?: UIProviderFactory;
-    appDirectoryUrls?: string[];
+    appDirectoryEntries?: (string | LocalAppDirectory)[];
     openStrategies?: IOpenApplicationStrategy[];
     identityUrl?: string;
     /**
