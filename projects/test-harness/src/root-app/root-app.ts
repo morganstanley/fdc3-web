@@ -24,6 +24,8 @@ import {
     IOpenApplicationStrategy,
     isFullyQualifiedAppId,
     isWebAppDetails,
+    LocalAppDirectory,
+    mapLocalAppDirectory,
     OpenApplicationStrategyParams,
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
@@ -46,7 +48,10 @@ import {
     SelectAppContextType,
 } from '../contracts.js';
 
-const appDirectoryUrls = ['http://localhost:4299/v2/apps'];
+const appDirectoryUrls: (string | LocalAppDirectory)[] = [
+    'http://localhost:4299/v2/apps',
+    [{ appId: 'fdc3-workbench', url: 'https://fdc3.finos.org/toolbox/fdc3-workbench/', title: 'FDC3 Workbench' }],
+];
 
 const retryParams: BackoffRetryParams = {
     maxAttempts: 5,
@@ -83,7 +88,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                 new DesktopAgentFactory().createRoot({
                     rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
-                    appDirectoryUrls: appDirectoryUrls, //passes in app directory web service base url
+                    appDirectoryEntries: appDirectoryUrls, //passes in app directory web service base url
                     openStrategies: [this],
                     backoffRetry: retryParams,
                 }),
@@ -93,7 +98,11 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
     }
 
     private async loadApplications(): Promise<void> {
-        const directoryResults = await Promise.allSettled(appDirectoryUrls.map(url => this.loadAppDirectory(url)));
+        const directoryResults = await Promise.allSettled(
+            appDirectoryUrls.map(directory =>
+                typeof directory === 'string' ? this.loadAppDirectory(directory) : mapLocalAppDirectory(directory),
+            ),
+        );
 
         this.applications = directoryResults
             .filter(result => result.status === 'fulfilled')
@@ -102,10 +111,10 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         this.initApp();
     }
 
-    private async loadAppDirectory(url: string): Promise<AppDirectoryApplication[]> {
-        const hostname = new URL(url).hostname;
+    private async loadAppDirectory(directory: string): Promise<AppDirectoryApplication[]> {
+        const hostname = new URL(directory).hostname;
 
-        const applications = await getAppDirectoryApplications(url, retryParams).catch(() => []);
+        const applications = await getAppDirectoryApplications(directory, retryParams).catch(() => []);
 
         return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }

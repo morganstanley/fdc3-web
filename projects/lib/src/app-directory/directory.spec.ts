@@ -16,6 +16,7 @@ import {
     BackoffRetryParams,
     FullyQualifiedAppIdentifier,
     IAppResolver,
+    LocalAppDirectory,
     ResolveForContextPayload,
     ResolveForIntentPayload,
 } from '../contracts.js';
@@ -102,7 +103,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
     });
 
     function createInstance(
-        appDirectoryUrls?: string[],
+        appDirectoryUrls?: (string | LocalAppDirectory)[],
         backoffRetry?: BackoffRetryParams,
         appId = 'mock-root-app-id',
     ): AppDirectory {
@@ -730,6 +731,12 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(mockedHelpers.withFunction('getAppDirectoryApplications')).wasNotCalled();
         });
 
+        it(`should do nothing if no app directory is passed`, async () => {
+            createInstance();
+
+            expect(mockedHelpers.withFunction('getAppDirectoryApplications')).wasNotCalled();
+        });
+
         it(`should add all apps in multiple app directories`, async () => {
             const instance = createInstance(['https://incorrect-mock-app-directory', mockedAppDirectoryUrl]);
 
@@ -744,6 +751,40 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(await instance.getAppMetadata({ appId: mockedAppIdOne })).toEqual({
                 appId: mockedAppIdOne,
                 title: mockedApplicationOne.title,
+            });
+        });
+
+        it(`should add locally defined app directories`, async () => {
+            const instance = createInstance([
+                [
+                    { appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' },
+                    { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' },
+                ],
+                mockedAppDirectoryUrl,
+            ]);
+
+            await wait();
+
+            expect(
+                mockedHelpers
+                    .withFunction('getAppDirectoryApplications')
+                    .withParametersEqualTo(mockedAppDirectoryUrl, undefined)
+                    .strict(),
+            ).wasCalledOnce();
+
+            expect(await instance.getAppMetadata({ appId: mockedAppIdOne })).toEqual({
+                appId: mockedAppIdOne,
+                title: mockedApplicationOne.title,
+            });
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
+                appId: 'localAppIdOne@my-app.com',
+                title: 'My First App',
+            });
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toEqual({
+                appId: 'localAppIdTwo@my-app.com',
+                title: 'My Other App',
             });
         });
     });
@@ -767,7 +808,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
         it(`should return undefined if app is not known to desktop agent`, async () => {
             const instance = createInstance();
 
-            const app = await instance.getAppDirectoryApplication(mockedAppIdOne);
+            const app = await instance.getAppDirectoryApplication('unknown-app-id');
 
             expect(app).toBeUndefined();
         });

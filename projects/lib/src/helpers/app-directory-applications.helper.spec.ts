@@ -12,11 +12,13 @@ import { AppMetadata, BrowserTypes } from '@finos/fdc3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
-import { FullyQualifiedAppIdentifier } from '../contracts.js';
+import { FullyQualifiedAppIdentifier, LocalAppDirectory } from '../contracts.js';
 import {
     getAppDirectoryApplications,
     getImplementationMetadata,
     mapApplicationToMetadata,
+    mapLocalAppDirectory,
+    mapUrlToFullyQualifiedAppId,
 } from './app-directory-applications.helper.js';
 
 describe('app-directory-applications.helper', () => {
@@ -261,6 +263,40 @@ describe('app-directory-applications.helper', () => {
             expect(result.instanceId).toBe(mockAppIdentifier.instanceId);
             expect(result.appId).not.toBe(mockAppMetadata.appId);
             expect(result.instanceId).not.toBe(mockAppMetadata.instanceId);
+        });
+    });
+
+    describe('mapLocalAppDirectory', () => {
+        it('should map a single local app entry to a fully qualified application', () => {
+            const local: LocalAppDirectory = [
+                {
+                    appId: 'app1',
+                    title: 'Local App 1',
+                    url: 'https://app1.example.com/path',
+                },
+            ];
+
+            const result = mapLocalAppDirectory(local);
+
+            expect(result).toHaveLength(1);
+            expect(result[0]).toEqual({
+                appId: 'app1@app1.example.com',
+                title: 'Local App 1',
+                type: 'web',
+                details: { url: 'https://app1.example.com/path' },
+            });
+        });
+    });
+
+    describe('mapUrlToFullyQualifiedAppId', () => {
+        it('should handle subdomains', () => {
+            expect(mapUrlToFullyQualifiedAppId('https://sub.domain.example.co.uk/path', 'svc')).toBe(
+                'svc@sub.domain.example.co.uk',
+            );
+        });
+
+        it('should produce hostnames without ports', () => {
+            expect(mapUrlToFullyQualifiedAppId('http://localhost.com:8080/foo', 'app')).toBe('app@localhost.com');
         });
     });
 });

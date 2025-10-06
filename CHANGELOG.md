@@ -1,3 +1,45 @@
+## 0.5.0 (2025-10-03)
+
+## Breaking:
+
+`appDirectoryUrls` in `RootDesktopAgentFactoryParams` has been renamed to `appDirectoryEntries`:
+
+```ts
+new DesktopAgentFactory().createRoot({
+    appDirectoryUrls: ['http://localhost:4299/v2/apps'],
+}),
+```
+
+becomes:
+
+```ts
+new DesktopAgentFactory().createRoot({
+    appDirectoryEntries: ['http://localhost:4299/v2/apps'],
+}),
+```
+
+## Added:
+
+Added for support for locally defined App Directories to eliminate the need to host an app directory on a server:
+
+```ts
+getAgent({
+    failover: () =>
+        new DesktopAgentFactory().createRoot({
+            rootAppId: 'test-harness-root-app',
+            appDirectoryEntries: [
+                [
+                    {
+                        appId: 'local-app-id',
+                        title: 'Local App',
+                        url: 'https://example.com/someApp',
+                    },
+                ],
+            ],
+        }),
+});
+```
+
 ## 0.4.0 (2025-10-01)
 
 Root app id is no longer resolved from the app directory but instead is passed in to the root app constructor:
@@ -10,6 +52,8 @@ getAgent({
         }),
 });
 ```
+
+This makes it possible to run the container app without an app directory as this is no longer required to resolve the appId.
 
 ## 0.3.5 (2025-09-26)
 
