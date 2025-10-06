@@ -1,5 +1,25 @@
 ## 0.5.0 (2025-10-03)
 
+## Breaking:
+
+`appDirectoryUrls` in `RootDesktopAgentFactoryParams` has been renamed to `appDirectoryEntries`:
+
+```ts
+new DesktopAgentFactory().createRoot({
+    appDirectoryUrls: ['http://localhost:4299/v2/apps'],
+}),
+```
+
+becomes:
+
+```ts
+new DesktopAgentFactory().createRoot({
+    appDirectoryEntries: ['http://localhost:4299/v2/apps'],
+}),
+```
+
+## Added:
+
 Added for support for locally defined App Directories to eliminate the need to host an app directory on a server:
 
 ```ts
