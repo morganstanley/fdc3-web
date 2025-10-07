@@ -32,8 +32,8 @@ const agent = await getAgent({
       uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
       appDirectoryEntries: ['http://localhost:4299/v2/apps'],
       openStrategies: [{
-        canOpen: (params: OpenApplicationStrategyParams) => { /* define whether an app should open */ },
-        open: (params: OpenApplicationStrategyParams) => { /* define how an app should open */ }
+        canOpen: (params: OpenApplicationStrategyParams, context?: Context) => { /* define whether an app should open */ },
+        open: (params: OpenApplicationStrategyParams, context?: Context) => { /* define how an app should open */ }
       }],
     }),
   // Control logging levels

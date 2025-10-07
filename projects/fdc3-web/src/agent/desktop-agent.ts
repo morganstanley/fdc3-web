@@ -861,7 +861,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         const strategyCanOpenResults = await Promise.all(
             this.openStrategies.map(async strategy => {
                 // if canOpen fails, do not use this strategy
-                const canOpen = await this.canStrategyOpenApp(application, strategy).catch(() => false);
+                const canOpen = await this.canStrategyOpenApp(
+                    application,
+                    strategy,
+                    requestMessage.payload.context,
+                ).catch(() => false);
 
                 return { canOpen, strategy };
             }),
@@ -874,7 +878,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         if (validStrategies.length > 0) {
             const strategy = validStrategies[0];
 
-            this.openAppWithStrategy(strategy, application, requestMessage, source);
+            this.openAppWithStrategy(strategy, application, requestMessage, source, requestMessage.payload.context);
         } else {
             this.proxyLog('OpenRequest no opening strategies found', LogLevel.ERROR, { source });
 
@@ -895,6 +899,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         application: AppDirectoryApplication,
         requestMessage: BrowserTypes.OpenRequest,
         source: FullyQualifiedAppIdentifier,
+        context?: BrowserTypes.Context,
     ): Promise<void> {
         const { hostManifests, ...noManifests } = application;
 
@@ -905,13 +910,16 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             let openError: any;
 
             const newAppConnectionAttemptUuid = await strategy
-                .open({
-                    appDirectoryRecord: noManifests,
-                    agent: this,
-                    manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err =>
-                        console.error(err),
-                    ),
-                })
+                .open(
+                    {
+                        appDirectoryRecord: noManifests,
+                        agent: this,
+                        manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err =>
+                            console.error(err),
+                        ),
+                    },
+                    context,
+                )
                 .catch(err => {
                     openError = err;
                 });
@@ -982,6 +990,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
     private async canStrategyOpenApp(
         application: AppDirectoryApplication,
         strategy: IOpenApplicationStrategy,
+        context?: BrowserTypes.Context,
     ): Promise<boolean> {
         const manifest = await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
             console.error(err),
@@ -989,7 +998,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         const { hostManifests, ...appDirectoryRecord } = application;
 
-        const canOpen = await strategy.canOpen({ agent: this, appDirectoryRecord, manifest });
+        const canOpen = await strategy.canOpen({ agent: this, appDirectoryRecord, manifest }, context);
 
         if (canOpen) {
             return true;

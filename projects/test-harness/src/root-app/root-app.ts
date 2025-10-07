@@ -123,9 +123,9 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 
-    public async open(params: OpenApplicationStrategyParams): Promise<string> {
+    public async open(params: OpenApplicationStrategyParams, context?: Context): Promise<string> {
         if (isWebAppDetails(params.appDirectoryRecord.details)) {
-            this.log('Opening WebAppDetails', LogLevel.DEBUG, params);
+            this.log('Opening WebAppDetails', LogLevel.DEBUG, params, context);
             const newWindow = (document.getElementById('openInWindow') as HTMLInputElement).checked;
 
             if (this.selectedApp != null) {
