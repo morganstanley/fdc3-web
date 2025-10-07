@@ -366,7 +366,7 @@ export class AppDirectory {
         }
         //otherwise, return contexts based on app intent pair from application data
         return (
-            this.directory[fullyQualifiedAppId]?.application?.interop?.intents?.listensFor?.[intent].contexts?.map(
+            this.directory[fullyQualifiedAppId]?.application?.interop?.intents?.listensFor?.[intent]?.contexts?.map(
                 contextType => ({
                     type: contextType,
                 }),
