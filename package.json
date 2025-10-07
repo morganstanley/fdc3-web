@@ -15,9 +15,8 @@
         "type-check-specs": "nx run-many -t type-check-specs",
         "start": "nx serve test-harness",
         "generate-docs": "nx run-many -t generate-docs",
-        "prebuild:release": "npm run clean",
-        "build:release": "npm run lint -- --skip-nx-cache && npm run build -- --skip-nx-cache && npm run test -- --skip-nx-cache && npm run type-check-specs -- --skip-nx-cache",
-        "postbuild:release": "npm run generate-docs",
+        "prebuild:release": "npm run reset",
+        "build:release": "nx run-many -t build:release",
         "release": "nx release"
     },
     "workspaces": [
