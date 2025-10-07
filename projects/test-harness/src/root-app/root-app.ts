@@ -227,9 +227,13 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
             .filter(application => application.appId.includes('root'))
             .forEach(application => this.openAppInfo(application));
 
-        await this.subscribeToSelectedApp();
+        await this.subscribeToSelectedApp().catch(err =>
+            this.log('Error subscribing to selected app', LogLevel.ERROR, err),
+        );
 
-        await this.subscribeToSelectableApps();
+        await this.listenForSelectableAppsRequests().catch(err =>
+            this.log('Error subscribing to selectable apps', LogLevel.ERROR, err),
+        );
     }
 
     private async subscribeToSelectedApp(): Promise<void> {
@@ -245,21 +249,23 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         this.selectedApp = (context as Partial<ISelectAppContext>).appIdentifier;
     }
 
-    private async subscribeToSelectableApps(): Promise<void> {
+    private async listenForSelectableAppsRequests(): Promise<void> {
         const agent = await getAgent();
 
-        await agent.addIntentListener(SelectableAppsIntent, async context => {
-            if (context.type === SelectableAppsRequestContextType) {
-                const selectableAppsContext: ISelectableAppsResponseContext = {
-                    type: SelectableAppsResponseContextType,
-                    applications: await this.applications,
-                };
+        await agent
+            .addIntentListener(SelectableAppsIntent, async context => {
+                if (context.type === SelectableAppsRequestContextType) {
+                    const selectableAppsContext: ISelectableAppsResponseContext = {
+                        type: SelectableAppsResponseContextType,
+                        applications: await this.applications,
+                    };
 
-                return selectableAppsContext;
-            }
+                    return selectableAppsContext;
+                }
 
-            return;
-        });
+                return;
+            })
+            .catch(err => this.log(`Error adding intent listener for '${SelectableAppsIntent}'`, LogLevel.ERROR, err));
     }
 
     /**

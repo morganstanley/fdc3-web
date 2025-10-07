@@ -61,7 +61,7 @@ export class AppDirectory {
         appDirectoryEntries?: (string | LocalAppDirectory)[],
         backoffRetry?: BackoffRetryParams,
     ) {
-        this._rootAppIdentifier = this.generateRootAppIdentifier(rootAppId);
+        this._rootAppIdentifier = this.registerRootApp(rootAppId);
 
         //assumes app directory is not modified while root desktop agent is active
         this.appDirectoryEntries = appDirectoryEntries ?? [];
@@ -72,6 +72,19 @@ export class AppDirectory {
 
     public get rootAppIdentifier(): FullyQualifiedAppIdentifier {
         return this._rootAppIdentifier;
+    }
+
+    private registerRootApp(rootAppId: string): FullyQualifiedAppIdentifier {
+        const appId: FullyQualifiedAppId = isFullyQualifiedAppId(rootAppId)
+            ? rootAppId
+            : `${rootAppId}@${window.location.hostname}`;
+
+        const rootAppIdentifier = { appId, instanceId: generateUUID() };
+
+        this.directory[appId] = { instances: [rootAppIdentifier.instanceId] };
+        this.instanceLookup[rootAppIdentifier.instanceId] = new Set();
+
+        return rootAppIdentifier;
     }
 
     /**
@@ -642,13 +655,6 @@ export class AppDirectory {
         if (instanceIndex != null && instanceIndex >= 0) {
             appInstances?.instances.splice(instanceIndex, 1);
         }
-    }
-
-    private generateRootAppIdentifier(rootAppId: string): FullyQualifiedAppIdentifier {
-        const fullyQualifiedAppId = isFullyQualifiedAppId(rootAppId)
-            ? rootAppId
-            : `${rootAppId}@${window.location.hostname}`;
-        return { appId: fullyQualifiedAppId, instanceId: generateUUID() };
     }
 }
 
