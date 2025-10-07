@@ -5,7 +5,8 @@
     "license": "Apache-2.0",
     "author": "Morgan Stanley",
     "scripts": {
-        "clean": "rimraf dist build reports docs",
+        "clean": "rimraf dist build reports docs tmp coverage",
+        "reset": "nx reset && npm run clean",
         "lint:fix": "nx run-many -t lint --fix",
         "lint": "nx run-many -t lint",
         "build": "nx run-many -t build",

@@ -77,7 +77,7 @@
             "currentVersionResolver": "git-tag",
             "preserveLocalDependencyProtocols": false,
             "manifestRootsToUpdate": [
-                "projects/lib/",
+                "projects/fdc3-web/",
                 "projects/messaging-provider/",
                 "projects/ui-provider/"
             ]
