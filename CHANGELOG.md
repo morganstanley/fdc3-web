@@ -1,3 +1,9 @@
+## 0.6.0 (2025-10-07)
+
+## Added:
+
+`IOpenApplicationStrategy` now accepts the optional associated context object for window opening as params on the `canOpen` and `open` functions
+
 ## 0.5.0 (2025-10-03)
 
 ## Breaking:

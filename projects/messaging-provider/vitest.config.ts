@@ -14,6 +14,7 @@ import baseConfig from '../../shared/vitest.config.js';
 
 export default defineConfig({
     ...baseConfig,
+    cacheDir: join(__dirname, '../../', 'node_modules', '.vitest', 'fdc3-web-messaging-provider'),
     test: {
         ...baseConfig.test,
         coverage: {

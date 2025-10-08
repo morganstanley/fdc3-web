@@ -285,11 +285,11 @@ export type OpenApplicationStrategyParams = {
 
 export interface IOpenApplicationStrategy {
     manifestKey?: string;
-    canOpen(params: OpenApplicationStrategyParams): Promise<boolean>;
+    canOpen(params: OpenApplicationStrategyParams, context?: Context): Promise<boolean>;
     /**
      * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
      * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
      * @param params
      */
-    open(params: OpenApplicationStrategyParams): Promise<string>;
+    open(params: OpenApplicationStrategyParams, context?: Context): Promise<string>;
 }
