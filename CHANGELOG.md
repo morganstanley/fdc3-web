@@ -1,12 +1,59 @@
+## 0.7.0 (2025-10-21)
+
+### Breaking
+
+Locally defined app directories force the app directory host to be specified separately to ensure all apps in the same directory have the same host for the fully qualified id.
+
+```ts
+getAgent({
+    failover: () =>
+        new DesktopAgentFactory().createRoot({
+            rootAppId: 'test-harness-root-app',
+            appDirectoryEntries: [
+                [
+                    {
+                        appId: 'local-app-id',
+                        title: 'Local App',
+                        url: 'https://example.com/someApp',
+                    },
+                ],
+            ],
+        }),
+});
+```
+
+becomes:
+
+```ts
+getAgent({
+    failover: () =>
+        new DesktopAgentFactory().createRoot({
+            rootAppId: 'test-harness-root-app',
+            appDirectoryEntries: [
+                {
+                    host: "example.com",
+                    apps: [
+                        {
+                            appId: 'local-app-id',
+                            title: 'Local App',
+                            url: 'https://example.com/someApp',
+                        },
+                ]
+                },
+            ],
+        }),
+});
+```
+
 ## 0.6.0 (2025-10-07)
 
-## Added:
+### Added:
 
 `IOpenApplicationStrategy` now accepts the optional associated context object for window opening as params on the `canOpen` and `open` functions
 
 ## 0.5.0 (2025-10-03)
 
-## Breaking:
+### Breaking:
 
 `appDirectoryUrls` in `RootDesktopAgentFactoryParams` has been renamed to `appDirectoryEntries`:
 
@@ -24,7 +71,7 @@ new DesktopAgentFactory().createRoot({
 }),
 ```
 
-## Added:
+### Added:
 
 Added for support for locally defined App Directories to eliminate the need to host an app directory on a server:
 
