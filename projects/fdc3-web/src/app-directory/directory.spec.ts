@@ -769,10 +769,13 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it(`should add locally defined app directories`, async () => {
             const instance = createInstance([
-                [
-                    { appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' },
-                    { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' },
-                ],
+                {
+                    host: 'my-app.com',
+                    apps: [
+                        { appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' },
+                        { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' },
+                    ],
+                },
                 mockedAppDirectoryUrl,
             ]);
 

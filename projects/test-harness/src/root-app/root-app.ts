@@ -50,7 +50,12 @@ import {
 
 const appDirectoryUrls: (string | LocalAppDirectory)[] = [
     'http://localhost:4299/v2/apps',
-    [{ appId: 'fdc3-workbench', url: 'https://fdc3.finos.org/toolbox/fdc3-workbench/', title: 'FDC3 Workbench' }],
+    {
+        host: 'fdc3.finos.org',
+        apps: [
+            { appId: 'fdc3-workbench', url: 'https://fdc3.finos.org/toolbox/fdc3-workbench/', title: 'FDC3 Workbench' },
+        ],
+    },
 ];
 
 const retryParams: BackoffRetryParams = {

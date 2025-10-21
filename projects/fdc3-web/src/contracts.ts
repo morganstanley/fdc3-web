@@ -252,7 +252,7 @@ export type LocalAppDirectoryEntry = {
     title: string;
 };
 
-export type LocalAppDirectory = LocalAppDirectoryEntry[];
+export type LocalAppDirectory = { apps: LocalAppDirectoryEntry[]; host: string };
 
 export type RootDesktopAgentFactoryParams = {
     /**

@@ -268,13 +268,16 @@ describe('app-directory-applications.helper', () => {
 
     describe('mapLocalAppDirectory', () => {
         it('should map a single local app entry to a fully qualified application', () => {
-            const local: LocalAppDirectory = [
-                {
-                    appId: 'app1',
-                    title: 'Local App 1',
-                    url: 'https://app1.example.com/path',
-                },
-            ];
+            const local: LocalAppDirectory = {
+                host: 'app1.example.com',
+                apps: [
+                    {
+                        appId: 'app1',
+                        title: 'Local App 1',
+                        url: 'https://app1.example.com/path',
+                    },
+                ],
+            };
 
             const result = mapLocalAppDirectory(local);
 
