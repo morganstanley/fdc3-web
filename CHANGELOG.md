@@ -45,6 +45,18 @@ getAgent({
 });
 ```
 
+### Changed
+
+Implemented a better url comparison function for verifying app identity against app directory. This function now considers all aspects of the url including query params, hash and path segments. This allows apps on the same host to be differentiated:
+
+```
+http://myhost.com/pathOne/pathTwo?appId=appOne
+http://myhost.com/pathOne/pathTwo?appId=appTwo
+http://myhost.com/pathOne/pathTwo?appId=appOne#additionalModifier
+http://myhost.com/pathOne/pathTwo/pathThree?appId=appOne
+```
+all of these urls can be defined as separate apps in the app directory.
+
 ## 0.6.0 (2025-10-07)
 
 ### Added:
