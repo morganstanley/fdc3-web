@@ -10,7 +10,7 @@
 
 import { Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeUUUrl, generateUUUrl } from './url-helper.js';
+import { decodeUUUrl, generateUUUrl, urlContainsAllElements } from './url-helper.js';
 import * as helpersImport from './uuid.helper.js';
 
 vi.mock('./uuid.helper.js', async () => {
@@ -73,5 +73,122 @@ describe(`generateUUUrl`, () => {
 
     it(`decodeUUUrl should return undefined if passed an invalid url`, () => {
         expect(decodeUUUrl<SampleData>('not a valid url')).toBeUndefined();
+    });
+});
+
+describe(`urlContainsAllElements`, () => {
+    const tests: { description: string; appDUrl: string; matches?: string[]; failures?: string[] }[] = [
+        {
+            description: 'path includes file no params and no hash',
+            appDUrl: 'https://example.com/pathOne/index.html',
+            matches: [
+                'https://example.com/pathOne/index.html',
+                'https://example.com/pathOne/index.html?paramOne=valueOne',
+                'https://example.com/pathOne/index.html#someAnchor',
+                'https://example.com/pathOne/index.html?paramOne=valueOne&paramTwo=valueTwo#someAnchor',
+                'https://example.com/pathOne/index.html?paramOne=valueOne#someAnchor',
+            ],
+            failures: [
+                'https://example.com/pathTwo/index.html',
+                'https://example.com/pathTwo/otherFile.html',
+                'http://example.com/pathOne/index.html',
+                'https://other-host.com/pathOne/index.html',
+                'https://example.co.uk/pathOne/index.html',
+                'https://example.com:8080/pathOne/index.html',
+            ],
+        },
+        {
+            description: 'path has port',
+            appDUrl: 'https://example.com:8080/pathOne/index.html',
+            matches: ['https://example.com:8080/pathOne/index.html'],
+            failures: ['https://example.com:80/pathOne/index.html', 'https://example.com/pathOne/index.html'],
+        },
+        {
+            description: 'path includes multiple url params',
+            appDUrl: 'https://example.com:8080/pathOne?paramOne=valueOne&paramTwo=valueTwo',
+            matches: [
+                'https://example.com:8080/pathOne?paramOne=valueOne&paramTwo=valueTwo',
+                'https://example.com:8080/pathOne/pathTwo?paramOne=valueOne&paramTwo=valueTwo',
+                'https://example.com:8080/pathOne?paramOne=valueOne&paramTwo=valueTwo&paramThree=valueThree',
+                'https://example.com:8080/pathOne?paramOne=valueOne&paramTwo=valueTwo#someHash',
+                'https://example.com:8080/pathOne?otherParam=otherValue&paramOne=valueOne&paramTwo=valueTwo',
+                'https://example.com:8080/pathOne?paramOne=valueOne&otherParam=otherValue&paramTwo=valueTwo',
+            ],
+            failures: [
+                'https://example.com:8080/pathOne?paramOne=valueOne',
+                'https://example.com:8080/pathOne?paramTwo=valueTwo',
+            ],
+        },
+        {
+            description: 'path includes hash',
+            appDUrl: 'https://example.com:8080/pathOne#someHash',
+            matches: [
+                'https://example.com:8080/pathOne#someHash',
+                'https://example.com:8080/pathOne?paramOne=valueOne&paramTwo=valueTwo#someHash',
+                'https://example.com:8080/pathOne/pathTwo#someHash',
+            ],
+            failures: ['https://example.com:8080/pathOne'],
+        },
+        {
+            description: 'path has multiple sections',
+            appDUrl: 'https://example.com:8080/pathOne/pathTwo',
+            matches: [
+                'https://example.com:8080/pathOne/pathTwo',
+                'https://example.com:8080/pathOne/pathTwo?paramOne=valueOne&paramTwo=valueTwo#someHash',
+            ],
+            failures: ['https://example.com:8080/pathOne'],
+        },
+        // below tests taken from https://github.com/finos/fdc3/issues/1337
+        {
+            description: 'Path and search present, exact match available',
+            appDUrl: 'https://example.com/path?search=text',
+            matches: ['https://example.com/path?search=text'],
+        },
+        {
+            description: 'Path and hash present, no exact match, need to ignore path in input to match',
+            appDUrl: 'https://example.com/#hash',
+            matches: ['https://example.com/altPath#hash'],
+        },
+        {
+            description: 'Path only present, exact match available',
+            appDUrl: 'https://example.com/path',
+            matches: ['https://example.com/path'],
+        },
+        {
+            description: 'Path only present but not matchable, match on domain only',
+            appDUrl: 'https://example.com/',
+            matches: ['https://example.com/altPath'],
+        },
+        {
+            description: 'path, search and hash present, but no match on search param or path, select match without',
+            appDUrl: 'https://example.com/#hash',
+            matches: ['https://example.com/altPath?search=tulip#hash'],
+        },
+        {
+            description: 'Ignore trailing slashes on path',
+            appDUrl: 'https://example.com/#hash',
+            matches: ['https://example.com#hash'],
+        },
+        {
+            description: 'Hash present but unknown, match origin only, ignoring trailing slash',
+            appDUrl: 'https://example.com/',
+            matches: ['https://example.com#unknownHash'],
+        },
+    ];
+
+    tests.forEach(({ description, appDUrl, matches, failures }) => {
+        describe(description, () => {
+            matches?.forEach(comparisonUrl => {
+                it(`should return true when comparing appD Url '${appDUrl}' to comparison url: ${comparisonUrl}`, () => {
+                    expect(urlContainsAllElements(appDUrl, comparisonUrl)).toBe(true);
+                });
+            });
+
+            failures?.forEach(comparisonUrl => {
+                it(`should return false when comparing appD Url '${appDUrl}' to comparison url: ${comparisonUrl}`, () => {
+                    expect(urlContainsAllElements(appDUrl, comparisonUrl)).toBe(false);
+                });
+            });
+        });
     });
 });

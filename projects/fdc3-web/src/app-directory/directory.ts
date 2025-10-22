@@ -38,6 +38,7 @@ import {
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
     resolveAppIdentifier,
+    urlContainsAllElements,
 } from '../helpers/index.js';
 
 type IntentContextLookup = { intent: Intent; context: Context[] };
@@ -247,7 +248,9 @@ export class AppDirectory {
             .map(record => record?.application)
             .filter(application => application != null)
             .find(
-                application => isWebAppDetails(application.details) && urlsMatch(application.details.url, identityUrl),
+                application =>
+                    isWebAppDetails(application.details) &&
+                    urlContainsAllElements(application.details.url, identityUrl),
             );
 
         if (matchingApp != null) {
@@ -656,21 +659,4 @@ export class AppDirectory {
             appInstances?.instances.splice(instanceIndex, 1);
         }
     }
-}
-
-//TODO: remove this
-/**
- * currently this function just checks that the host, path and port match
- * when we support passing identity urls as part of get agent we will remove this function and just use direct comparison
- */
-function urlsMatch(one: string, two: string): boolean {
-    const urlOne = new URL(one);
-    const urlTwo = new URL(two);
-
-    return (
-        urlOne.host === urlTwo.host &&
-        urlOne.port === urlTwo.port &&
-        urlOne.pathname === urlTwo.pathname &&
-        urlOne.protocol === urlTwo.protocol
-    );
 }

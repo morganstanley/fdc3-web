@@ -128,6 +128,8 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 
+    private _appCount = 0;
+
     public async open(params: OpenApplicationStrategyParams, context?: Context): Promise<string> {
         if (isWebAppDetails(params.appDirectoryRecord.details)) {
             this.log('Opening WebAppDetails', LogLevel.DEBUG, params, context);
@@ -176,8 +178,12 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
                 if (newWindow) {
                     this.log('Opening app in new window', LogLevel.DEBUG, details);
+
+                    const url = new URL(details.url);
+                    url.searchParams.append('appIndex', (this._appCount++).toString()); // add a url param to test app directory url matching
+
                     //open app in new window
-                    const windowProxy = window.open(details.url, '_blank', 'popup');
+                    const windowProxy = window.open(url, '_blank', 'popup');
 
                     if (windowProxy == null) {
                         this.log('null window returned from window.open', LogLevel.ERROR, params.appDirectoryRecord);
