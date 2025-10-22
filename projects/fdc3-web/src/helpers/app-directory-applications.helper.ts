@@ -31,11 +31,11 @@ export type FullyQualifiedAppDirectoryApplication = AppDirectoryApplication & { 
  * @returns Array of applications with fully-qualified appId and web details
  */
 export function mapLocalAppDirectory(local: LocalAppDirectory): FullyQualifiedAppDirectoryApplication[] {
-    return local.map(app => mapLocalApp(app));
+    return local.apps.map(app => mapLocalApp(app, local.host));
 }
 
-function mapLocalApp(local: LocalAppDirectoryEntry): FullyQualifiedAppDirectoryApplication {
-    const fullyQualifiedAppId = mapUrlToFullyQualifiedAppId(local.url, local.appId);
+function mapLocalApp(local: LocalAppDirectoryEntry, hostname: string): FullyQualifiedAppDirectoryApplication {
+    const fullyQualifiedAppId = constructFullyQualifiedAppId(local.appId, hostname);
 
     return {
         appId: fullyQualifiedAppId,
@@ -57,6 +57,11 @@ function mapLocalApp(local: LocalAppDirectoryEntry): FullyQualifiedAppDirectoryA
  */
 export function mapUrlToFullyQualifiedAppId(url: string, appId: string): FullyQualifiedAppId {
     const hostname = new URL(url).hostname;
+
+    return constructFullyQualifiedAppId(appId, hostname);
+}
+
+function constructFullyQualifiedAppId(appId: string, hostname: string): FullyQualifiedAppId {
     return `${appId}@${hostname}`;
 }
 
