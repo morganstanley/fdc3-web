@@ -36,7 +36,6 @@ import {
     isFullyQualifiedAppIdentifier,
     isWebAppDetails,
     mapApplicationToMetadata,
-    mapLocalApp,
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
     resolveAppIdentifier,
@@ -576,24 +575,27 @@ export class AppDirectory {
 
     private addLocalApps(directoryEntry: LocalAppDirectory): void {
         const localDirectory = directoryEntry;
-        const directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = this.directory;
 
-        async function handleUpdate(updateResult: IteratorResult<LocalAppDirectoryEntry>): Promise<void> {
-            const localApp = mapLocalApp(updateResult.value, directoryEntry.host);
+        async function handleUpdate(
+            this: AppDirectory,
+            updateResult: IteratorResult<LocalAppDirectoryEntry | LocalAppDirectoryEntry[]>,
+        ): Promise<void> {
+            const apps = Array.isArray(updateResult.value) ? updateResult.value : [updateResult.value];
 
-            directory[localApp.appId] = {
-                application: localApp,
-                instances: [],
-            };
+            this.addLocalAppToDirectory({ ...directoryEntry, apps });
 
             if (updateResult.done !== true) {
-                await localDirectory.updates?.next().then(handleUpdate);
+                await localDirectory.updates?.next().then(result => handleUpdate.call(this, result));
             }
         }
 
-        localDirectory.updates?.next().then(handleUpdate);
+        localDirectory.updates?.next().then(result => handleUpdate.call(this, result));
 
-        mapLocalAppDirectory(directoryEntry).forEach(application => {
+        this.addLocalAppToDirectory(directoryEntry);
+    }
+
+    private addLocalAppToDirectory(localDirectory: LocalAppDirectory): void {
+        mapLocalAppDirectory(localDirectory).forEach(application => {
             this.directory[application.appId] = {
                 application,
                 instances: [],

@@ -258,7 +258,7 @@ export type LocalAppDirectory = {
     /**
      * Allows the url of an existing local app directory to be updated or for new entries to be added
      */
-    updates?: AsyncIterator<LocalAppDirectoryEntry>;
+    updates?: AsyncIterator<LocalAppDirectoryEntry | LocalAppDirectoryEntry[]>;
 };
 
 export type RootDesktopAgentFactoryParams = {
