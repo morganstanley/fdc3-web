@@ -34,7 +34,7 @@ export function mapLocalAppDirectory(local: LocalAppDirectory): FullyQualifiedAp
     return local.apps.map(app => mapLocalApp(app, local.host));
 }
 
-function mapLocalApp(local: LocalAppDirectoryEntry, hostname: string): FullyQualifiedAppDirectoryApplication {
+export function mapLocalApp(local: LocalAppDirectoryEntry, hostname: string): FullyQualifiedAppDirectoryApplication {
     const fullyQualifiedAppId = constructFullyQualifiedAppId(local.appId, hostname);
 
     return {

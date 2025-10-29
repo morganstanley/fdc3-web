@@ -17,6 +17,7 @@ import {
     FullyQualifiedAppIdentifier,
     IAppResolver,
     LocalAppDirectory,
+    LocalAppDirectoryEntry,
     ResolveForContextPayload,
     ResolveForIntentPayload,
 } from '../contracts.js';
@@ -797,6 +798,53 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 appId: 'localAppIdOne@my-app.com',
                 title: 'My First App',
             });
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toEqual({
+                appId: 'localAppIdTwo@my-app.com',
+                title: 'My Other App',
+            });
+        });
+
+        it('should add app when iterator emits app after initial load', async () => {
+            let emitFunction:
+                | ((value: LocalAppDirectoryEntry) => Promise<IteratorResult<LocalAppDirectoryEntry>>)
+                | undefined;
+
+            const updates: AsyncIterator<LocalAppDirectoryEntry> = {
+                next: async () => {
+                    const nextPromise = new Promise<IteratorResult<LocalAppDirectoryEntry>>(resolve => {
+                        emitFunction = value => {
+                            resolve({ done: false, value });
+
+                            return nextPromise;
+                        };
+                    });
+
+                    return nextPromise;
+                },
+            };
+
+            const instance = createInstance([
+                {
+                    host: 'my-app.com',
+                    apps: [],
+                    updates,
+                },
+                mockedAppDirectoryUrl,
+            ]);
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toBeUndefined();
+
+            await emitFunction?.({ appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' });
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
+                appId: 'localAppIdOne@my-app.com',
+                title: 'My First App',
+            });
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toBeUndefined();
+
+            await emitFunction?.({ appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' });
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toEqual({
                 appId: 'localAppIdTwo@my-app.com',

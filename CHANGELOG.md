@@ -1,3 +1,38 @@
+## 0.8.0 (2025-10-29)
+
+Support added for adding and updating local app directory records after creation of the app directory:
+
+```ts
+let addAppToDirectory: ((value: LocalAppDirectoryEntry) => void) | undefined;
+
+const updates: AsyncIterator<LocalAppDirectoryEntry> = {
+    next: async () =>
+        new Promise<IteratorResult<LocalAppDirectoryEntry>>(resolve => {
+            addAppToDirectory = value => resolve({ done: false, value });
+        }),
+};
+
+getAgent({
+    failover: () =>
+        new DesktopAgentFactory().createRoot({
+            rootAppId: 'test-harness-root-app',
+            appDirectoryEntries: [
+                {
+                    host: 'example.com',
+                    apps: [
+                        {
+                            appId: 'local-app-id',
+                            title: 'Local App',
+                            url: 'https://example.com/someApp',
+                        },
+                    ],
+                    updates,
+                },
+            ],
+        }),
+});
+```
+
 ## 0.7.0 (2025-10-21)
 
 ### Breaking
