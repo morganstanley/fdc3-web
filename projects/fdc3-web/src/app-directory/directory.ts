@@ -25,6 +25,7 @@ import {
     FullyQualifiedAppIdentifier,
     IAppResolver,
     LocalAppDirectory,
+    LocalAppDirectoryEntry,
     ResolveForContextResponse,
 } from '../contracts.js';
 import {
@@ -35,6 +36,7 @@ import {
     isFullyQualifiedAppIdentifier,
     isWebAppDetails,
     mapApplicationToMetadata,
+    mapLocalApp,
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
     resolveAppIdentifier,
@@ -564,17 +566,39 @@ export class AppDirectory {
                 if (typeof directoryEntry === 'string') {
                     return this.loadAppDirectory(directoryEntry, backoffRetry);
                 } else {
-                    mapLocalAppDirectory(directoryEntry).forEach(application => {
-                        this.directory[application.appId] = {
-                            application,
-                            instances: [],
-                        };
-                    });
+                    this.addLocalApps(directoryEntry);
                 }
             }),
         );
 
         this.log('All App directories loaded', LogLevel.INFO, this.directory);
+    }
+
+    private addLocalApps(directoryEntry: LocalAppDirectory): void {
+        const localDirectory = directoryEntry;
+        const directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = this.directory;
+
+        async function handleUpdate(updateResult: IteratorResult<LocalAppDirectoryEntry>): Promise<void> {
+            const localApp = mapLocalApp(updateResult.value, directoryEntry.host);
+
+            directory[localApp.appId] = {
+                application: localApp,
+                instances: [],
+            };
+
+            if (updateResult.done !== true) {
+                await localDirectory.updates?.next().then(handleUpdate);
+            }
+        }
+
+        localDirectory.updates?.next().then(handleUpdate);
+
+        mapLocalAppDirectory(directoryEntry).forEach(application => {
+            this.directory[application.appId] = {
+                application,
+                instances: [],
+            };
+        });
     }
 
     private async loadAppDirectory(url: string, backoffRetry?: BackoffRetryParams): Promise<void> {
