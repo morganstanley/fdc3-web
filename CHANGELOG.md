@@ -1,3 +1,7 @@
+## 0.7.1 (2025-10-29)
+
+Added support for passing multiple local apps to app directory through `updates` AsyncIterator
+
 ## 0.8.0 (2025-10-29)
 
 Support added for adding and updating local app directory records after creation of the app directory:
