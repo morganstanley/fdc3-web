@@ -1,4 +1,4 @@
-## 0.7.1 (2025-10-29)
+## 0.8.1 (2025-10-29)
 
 Added support for passing multiple local apps to app directory through `updates` AsyncIterator
 
