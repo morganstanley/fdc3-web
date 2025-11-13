@@ -9,15 +9,10 @@
  * and limitations under the License. */
 
 import { AppMetadata, BrowserTypes, ImplementationMetadata } from '@finos/fdc3';
-import { AppDirectoryApplication } from '../app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
 import { defaultBackoffRetry, FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
-import {
-    BackoffRetryParams,
-    FullyQualifiedAppId,
-    FullyQualifiedAppIdentifier,
-    LocalAppDirectory,
-    LocalAppDirectoryEntry,
-} from '../contracts.js';
+import { BackoffRetryParams, FullyQualifiedAppId, FullyQualifiedAppIdentifier } from '../contracts.js';
+import { isFullyQualifiedAppId } from './type-predicate.helper.js';
 
 export type FullyQualifiedAppDirectoryApplication = AppDirectoryApplication & { appId: FullyQualifiedAppId };
 
@@ -34,14 +29,12 @@ export function mapLocalAppDirectory(local: LocalAppDirectory): FullyQualifiedAp
     return local.apps.map(app => mapLocalApp(app, local.host));
 }
 
-export function mapLocalApp(local: LocalAppDirectoryEntry, hostname: string): FullyQualifiedAppDirectoryApplication {
+export function mapLocalApp(local: AppDirectoryApplication, hostname: string): FullyQualifiedAppDirectoryApplication {
     const fullyQualifiedAppId = constructFullyQualifiedAppId(local.appId, hostname);
 
     return {
+        ...local,
         appId: fullyQualifiedAppId,
-        title: local.title,
-        type: 'web',
-        details: { url: local.url },
     };
 }
 
@@ -62,7 +55,7 @@ export function mapUrlToFullyQualifiedAppId(url: string, appId: string): FullyQu
 }
 
 function constructFullyQualifiedAppId(appId: string, hostname: string): FullyQualifiedAppId {
-    return `${appId}@${hostname}`;
+    return isFullyQualifiedAppId(appId) ? appId : `${appId}@${hostname}`;
 }
 
 /**
@@ -133,4 +126,13 @@ export function mapApplicationToMetadata(
         icons: appMetadata?.icons,
         screenshots: appMetadata?.screenshots,
     };
+}
+
+export function createWebAppDirectoryEntry(
+    appId: string,
+    url: string,
+    title: string,
+    directoryDetails: Partial<Omit<AppDirectoryApplication, 'appId' | 'title' | 'type' | 'details'>> = {},
+): AppDirectoryApplication {
+    return { appId, title, type: 'web', details: { url }, ...directoryDetails };
 }

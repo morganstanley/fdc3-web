@@ -16,6 +16,7 @@ import {
     AppDirectoryApplication,
     BackoffRetryParams,
     createLogger,
+    createWebAppDirectoryEntry,
     DesktopAgentFactory,
     FullyQualifiedAppIdentifier,
     generateUUID,
@@ -53,7 +54,11 @@ const appDirectoryUrls: (string | LocalAppDirectory)[] = [
     {
         host: 'fdc3.finos.org',
         apps: [
-            { appId: 'fdc3-workbench', url: 'https://fdc3.finos.org/toolbox/fdc3-workbench/', title: 'FDC3 Workbench' },
+            createWebAppDirectoryEntry(
+                'fdc3-workbench',
+                'https://fdc3.finos.org/toolbox/fdc3-workbench/',
+                'FDC3 Workbench',
+            ),
         ],
     },
 ];

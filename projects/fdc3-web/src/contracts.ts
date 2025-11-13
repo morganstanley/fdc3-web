@@ -20,7 +20,7 @@ import type {
     Intent,
     PrivateChannelEvent,
 } from '@finos/fdc3';
-import { AppDirectoryApplication } from './app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory } from './app-directory.contracts.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -244,21 +244,6 @@ export type BackoffRetryParams = {
      * The initial delay in milliseconds before the first retry attempt. This will increase exponentially with each attempt
      */
     baseDelay?: number;
-};
-
-export type LocalAppDirectoryEntry = {
-    appId: string;
-    url: string;
-    title: string;
-};
-
-export type LocalAppDirectory = {
-    apps: LocalAppDirectoryEntry[];
-    host: string;
-    /**
-     * Allows the url of an existing local app directory to be updated or for new entries to be added
-     */
-    updates?: AsyncIterator<LocalAppDirectoryEntry | LocalAppDirectoryEntry[]>;
 };
 
 export type RootDesktopAgentFactoryParams = {

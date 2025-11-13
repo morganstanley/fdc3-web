@@ -22,6 +22,7 @@ export type AppDirectoryApplicationDetails =
     | CitrixAppDetails
     | OnlineNativeAppDetails
     | OtherAppDetails;
+
 //manifest key can map to manifest object or URI from which manifest can be retrieved
 export type ApplicationHostManifests = { [key: string]: object | string };
 export type AppDirectoryContextResultTypePair = { contexts: string[]; resultType?: string };
@@ -65,3 +66,12 @@ type BaseApplication = {
 };
 
 export type AppDirectoryApplication = BaseApplication & { localizedVersions?: { [key: string]: BaseApplication } };
+
+export type LocalAppDirectory = {
+    apps: AppDirectoryApplication[];
+    host: string;
+    /**
+     * Allows the url of an existing local app directory to be updated or for new entries to be added
+     */
+    updates?: AsyncIterator<AppDirectoryApplication | AppDirectoryApplication[]>;
+};
