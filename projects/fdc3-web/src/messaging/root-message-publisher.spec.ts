@@ -50,7 +50,6 @@ describe('RootMessagePublisher', () => {
         >
     >;
     let mockDirectory: IMocked<AppDirectory>;
-    let mockWindowRef: IMocked<WindowProxy>;
     let mockedHelpers: IMocked<typeof helpersImport>;
     let mockRequestHandler: IMocked<{
         handler: (message: RequestMessage, source: FullyQualifiedAppIdentifier) => void;
@@ -69,18 +68,9 @@ describe('RootMessagePublisher', () => {
         mockRequestHandler = Mock.create();
         mockRequestHandler.setupFunction('handler');
 
-        const mockAppDirectoryApplication = Mock.create<AppDirectoryApplication>().setup(
-            setupProperty('appId', rootAppIdentity.appId),
-        ).mock;
-
         mockDirectory = Mock.create<AppDirectory>().setup(
-            setupFunction('registerNewInstance', () =>
-                Promise.resolve({ application: mockAppDirectoryApplication, identifier: rootAppIdentity }),
-            ),
             setupFunction('removeDisconnectedApp'),
-        );
-        mockWindowRef = Mock.create<WindowProxy>().setup(
-            setupProperty('location', Mock.create<Location>().setup(setupProperty('href', 'mock-location')).mock),
+            setupProperty('rootAppIdentifier', rootAppIdentity),
         );
 
         mockedHelpers = Mock.create<typeof helpersImport>().setup(
@@ -92,45 +82,13 @@ describe('RootMessagePublisher', () => {
     });
 
     function createInstance(): RootMessagePublisher {
-        return new RootMessagePublisher(mockRootMessagingProvider.mock, mockDirectory.mock, mockWindowRef.mock);
+        return new RootMessagePublisher(mockRootMessagingProvider.mock, mockDirectory.mock);
     }
 
     it(`should create`, () => {
         const instance = createInstance();
         expect(instance).toBeDefined();
         expect(mockRootMessagingProvider.withFunction('subscribe')).wasCalledOnce();
-    });
-
-    describe('initialize', () => {
-        it('should call determineIdentity with the provided identityUrl', async () => {
-            const instance = createInstance();
-            await instance.initialize('mock-identity-url');
-
-            expect(
-                mockDirectory.withFunction('registerNewInstance').withParameters('mock-identity-url'),
-            ).wasCalledOnce();
-        });
-
-        it('should call determineIdentity with the current window location if identityUrl is not provided', async () => {
-            const instance = createInstance();
-            await instance.initialize();
-
-            expect(mockDirectory.withFunction('registerNewInstance').withParameters('mock-location')).wasCalledOnce();
-        });
-
-        it('should set the rootAppIdentifier and return it', async () => {
-            const instance = createInstance();
-            const result = await instance.initialize();
-
-            expect(result).toEqual(rootAppIdentity);
-        });
-
-        it('should throw an error if rootAppIdentifier is not set', async () => {
-            mockDirectory.setupFunction('registerNewInstance', () => Promise.reject('some error from directory'));
-            const instance = createInstance();
-
-            await expect(instance.initialize()).rejects.toThrow('some error from directory');
-        });
     });
 
     describe('sendMessage', () => {
@@ -143,17 +101,8 @@ describe('RootMessagePublisher', () => {
             type: 'getInfoRequest',
         };
 
-        it('should throw an error if initialize has not completed', async () => {
-            const instance = createInstance();
-
-            expect(() => instance.sendMessage({ payload: requestMessage })).toThrow(
-                'sendMessage called before RootMessagePublisher has been initialized',
-            );
-        });
-
         it('should call handleRequestMessage with the message payload and rootAppIdentifier', async () => {
             const instance = createInstance();
-            await instance.initialize();
             instance.requestMessageHandler = mockRequestHandler.mock.handler;
 
             instance.sendMessage({ payload: requestMessage });
@@ -179,7 +128,6 @@ describe('RootMessagePublisher', () => {
             const callbackOne = Mock.create<ProxyCallback>().setup(setupFunction('callback'));
             const callbackTwo = Mock.create<ProxyCallback>().setup(setupFunction('callback'));
             const instance = createInstance();
-            await instance.initialize();
 
             instance.addResponseHandler(callbackOne.mock.callback);
             instance.addResponseHandler(callbackTwo.mock.callback);
@@ -196,7 +144,6 @@ describe('RootMessagePublisher', () => {
 
         it('should publish the response message to the root messaging provider if the source is not the root agent', async () => {
             const instance = createInstance();
-            await instance.initialize();
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -235,7 +182,6 @@ describe('RootMessagePublisher', () => {
 
         it('should log an error if channelId cannot be resolved for unknown source app', async () => {
             const instance = createInstance();
-            await instance.initialize();
             const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {
@@ -252,8 +198,7 @@ describe('RootMessagePublisher', () => {
 
     describe('onMessage', () => {
         it('should log an error when source cannot be resolved for an unknown channelId', async () => {
-            const instance = createInstance();
-            await instance.initialize();
+            createInstance();
 
             // Mock console.error
             const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -284,8 +229,7 @@ describe('RootMessagePublisher', () => {
         });
 
         it('should remove the app from the directory if a goodbye message is received', async () => {
-            const instance = createInstance();
-            await instance.initialize();
+            createInstance();
 
             const sourceApp: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -329,7 +273,6 @@ describe('RootMessagePublisher', () => {
             const callbackOne = Mock.create<ProxyCallback>().setup(setupFunction('callback'));
             const callbackTwo = Mock.create<ProxyCallback>().setup(setupFunction('callback'));
             const instance = createInstance();
-            await instance.initialize();
 
             instance.addResponseHandler(callbackOne.mock.callback);
             instance.addResponseHandler(callbackTwo.mock.callback);
@@ -346,7 +289,6 @@ describe('RootMessagePublisher', () => {
 
         it('should publish the event message to the root messaging provider', async () => {
             const instance = createInstance();
-            await instance.initialize();
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -365,7 +307,6 @@ describe('RootMessagePublisher', () => {
 
         it(`should send event to multiple sources`, async () => {
             const instance = createInstance();
-            await instance.initialize();
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -404,7 +345,6 @@ describe('RootMessagePublisher', () => {
 
         it('should log an error if channelId cannot be resolved for unknown source app', async () => {
             const instance = createInstance();
-            await instance.initialize();
             const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {

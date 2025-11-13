@@ -9,9 +9,54 @@
  * and limitations under the License. */
 
 import { AppMetadata, BrowserTypes, ImplementationMetadata } from '@finos/fdc3';
-import { AppDirectoryApplication } from '../app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
 import { defaultBackoffRetry, FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
-import { BackoffRetryParams, FullyQualifiedAppIdentifier } from '../contracts.js';
+import { BackoffRetryParams, FullyQualifiedAppId, FullyQualifiedAppIdentifier } from '../contracts.js';
+import { isFullyQualifiedAppId } from './type-predicate.helper.js';
+
+export type FullyQualifiedAppDirectoryApplication = AppDirectoryApplication & { appId: FullyQualifiedAppId };
+
+/**
+ * Convert a local app directory into an array of applications with fully-qualified app IDs.
+ *
+ * Each LocalAppDirectoryEntry is mapped to a FullyQualifiedAppDirectoryApplication by
+ * converting the local appId into a FullyQualifiedAppId derived from the entry URL's hostname.
+ *
+ * @param local - Array of local app directory entries to map
+ * @returns Array of applications with fully-qualified appId and web details
+ */
+export function mapLocalAppDirectory(local: LocalAppDirectory): FullyQualifiedAppDirectoryApplication[] {
+    return local.apps.map(app => mapLocalApp(app, local.host));
+}
+
+export function mapLocalApp(local: AppDirectoryApplication, hostname: string): FullyQualifiedAppDirectoryApplication {
+    const fullyQualifiedAppId = constructFullyQualifiedAppId(local.appId, hostname);
+
+    return {
+        ...local,
+        appId: fullyQualifiedAppId,
+    };
+}
+
+/**
+ * Build a FullyQualifiedAppId from a URL and an appId.
+ *
+ * The hostname portion of the provided URL is used to form an id of the form:
+ * "<appId>@<hostname>".
+ *
+ * @param url - The app's launch URL (parsed with the URL constructor)
+ * @param appId - The local application identifier
+ * @returns Fully qualified app id string combining appId and the URL hostname
+ */
+export function mapUrlToFullyQualifiedAppId(url: string, appId: string): FullyQualifiedAppId {
+    const hostname = new URL(url).hostname;
+
+    return constructFullyQualifiedAppId(appId, hostname);
+}
+
+function constructFullyQualifiedAppId(appId: string, hostname: string): FullyQualifiedAppId {
+    return isFullyQualifiedAppId(appId) ? appId : `${appId}@${hostname}`;
+}
 
 /**
  * Fetches app directory applications from single app directory url
@@ -81,4 +126,13 @@ export function mapApplicationToMetadata(
         icons: appMetadata?.icons,
         screenshots: appMetadata?.screenshots,
     };
+}
+
+export function createWebAppDirectoryEntry(
+    appId: string,
+    url: string,
+    title: string,
+    directoryDetails: Partial<Omit<AppDirectoryApplication, 'appId' | 'title' | 'type' | 'details'>> = {},
+): AppDirectoryApplication {
+    return { appId, title, type: 'web', details: { url }, ...directoryDetails };
 }

@@ -53,3 +53,31 @@ export function decodeUUUrl<T extends Record<string, string>>(
 
     return { payload, uuid };
 }
+
+/**
+ * Compares two urls and returns true if all elements (query parameters, hash, path segments) from the source url are in the comparisonUrl
+ * host, port and protocol must all match as well
+ * @param _sourceUrl
+ * @param _comparisonUrl
+ * @returns
+ */
+export function urlContainsAllElements(sourceUrl: string, comparisonUrl: string): boolean {
+    const source = new URL(sourceUrl);
+    const comparison = new URL(comparisonUrl);
+
+    const sourcePathSegments = source.pathname.split('/').filter(segment => segment.length > 0);
+    const comparisonPathSegments = comparison.pathname.split('/').filter(segment => segment.length > 0);
+
+    return (
+        source.host === comparison.host &&
+        source.port === comparison.port &&
+        source.protocol === comparison.protocol &&
+        (source.hash === '' || source.hash === comparison.hash) &&
+        sourcePathSegments.every((pathSegment, index) => pathSegment === comparisonPathSegments[index]) &&
+        Array.from(source.searchParams.keys()).every(
+            key =>
+                comparison.searchParams.has(key) &&
+                source.searchParams.getAll(key).join(',') === comparison.searchParams.getAll(key).join(','),
+        )
+    );
+}

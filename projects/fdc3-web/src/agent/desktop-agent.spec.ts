@@ -1708,6 +1708,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: mockedTargetAppId },
+                        context: contact,
                     },
                     type: 'openRequest',
                 };
@@ -1718,11 +1719,25 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 delete recordWithNoManifests.hostManifests;
 
                 expect(
-                    mockOpenStrategy.withFunction('open').withParametersEqualTo({
-                        appDirectoryRecord: recordWithNoManifests,
-                        agent: instance,
-                        manifest: mockedApplication.hostManifests?.['mock-application'],
-                    }),
+                    mockOpenStrategy.withFunction('canOpen').withParametersEqualTo(
+                        {
+                            appDirectoryRecord: recordWithNoManifests,
+                            agent: instance,
+                            manifest: mockedApplication.hostManifests?.['mock-application'],
+                        },
+                        contact,
+                    ),
+                ).wasCalledOnce();
+
+                expect(
+                    mockOpenStrategy.withFunction('open').withParametersEqualTo(
+                        {
+                            appDirectoryRecord: recordWithNoManifests,
+                            agent: instance,
+                            manifest: mockedApplication.hostManifests?.['mock-application'],
+                        },
+                        contact,
+                    ),
                 ).wasCalledOnce();
 
                 expect(mockDisabledOpenStrategy.withFunction('open')).wasNotCalled();

@@ -71,6 +71,7 @@
                 "buildTarget": "test-harness:build-node",
                 "runBuildTargetDependencies": false
             }
-        }
+        },
+        "build:release": {}
     }
 }

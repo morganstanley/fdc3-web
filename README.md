@@ -30,10 +30,10 @@ const agent = await getAgent({
   failover: () =>
     new DesktopAgentFactory().createRoot({
       uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
-      appDirectoryUrls: ['http://localhost:4299/v2/apps'],
+      appDirectoryEntries: ['http://localhost:4299/v2/apps'],
       openStrategies: [{
-        canOpen: (params: OpenApplicationStrategyParams) => { /* define whether an app should open */ },
-        open: (params: OpenApplicationStrategyParams) => { /* define how an app should open */ }
+        canOpen: (params: OpenApplicationStrategyParams, context?: Context) => { /* define whether an app should open */ },
+        open: (params: OpenApplicationStrategyParams, context?: Context) => { /* define how an app should open */ }
       }],
     }),
   // Control logging levels
@@ -101,12 +101,19 @@ To enable app discovery and intent resolution, provide App Directory URLs when i
 
 ```js
 const agent = await getAgent({
-  appDirectoryUrls: ['http://localhost:4299/v2/apps'],
+  appDirectoryEntries: ['http://localhost:4299/v2/apps'],
 });
+```
 
-// Fetch available applications
-import { getAppDirectoryApplications } from '@morgan-stanley/fdc3-web';
-const apps = await getAppDirectoryApplications('http://localhost:4299/v2/apps');
+App directories can also be defined locally and pass as an array of Local App Definitions. Here we define a remote app directory that is loaded from the url and a local app directory where we pass app definitions:
+
+```js
+const agent = await getAgent({
+  appDirectoryEntries: [
+    'http://localhost:4299/v2/apps',
+    [{ appId: 'fdc3-workbench', url: 'https://fdc3.finos.org/toolbox/fdc3-workbench/', title: 'FDC3 Workbench' }],
+    ],
+});
 ```
 
 For more advanced usage, see the [test-harness](./projects/test-harness/README.md) example app.

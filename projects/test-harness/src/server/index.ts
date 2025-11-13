@@ -16,6 +16,11 @@ import { Express } from 'express-serve-static-core';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
+interface PartialAppRecord {
+    title: string;
+    appId: string;
+}
+
 //can swap in different config files
 const { default: config } = await import(configFileName, { with: { type: 'json' } });
 
@@ -76,24 +81,17 @@ console.log(`\n\nMock App Directory Service base url: http://localhost:${appDire
 
 // Routing for app-directory service
 
-const rootApp = {
-    appId: 'test-harness-root-app',
-    title: 'Root App',
-    type: 'web',
-    details: {
-        url: `http://localhost:${rootPort}/index.html`,
-    },
-};
+const applications: PartialAppRecord[] = config.applications;
 
 app.get('/v2/apps', (_, res) => {
     const allApplicationsResponse = {
-        applications: [rootApp, ...config.applications],
+        applications,
         message: 'OK',
     };
     res.send(allApplicationsResponse);
 });
 
-[rootApp, ...config.applications].forEach(application => {
+applications.forEach(application => {
     app.get(`/v2/apps/${application.appId}`, (_, res) => {
         res.send(application);
     });

@@ -20,7 +20,7 @@ import type {
     Intent,
     PrivateChannelEvent,
 } from '@finos/fdc3';
-import { AppDirectoryApplication } from './app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory } from './app-directory.contracts.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -247,9 +247,13 @@ export type BackoffRetryParams = {
 };
 
 export type RootDesktopAgentFactoryParams = {
+    /**
+     * Either a fully qualified appId (appId@hostname) or an unqualified appId (appId only). If an unqualified appId is provided the hostname of the current window will be used to create a fully qualified appId
+     */
+    rootAppId: string;
     messagingProviderFactory?: MessagingProviderFactory<IRootMessagingProvider>;
     uiProvider?: UIProviderFactory;
-    appDirectoryUrls?: string[];
+    appDirectoryEntries?: (string | LocalAppDirectory)[];
     openStrategies?: IOpenApplicationStrategy[];
     identityUrl?: string;
     /**
@@ -273,11 +277,11 @@ export type OpenApplicationStrategyParams = {
 
 export interface IOpenApplicationStrategy {
     manifestKey?: string;
-    canOpen(params: OpenApplicationStrategyParams): Promise<boolean>;
+    canOpen(params: OpenApplicationStrategyParams, context?: Context): Promise<boolean>;
     /**
      * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
      * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
      * @param params
      */
-    open(params: OpenApplicationStrategyParams): Promise<string>;
+    open(params: OpenApplicationStrategyParams, context?: Context): Promise<string>;
 }

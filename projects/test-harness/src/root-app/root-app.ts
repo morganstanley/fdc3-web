@@ -16,6 +16,7 @@ import {
     AppDirectoryApplication,
     BackoffRetryParams,
     createLogger,
+    createWebAppDirectoryEntry,
     DesktopAgentFactory,
     FullyQualifiedAppIdentifier,
     generateUUID,
@@ -24,6 +25,8 @@ import {
     IOpenApplicationStrategy,
     isFullyQualifiedAppId,
     isWebAppDetails,
+    LocalAppDirectory,
+    mapLocalAppDirectory,
     OpenApplicationStrategyParams,
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
@@ -46,7 +49,19 @@ import {
     SelectAppContextType,
 } from '../contracts.js';
 
-const appDirectoryUrls = ['http://localhost:4299/v2/apps'];
+const appDirectoryUrls: (string | LocalAppDirectory)[] = [
+    'http://localhost:4299/v2/apps',
+    {
+        host: 'fdc3.finos.org',
+        apps: [
+            createWebAppDirectoryEntry(
+                'fdc3-workbench',
+                'https://fdc3.finos.org/toolbox/fdc3-workbench/',
+                'FDC3 Workbench',
+            ),
+        ],
+    },
+];
 
 const retryParams: BackoffRetryParams = {
     maxAttempts: 5,
@@ -81,8 +96,9 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         getAgent({
             failover: () =>
                 new DesktopAgentFactory().createRoot({
+                    rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
-                    appDirectoryUrls: appDirectoryUrls, //passes in app directory web service base url
+                    appDirectoryEntries: appDirectoryUrls, //passes in app directory web service base url
                     openStrategies: [this],
                     backoffRetry: retryParams,
                 }),
@@ -92,7 +108,11 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
     }
 
     private async loadApplications(): Promise<void> {
-        const directoryResults = await Promise.allSettled(appDirectoryUrls.map(url => this.loadAppDirectory(url)));
+        const directoryResults = await Promise.allSettled(
+            appDirectoryUrls.map(directory =>
+                typeof directory === 'string' ? this.loadAppDirectory(directory) : mapLocalAppDirectory(directory),
+            ),
+        );
 
         this.applications = directoryResults
             .filter(result => result.status === 'fulfilled')
@@ -101,23 +121,23 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         this.initApp();
     }
 
-    private async loadAppDirectory(url: string): Promise<AppDirectoryApplication[]> {
-        const hostname = new URL(url).hostname;
+    private async loadAppDirectory(directory: string): Promise<AppDirectoryApplication[]> {
+        const hostname = new URL(directory).hostname;
 
-        const applications = await getAppDirectoryApplications(url, retryParams).catch(() => []);
+        const applications = await getAppDirectoryApplications(directory, retryParams).catch(() => []);
 
-        return applications
-            .filter(app => app.appId !== 'test-harness-root-app') //test-harness-root-app is the container and so is always open
-            .map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
+        return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
     public async canOpen(params: OpenApplicationStrategyParams): Promise<boolean> {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 
-    public async open(params: OpenApplicationStrategyParams): Promise<string> {
+    private _appCount = 0;
+
+    public async open(params: OpenApplicationStrategyParams, context?: Context): Promise<string> {
         if (isWebAppDetails(params.appDirectoryRecord.details)) {
-            this.log('Opening WebAppDetails', LogLevel.DEBUG, params);
+            this.log('Opening WebAppDetails', LogLevel.DEBUG, params, context);
             const newWindow = (document.getElementById('openInWindow') as HTMLInputElement).checked;
 
             if (this.selectedApp != null) {
@@ -163,8 +183,12 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
                 if (newWindow) {
                     this.log('Opening app in new window', LogLevel.DEBUG, details);
+
+                    const url = new URL(details.url);
+                    url.searchParams.append('appIndex', (this._appCount++).toString()); // add a url param to test app directory url matching
+
                     //open app in new window
-                    const windowProxy = window.open(details.url, '_blank', 'popup');
+                    const windowProxy = window.open(url, '_blank', 'popup');
 
                     if (windowProxy == null) {
                         this.log('null window returned from window.open', LogLevel.ERROR, params.appDirectoryRecord);
@@ -219,9 +243,13 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
             .filter(application => application.appId.includes('root'))
             .forEach(application => this.openAppInfo(application));
 
-        await this.subscribeToSelectedApp();
+        await this.subscribeToSelectedApp().catch(err =>
+            this.log('Error subscribing to selected app', LogLevel.ERROR, err),
+        );
 
-        await this.subscribeToSelectableApps();
+        await this.listenForSelectableAppsRequests().catch(err =>
+            this.log('Error subscribing to selectable apps', LogLevel.ERROR, err),
+        );
     }
 
     private async subscribeToSelectedApp(): Promise<void> {
@@ -237,21 +265,23 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         this.selectedApp = (context as Partial<ISelectAppContext>).appIdentifier;
     }
 
-    private async subscribeToSelectableApps(): Promise<void> {
+    private async listenForSelectableAppsRequests(): Promise<void> {
         const agent = await getAgent();
 
-        await agent.addIntentListener(SelectableAppsIntent, async context => {
-            if (context.type === SelectableAppsRequestContextType) {
-                const selectableAppsContext: ISelectableAppsResponseContext = {
-                    type: SelectableAppsResponseContextType,
-                    applications: await this.applications,
-                };
+        await agent
+            .addIntentListener(SelectableAppsIntent, async context => {
+                if (context.type === SelectableAppsRequestContextType) {
+                    const selectableAppsContext: ISelectableAppsResponseContext = {
+                        type: SelectableAppsResponseContextType,
+                        applications: await this.applications,
+                    };
 
-                return selectableAppsContext;
-            }
+                    return selectableAppsContext;
+                }
 
-            return;
-        });
+                return;
+            })
+            .catch(err => this.log(`Error adding intent listener for '${SelectableAppsIntent}'`, LogLevel.ERROR, err));
     }
 
     /**

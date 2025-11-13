@@ -19,6 +19,7 @@
                 "command": "tsc -p {projectRoot}/tsconfig.spec.json --noEmit"
             },
             "dependsOn": []
-        }
+        },
+        "build:release": {}
     }
 }

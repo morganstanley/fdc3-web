@@ -18,7 +18,7 @@ import {
     OpenError,
     ResolveError,
 } from '@finos/fdc3';
-import { AppDirectoryApplication } from '../app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
 import {
     BackoffRetryParams,
     FullyQualifiedAppId,
@@ -34,7 +34,10 @@ import {
     isFullyQualifiedAppIdentifier,
     isWebAppDetails,
     mapApplicationToMetadata,
+    mapLocalAppDirectory,
+    mapUrlToFullyQualifiedAppId,
     resolveAppIdentifier,
+    urlContainsAllElements,
 } from '../helpers/index.js';
 
 type IntentContextLookup = { intent: Intent; context: Context[] };
@@ -49,17 +52,39 @@ export class AppDirectory {
     private readonly directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = {}; //indexed by appId
     private readonly instanceLookup: Partial<Record<string, Set<IntentContextLookup>>> = {}; //indexed by instanceId
 
-    private readonly appDirectoryUrls: string[];
+    private readonly appDirectoryEntries: (string | LocalAppDirectory)[];
     private loadDirectoryPromise: Promise<void>;
 
     constructor(
+        rootAppId: string,
         private readonly appResolverPromise: Promise<IAppResolver>,
-        appDirectoryUrls?: string[],
+        appDirectoryEntries?: (string | LocalAppDirectory)[],
         backoffRetry?: BackoffRetryParams,
     ) {
+        this._rootAppIdentifier = this.registerRootApp(rootAppId);
+
         //assumes app directory is not modified while root desktop agent is active
-        this.appDirectoryUrls = appDirectoryUrls ?? [];
-        this.loadDirectoryPromise = this.loadAppDirectory(this.appDirectoryUrls, backoffRetry);
+        this.appDirectoryEntries = appDirectoryEntries ?? [];
+        this.loadDirectoryPromise = this.loadAllAppDirectories(this.appDirectoryEntries, backoffRetry);
+    }
+
+    private _rootAppIdentifier: FullyQualifiedAppIdentifier;
+
+    public get rootAppIdentifier(): FullyQualifiedAppIdentifier {
+        return this._rootAppIdentifier;
+    }
+
+    private registerRootApp(rootAppId: string): FullyQualifiedAppIdentifier {
+        const appId: FullyQualifiedAppId = isFullyQualifiedAppId(rootAppId)
+            ? rootAppId
+            : `${rootAppId}@${window.location.hostname}`;
+
+        const rootAppIdentifier = { appId, instanceId: generateUUID() };
+
+        this.directory[appId] = { instances: [rootAppIdentifier.instanceId] };
+        this.instanceLookup[rootAppIdentifier.instanceId] = new Set();
+
+        return rootAppIdentifier;
     }
 
     /**
@@ -222,7 +247,9 @@ export class AppDirectory {
             .map(record => record?.application)
             .filter(application => application != null)
             .find(
-                application => isWebAppDetails(application.details) && urlsMatch(application.details.url, identityUrl),
+                application =>
+                    isWebAppDetails(application.details) &&
+                    urlContainsAllElements(application.details.url, identityUrl),
             );
 
         if (matchingApp != null) {
@@ -285,7 +312,7 @@ export class AppDirectory {
             //return fullyQualifiedAppId
             return appId;
         }
-        if (this.appDirectoryUrls.length === 0 && appId != null) {
+        if (this.appDirectoryEntries.length === 0 && appId != null) {
             //if no app directory is loaded, create fullyQualifiedAppId using default hostname string
             return `${appId}@${unknownAppDirectory}`;
         }
@@ -341,7 +368,7 @@ export class AppDirectory {
         }
         //otherwise, return contexts based on app intent pair from application data
         return (
-            this.directory[fullyQualifiedAppId]?.application?.interop?.intents?.listensFor?.[intent].contexts?.map(
+            this.directory[fullyQualifiedAppId]?.application?.interop?.intents?.listensFor?.[intent]?.contexts?.map(
                 contextType => ({
                     type: contextType,
                 }),
@@ -525,35 +552,73 @@ export class AppDirectory {
     /**
      * Fetches app data from given app directory urls and stores it in directory
      */
-    public async loadAppDirectory(appDirectoryUrls: string[], backoffRetry?: BackoffRetryParams): Promise<void> {
-        this.log('Loading app directory', LogLevel.DEBUG, appDirectoryUrls);
-        if (appDirectoryUrls == null) {
-            return;
-        }
-        await Promise.all(
-            appDirectoryUrls.map(async url => {
-                try {
-                    const apps: AppDirectoryApplication[] | void = await getAppDirectoryApplications(url, backoffRetry);
+    private async loadAllAppDirectories(
+        appDirectoryUrls: (string | LocalAppDirectory)[],
+        backoffRetry?: BackoffRetryParams,
+    ): Promise<void> {
+        this.log('Loading all app directories', LogLevel.DEBUG, appDirectoryUrls);
 
-                    this.log(`Loaded app directory (${url})`, LogLevel.DEBUG, apps);
-                    //add all returned apps to app directory using appId as key
-                    //TODO: fix possible collisions between apps in different app directories with same appId
-                    apps.forEach(app => {
-                        const hostname = new URL(url).hostname;
-                        const fullyQualifiedAppId: FullyQualifiedAppId = `${app.appId}@${hostname}`;
-                        this.directory[fullyQualifiedAppId] = {
-                            //need to update appId in record as record is used to open apps
-                            application: { ...app, appId: `${app.appId}@${hostname}` },
-                            instances: [],
-                        };
-                    });
-                } catch (err) {
-                    this.log(`Error loading app directory (${url})`, LogLevel.ERROR, err);
+        await Promise.all(
+            appDirectoryUrls.map(async directoryEntry => {
+                if (typeof directoryEntry === 'string') {
+                    return this.loadAppDirectory(directoryEntry, backoffRetry);
+                } else {
+                    this.addLocalApps(directoryEntry);
                 }
             }),
         );
 
         this.log('All App directories loaded', LogLevel.INFO, this.directory);
+    }
+
+    private addLocalApps(directoryEntry: LocalAppDirectory): void {
+        const localDirectory = directoryEntry;
+
+        async function handleUpdate(
+            this: AppDirectory,
+            updateResult: IteratorResult<AppDirectoryApplication | AppDirectoryApplication[]>,
+        ): Promise<void> {
+            const apps = Array.isArray(updateResult.value) ? updateResult.value : [updateResult.value];
+
+            this.addLocalAppToDirectory({ ...directoryEntry, apps });
+
+            if (updateResult.done !== true) {
+                await localDirectory.updates?.next().then(result => handleUpdate.call(this, result));
+            }
+        }
+
+        localDirectory.updates?.next().then(result => handleUpdate.call(this, result));
+
+        this.addLocalAppToDirectory(directoryEntry);
+    }
+
+    private addLocalAppToDirectory(localDirectory: LocalAppDirectory): void {
+        mapLocalAppDirectory(localDirectory).forEach(application => {
+            this.directory[application.appId] = {
+                application,
+                instances: [],
+            };
+        });
+    }
+
+    private async loadAppDirectory(url: string, backoffRetry?: BackoffRetryParams): Promise<void> {
+        try {
+            const apps: AppDirectoryApplication[] | void = await getAppDirectoryApplications(url, backoffRetry);
+
+            this.log(`Loaded app directory (${url})`, LogLevel.DEBUG, apps);
+            //add all returned apps to app directory using appId as key
+            //TODO: fix possible collisions between apps in different app directories with same appId
+            apps.forEach(app => {
+                const fullyQualifiedAppId: FullyQualifiedAppId = mapUrlToFullyQualifiedAppId(url, app.appId);
+                this.directory[fullyQualifiedAppId] = {
+                    //need to update appId in record as record is used to open apps
+                    application: { ...app, appId: fullyQualifiedAppId },
+                    instances: [],
+                };
+            });
+        } catch (err) {
+            this.log(`Error loading app directory (${url})`, LogLevel.ERROR, err);
+        }
     }
 
     /**
@@ -618,21 +683,4 @@ export class AppDirectory {
             appInstances?.instances.splice(instanceIndex, 1);
         }
     }
-}
-
-//TODO: remove this
-/**
- * currently this function just checks that the host, path and port match
- * when we support passing identity urls as part of get agent we will remove this function and just use direct comparison
- */
-function urlsMatch(one: string, two: string): boolean {
-    const urlOne = new URL(one);
-    const urlTwo = new URL(two);
-
-    return (
-        urlOne.host === urlTwo.host &&
-        urlOne.port === urlTwo.port &&
-        urlOne.pathname === urlTwo.pathname &&
-        urlOne.protocol === urlTwo.protocol
-    );
 }
