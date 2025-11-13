@@ -1,3 +1,29 @@
+## 0.9.0 (2025-11-13)
+
+### Breaking
+
+ - Locally defined app directories must now define a full `AppDirectoryApplication` Object.
+ - `LocalAppDirectoryEntry` removed
+
+### Added
+
+ - `createWebAppDirectoryEntry`, a helper function to make it easier to create Web app directory entries:
+
+ ```ts
+getAgent({
+    failover: () =>
+        new DesktopAgentFactory().createRoot({
+            rootAppId: 'test-harness-root-app',
+            appDirectoryEntries: [
+                {
+                    host: 'example.com',
+                    apps: [ createWebAppDirectoryEntry('local-app-id', 'https://example.com/someApp', 'Local App' ) ]
+                },
+            ],
+        }),
+});
+```
+
 ## 0.8.1 (2025-10-29)
 
 Added support for passing multiple local apps to app directory through `updates` AsyncIterator

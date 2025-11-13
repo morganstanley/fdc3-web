@@ -12,8 +12,9 @@ import { AppMetadata, BrowserTypes } from '@finos/fdc3';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
-import { FullyQualifiedAppIdentifier, LocalAppDirectory } from '../contracts.js';
+import { FullyQualifiedAppIdentifier } from '../contracts.js';
 import {
+    createWebAppDirectoryEntry,
     getAppDirectoryApplications,
     getImplementationMetadata,
     mapApplicationToMetadata,
@@ -268,15 +269,9 @@ describe('app-directory-applications.helper', () => {
 
     describe('mapLocalAppDirectory', () => {
         it('should map a single local app entry to a fully qualified application', () => {
-            const local: LocalAppDirectory = {
+            const local = {
                 host: 'app1.example.com',
-                apps: [
-                    {
-                        appId: 'app1',
-                        title: 'Local App 1',
-                        url: 'https://app1.example.com/path',
-                    },
-                ],
+                apps: [createWebAppDirectoryEntry('app1', 'https://app1.example.com/path', 'Local App 1')],
             };
 
             const result = mapLocalAppDirectory(local);

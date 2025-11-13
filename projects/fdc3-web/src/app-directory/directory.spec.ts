@@ -11,17 +11,21 @@
 import { type AppIdentifier, type AppIntent, type Contact, type Context, type Intent, ResolveError } from '@finos/fdc3';
 import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppDirectoryApplication, AppDirectoryApplicationType, WebAppDetails } from '../app-directory.contracts.js';
+import {
+    AppDirectoryApplication,
+    AppDirectoryApplicationType,
+    LocalAppDirectory,
+    WebAppDetails,
+} from '../app-directory.contracts.js';
 import {
     BackoffRetryParams,
     FullyQualifiedAppIdentifier,
     IAppResolver,
-    LocalAppDirectory,
-    LocalAppDirectoryEntry,
     ResolveForContextPayload,
     ResolveForIntentPayload,
 } from '../contracts.js';
 import * as helpersImport from '../helpers/index.js';
+import { createWebAppDirectoryEntry } from '../helpers/index.js';
 import { AppDirectory } from './directory.js';
 
 vi.mock('../helpers/index.js', async () => {
@@ -773,8 +777,8 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 {
                     host: 'my-app.com',
                     apps: [
-                        { appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' },
-                        { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' },
+                        createWebAppDirectoryEntry('localAppIdOne', 'http://my-app.com/path', 'My First App'),
+                        createWebAppDirectoryEntry('localAppIdTwo', 'http://my-app.com/otherPath', 'My Other App'),
                     ],
                 },
                 mockedAppDirectoryUrl,
@@ -807,12 +811,12 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it('should add app when iterator emits app after initial load', async () => {
             let emitFunction:
-                | ((value: LocalAppDirectoryEntry) => Promise<IteratorResult<LocalAppDirectoryEntry>>)
+                | ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>)
                 | undefined;
 
-            const updates: AsyncIterator<LocalAppDirectoryEntry> = {
+            const updates: AsyncIterator<AppDirectoryApplication> = {
                 next: async () => {
-                    const nextPromise = new Promise<IteratorResult<LocalAppDirectoryEntry>>(resolve => {
+                    const nextPromise = new Promise<IteratorResult<AppDirectoryApplication>>(resolve => {
                         emitFunction = value => {
                             resolve({ done: false, value });
 
@@ -835,7 +839,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toBeUndefined();
 
-            await emitFunction?.({ appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' });
+            await emitFunction?.(createWebAppDirectoryEntry('localAppIdOne', 'http://my-app.com/path', 'My First App'));
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
                 appId: 'localAppIdOne@my-app.com',
@@ -844,7 +848,9 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toBeUndefined();
 
-            await emitFunction?.({ appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' });
+            await emitFunction?.(
+                createWebAppDirectoryEntry('localAppIdTwo', 'http://my-app.com/otherPath', 'My Other App'),
+            );
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toEqual({
                 appId: 'localAppIdTwo@my-app.com',
@@ -854,12 +860,12 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it('should add multiple apps when iterator emits apps after initial load', async () => {
             let emitFunction:
-                | ((value: LocalAppDirectoryEntry[]) => Promise<IteratorResult<LocalAppDirectoryEntry[]>>)
+                | ((value: AppDirectoryApplication[]) => Promise<IteratorResult<AppDirectoryApplication[]>>)
                 | undefined;
 
-            const updates: AsyncIterator<LocalAppDirectoryEntry[]> = {
+            const updates: AsyncIterator<AppDirectoryApplication[]> = {
                 next: async () => {
-                    const nextPromise = new Promise<IteratorResult<LocalAppDirectoryEntry[]>>(resolve => {
+                    const nextPromise = new Promise<IteratorResult<AppDirectoryApplication[]>>(resolve => {
                         emitFunction = value => {
                             resolve({ done: false, value });
 
@@ -884,8 +890,8 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(await instance.getAppMetadata({ appId: 'localAppIdTwo@my-app.com' })).toBeUndefined();
 
             await emitFunction?.([
-                { appId: 'localAppIdOne', url: 'http://my-app.com/path', title: 'My First App' },
-                { appId: 'localAppIdTwo', url: 'http://my-app.com/otherPath', title: 'My Other App' },
+                createWebAppDirectoryEntry('localAppIdOne', 'http://my-app.com/path', 'My First App'),
+                createWebAppDirectoryEntry('localAppIdTwo', 'http://my-app.com/otherPath', 'My Other App'),
             ]);
 
             expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({

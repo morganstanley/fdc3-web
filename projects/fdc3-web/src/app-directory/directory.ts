@@ -18,14 +18,12 @@ import {
     OpenError,
     ResolveError,
 } from '@finos/fdc3';
-import { AppDirectoryApplication } from '../app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
 import {
     BackoffRetryParams,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
     IAppResolver,
-    LocalAppDirectory,
-    LocalAppDirectoryEntry,
     ResolveForContextResponse,
 } from '../contracts.js';
 import {
@@ -578,7 +576,7 @@ export class AppDirectory {
 
         async function handleUpdate(
             this: AppDirectory,
-            updateResult: IteratorResult<LocalAppDirectoryEntry | LocalAppDirectoryEntry[]>,
+            updateResult: IteratorResult<AppDirectoryApplication | AppDirectoryApplication[]>,
         ): Promise<void> {
             const apps = Array.isArray(updateResult.value) ? updateResult.value : [updateResult.value];
 
