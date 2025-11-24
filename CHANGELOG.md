@@ -1,3 +1,7 @@
+## 0.9.1 (2025-11-24)
+
+ - ensure that it is safe to add the same app to the directory multiple times without losing registered instances of that app
+
 ## 0.9.0 (2025-11-13)
 
 ### Breaking
