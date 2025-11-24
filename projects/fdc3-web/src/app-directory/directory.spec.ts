@@ -858,6 +858,78 @@ describe(`${AppDirectory.name} (directory)`, () => {
             });
         });
 
+        it(`should not clear app instances when an existing local app directory entry is updated`, async () => {
+            let emitFunction:
+                | ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>)
+                | undefined;
+
+            const updates: AsyncIterator<AppDirectoryApplication> = {
+                next: async () => {
+                    const nextPromise = new Promise<IteratorResult<AppDirectoryApplication>>(resolve => {
+                        emitFunction = value => {
+                            resolve({ done: false, value });
+
+                            return nextPromise;
+                        };
+                    });
+
+                    return nextPromise;
+                },
+            };
+
+            const instance = createInstance([
+                {
+                    host: 'my-app.com',
+                    apps: [],
+                    updates,
+                },
+                mockedAppDirectoryUrl,
+            ]);
+
+            await emitFunction?.(createWebAppDirectoryEntry('localAppIdOne', 'http://my-app.com/path', 'My First App'));
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
+                appId: 'localAppIdOne@my-app.com',
+                title: 'My First App',
+            });
+
+            await instance.registerNewInstance('http://my-app.com/path');
+
+            let appInstances = await instance.getAppInstances('localAppIdOne@my-app.com');
+
+            expect(appInstances).toEqual([
+                {
+                    appId: 'localAppIdOne@my-app.com',
+                    instanceId: 'instanceOne',
+                },
+            ]);
+
+            expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
+                appId: 'localAppIdOne@my-app.com',
+                title: 'My First App',
+            });
+
+            await emitFunction?.(
+                createWebAppDirectoryEntry('localAppIdOne', 'http://my-app.com/path', 'My MODIFIED First App'),
+            );
+
+            appInstances = await instance.getAppInstances('localAppIdOne@my-app.com');
+
+            // instance should still be retained
+            expect(appInstances).toEqual([
+                {
+                    appId: 'localAppIdOne@my-app.com',
+                    instanceId: 'instanceOne',
+                },
+            ]);
+
+            // title should be updated
+            expect(await instance.getAppMetadata({ appId: 'localAppIdOne@my-app.com' })).toEqual({
+                appId: 'localAppIdOne@my-app.com',
+                title: 'My MODIFIED First App',
+            });
+        });
+
         it('should add multiple apps when iterator emits apps after initial load', async () => {
             let emitFunction:
                 | ((value: AppDirectoryApplication[]) => Promise<IteratorResult<AppDirectoryApplication[]>>)
