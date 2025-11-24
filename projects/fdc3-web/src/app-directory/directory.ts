@@ -596,7 +596,7 @@ export class AppDirectory {
         mapLocalAppDirectory(localDirectory).forEach(application => {
             this.directory[application.appId] = {
                 application,
-                instances: [],
+                instances: this.directory[application.appId]?.instances ?? [],
             };
         });
     }
