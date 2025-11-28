@@ -35,7 +35,10 @@ import {
 
 const PUBLISHER_NOT_INITIALIZED = 'RootMessagePublisher not initialized before messages received.';
 
-type RequestMessageHandler = (message: RequestMessage, source: FullyQualifiedAppIdentifier) => void;
+type RequestMessageHandler = (
+    message: RequestMessage | BrowserTypes.WebConnectionProtocol6Goodbye,
+    source: FullyQualifiedAppIdentifier,
+) => void;
 
 /**
  * Responsible for publishing all messages from the root agent to proxy agents
@@ -185,10 +188,7 @@ export class RootMessagePublisher implements IRootPublisher {
         if (isWCPGoodbye(message.payload)) {
             if (source != null) {
                 this.log(`Goodbye message received from ${source.appId} (${source.instanceId})`, LogLevel.INFO);
-                this.directory.removeDisconnectedApp(source);
             }
-
-            return;
         }
 
         if (source == null) {
@@ -203,7 +203,10 @@ export class RootMessagePublisher implements IRootPublisher {
      * passes a request message to the root agent after verifying that the class has been properly initialized
      */
     private handleRequestMessage(
-        message: RequestMessage | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity,
+        message:
+            | RequestMessage
+            | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
+            | BrowserTypes.WebConnectionProtocol6Goodbye,
         source: FullyQualifiedAppIdentifier,
     ): void {
         if (isWCPValidateAppIdentity(message)) {
