@@ -48,6 +48,7 @@ import {
     isFullyQualifiedAppIdentifier,
     isOpenError,
     isResponsePayloadError,
+    isWCPGoodbye,
     LoggerFunction,
 } from '../helpers/index.js';
 import { RootMessagePublisher } from '../messaging/index.js';
@@ -116,9 +117,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
     }
 
     private async onRequestMessage(
-        requestMessage: RequestMessage,
+        requestMessage: RequestMessage | BrowserTypes.WebConnectionProtocol6Goodbye,
         sourceApp: FullyQualifiedAppIdentifier,
     ): Promise<void> {
+        if (isWCPGoodbye(requestMessage)) {
+            this.handleProxyDisconnect(sourceApp);
+            return;
+        }
+
         // Start heartbeat monitoring when we receive any message from a proxy
         this.connectionLog('Received message from proxy, ensuring heartbeat is active', LogLevel.DEBUG, {
             type: requestMessage.type,
