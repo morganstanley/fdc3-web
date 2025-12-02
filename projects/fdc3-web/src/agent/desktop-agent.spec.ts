@@ -283,6 +283,28 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
     });
 
     describe(`onMessage`, () => {
+        describe(`WebConnectionProtocol6Goodbye`, () => {
+            it(`should remove app from app directory and cleanup listeners`, async () => {
+                createInstance();
+
+                const message: BrowserTypes.WebConnectionProtocol6Goodbye = {
+                    meta: {
+                        timestamp: mockedDate,
+                    },
+                    type: 'WCP6Goodbye',
+                };
+
+                await postRequestMessage(message, source);
+
+                expect(
+                    mockAppDirectory.withFunction('removeDisconnectedApp').withParametersEqualTo(source),
+                ).wasCalledOnce();
+
+                // Verify the proxy was disconnected and the resources were cleaned up
+                expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+            });
+        });
+
         describe(`raiseIntentRequest`, () => {
             it(`should publish IntentEvent to chosen app instance`, async () => {
                 createInstance();
@@ -2771,7 +2793,10 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
     });
 
-    async function postRequestMessage(message: RequestMessage, source: FullyQualifiedAppIdentifier): Promise<void> {
+    async function postRequestMessage(
+        message: RequestMessage | BrowserTypes.WebConnectionProtocol6Goodbye,
+        source: FullyQualifiedAppIdentifier,
+    ): Promise<void> {
         await wait();
 
         const handler = mockRootPublisher.setterCallLookup.requestMessageHandler?.[0][0];

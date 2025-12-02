@@ -52,7 +52,10 @@ describe('RootMessagePublisher', () => {
     let mockDirectory: IMocked<AppDirectory>;
     let mockedHelpers: IMocked<typeof helpersImport>;
     let mockRequestHandler: IMocked<{
-        handler: (message: RequestMessage, source: FullyQualifiedAppIdentifier) => void;
+        handler: (
+            message: RequestMessage | BrowserTypes.WebConnectionProtocol6Goodbye,
+            source: FullyQualifiedAppIdentifier,
+        ) => void;
     }>;
     let generateUuidResult: string;
 
@@ -229,7 +232,9 @@ describe('RootMessagePublisher', () => {
         });
 
         it('should remove the app from the directory if a goodbye message is received', async () => {
-            createInstance();
+            const instance = createInstance();
+
+            instance.requestMessageHandler = mockRequestHandler.mock.handler;
 
             const sourceApp: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -251,7 +256,9 @@ describe('RootMessagePublisher', () => {
                 channelId: 'channelOne',
             });
 
-            expect(mockDirectory.withFunction('removeDisconnectedApp').withParameters(sourceApp)).wasCalledOnce();
+            expect(
+                mockRequestHandler.withFunction('handler').withParametersEqualTo(requestMessage, sourceApp),
+            ).wasCalledOnce();
         });
     });
 
