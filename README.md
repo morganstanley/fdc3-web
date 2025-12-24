@@ -1,6 +1,6 @@
 # fdc3-web
 
-![Lifecycle Incubating](https://badgen.net/badge/Lifecycle/Incubating/yellow)
+![Lifecycle Incubating](https://img.shields.io/badge/Lifecycle-Incubating-yellow)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/morganstanley/fdc3-web/actions/workflows/build.yml/badge.svg)](https://github.com/morganstanley/fdc3-web/actions/workflows/build.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/morganstanley/fdc3-web/badge)](https://securityscorecards.dev/viewer/?uri=github.com/morganstanley/fdc3-web)
