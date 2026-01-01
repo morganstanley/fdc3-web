@@ -62,7 +62,7 @@
         "jsdom": "~26.1.0",
         "lit-html": "^3.3.1",
         "nx": "21.6.8",
-        "prettier": "3.6",
+        "prettier": "3.7",
         "rimraf": "^6.1.0",
         "sass-embedded": "^1.93.3",
         "swc-loader": "0.2.6",
