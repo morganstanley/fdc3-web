@@ -1,0 +1,32 @@
+{
+  "name": "site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ms-gh-pages",
+  "author": "Morgan Stanley",
+  "keywords": [
+    "gatsby"
+  ],
+  "dependencies": {
+    "@morganstanley/gatsby-theme-ms-gh-pages": "1.1.1",
+    "gatsby": "^5.14.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "overrides": {
+    "axios": "^1.7.4",
+    "webpack-dev-middleware": "^5.3.4"
+  },
+  "scripts": {
+    "develop": "gatsby develop -H 0.0.0.0",
+    "start": "gatsby develop -H 0.0.0.0",
+    "build": "gatsby clean && gatsby build --prefix-paths",
+    "serve": "gatsby serve",
+    "pub": "rimraf ../docs && mv public ../docs",
+    "clean": "gatsby clean"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "rimraf": "^6.0.1"
+  }
+}
