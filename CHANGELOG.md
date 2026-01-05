@@ -1,3 +1,7 @@
+## 0.9.2 (2025-12-01)
+
+ - stop listening for heartbeat messages when a goodbye message is received from a child app.
+
 ## 0.9.1 (2025-11-24)
 
  - ensure that it is safe to add the same app to the directory multiple times without losing registered instances of that app
