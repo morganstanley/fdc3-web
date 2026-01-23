@@ -272,16 +272,35 @@ export type ProxyDesktopAgentFactoryParams = {
 export type OpenApplicationStrategyParams = {
     appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
     agent: DesktopAgent;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
     manifest?: unknown;
+    context?: Context;
+};
+
+export type OpenApplicationStrategyResolverParams = OpenApplicationStrategyParams & {
+    appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
 };
 
 export interface IOpenApplicationStrategy {
+    /**
+     * Used to identify the manifest key that is used to lookup the specific manifest from the appDirectory record's hostManifests
+     * The manifest identified through this key will then be passed to the open() and canOpen() functions
+     */
     manifestKey?: string;
-    canOpen(params: OpenApplicationStrategyParams, context?: Context): Promise<boolean>;
+
+    /**
+     * if the strategy is able to open a given application returns true
+     * If false is returned the strategy will not be used by the desktop agent and the next one will be tried
+     */
+
+    canOpen(params: OpenApplicationStrategyParams): Promise<boolean>;
+
     /**
      * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
      * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
      * @param params
      */
-    open(params: OpenApplicationStrategyParams, context?: Context): Promise<string>;
+    open(params: OpenApplicationStrategyResolverParams): Promise<string>;
 }

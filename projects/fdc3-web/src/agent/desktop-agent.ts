@@ -915,17 +915,23 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
             let openError: any;
 
+            // Set as the resolve function of a promise so that when we have created the app Identity we can send it to the strategy
+            let resolveAppIdentity: ((appIdentifier: FullyQualifiedAppIdentifier) => void) | undefined;
+
+            const appReadyPromise = new Promise<FullyQualifiedAppIdentifier>(resolve => {
+                resolveAppIdentity = resolve;
+            });
+
             const newAppConnectionAttemptUuid = await strategy
-                .open(
-                    {
-                        appDirectoryRecord: noManifests,
-                        agent: this,
-                        manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err =>
-                            console.error(err),
-                        ),
-                    },
+                .open({
+                    appDirectoryRecord: noManifests,
+                    agent: this,
+                    manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err =>
+                        console.error(err),
+                    ),
                     context,
-                )
+                    appReadyPromise,
+                })
                 .catch(err => {
                     openError = err;
                 });
@@ -961,6 +967,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
                 newAppConnectionAttemptUuid,
                 application,
             );
+
+            if (resolveAppIdentity != null) {
+                resolveAppIdentity(appIdentifier);
+            }
 
             this.proxyLog('OpenRequest appIdentifier resolved', LogLevel.DEBUG, { appIdentifier, source });
 
@@ -1004,7 +1014,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         const { hostManifests, ...appDirectoryRecord } = application;
 
-        const canOpen = await strategy.canOpen({ agent: this, appDirectoryRecord, manifest }, context);
+        const canOpen = await strategy.canOpen({ agent: this, appDirectoryRecord, manifest, context });
 
         if (canOpen) {
             return true;
