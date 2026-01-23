@@ -1,3 +1,7 @@
+## 0.10.0 (2026-01-23)
+
+This was a version bump only, there were no code changes.
+
 ## 0.9.2 (2025-12-01)
 
  - stop listening for heartbeat messages when a goodbye message is received from a child app.
