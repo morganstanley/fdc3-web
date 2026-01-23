@@ -1,6 +1,49 @@
 ## 0.10.0 (2026-01-23)
 
-This was a version bump only, there were no code changes.
+### Breaking
+
+ * `IOpenApplicationStrategy.open()` and `IOpenApplicationStrategy.canOpen()` now take a single parameter argument rather than multiple parameters
+
+was:
+
+```ts
+export type OpenApplicationStrategyParams = {
+    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    agent: DesktopAgent;
+    manifest?: unknown;
+};
+
+canOpen(params: OpenApplicationStrategyParams, context?: Context): Promise<boolean>;
+
+open(params: OpenApplicationStrategyParams, appReadyPromise: Promise<FullyQualifiedAppIdentifier>, context?: Context): Promise<string>;
+```
+
+now:
+
+```ts
+export type OpenApplicationStrategyParams = {
+    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    agent: DesktopAgent;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
+    manifest?: unknown;
+    context?: Context;
+};
+
+export type OpenApplicationStrategyResolverParams = OpenApplicationStrategyParams & {
+    appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
+};
+
+canOpen(params: OpenApplicationStrategyParams): Promise<boolean>;
+
+
+open(params: OpenApplicationStrategyResolverParams): Promise<string>;
+```
+
+### Added
+
+ * `appReadyPromise` property added to `IOpenApplicationStrategy.open()` function. This promise resolves when the application that is being opened is ready and has had an `instanceId` assigned
 
 ## 0.9.2 (2025-12-01)
 
