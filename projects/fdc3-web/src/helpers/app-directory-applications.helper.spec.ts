@@ -9,7 +9,8 @@
  * and limitations under the License. */
 
 import { AppMetadata, BrowserTypes } from '@finos/fdc3';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { IMocked, Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
 import { FullyQualifiedAppIdentifier } from '../contracts.js';
@@ -42,9 +43,21 @@ describe('app-directory-applications.helper', () => {
             },
         ];
 
+        let mockConsole: IMocked<Console>;
+        let originalConsole: Console;
+
         beforeEach(() => {
             // Reset fetch mock before each test
             global.fetch = vi.fn();
+
+            // Mock console to prevent test output noise
+            mockConsole = Mock.create<Console>().setup(setupFunction('error'), setupFunction('warn'));
+            originalConsole = globalThis.console;
+            globalThis.console = mockConsole.mock;
+        });
+
+        afterEach(() => {
+            globalThis.console = originalConsole;
         });
 
         it('should fetch applications from the app directory URL', async () => {
@@ -106,22 +119,19 @@ describe('app-directory-applications.helper', () => {
             const mockError = new Error('Network error');
             (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(mockError);
 
-            // Mock console.error to prevent test output noise
-            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
             // Verify the function throws the expected error
             await expect(getAppDirectoryApplications(mockAppDirectoryUrl)).rejects.toThrow(
                 'Error occurred when reading apps from app directory after 3 attempts',
             );
 
             // Verify console.error was called with the original error
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
-                `Max retries reached. Unable to fetch directory applications`,
-                { url: mockAppDirectoryUrl },
-            );
-
-            // Restore console.error
-            consoleErrorSpy.mockRestore();
+            expect(
+                mockConsole
+                    .withFunction('error')
+                    .withParametersEqualTo(`Max retries reached. Unable to fetch directory applications`, {
+                        url: mockAppDirectoryUrl,
+                    }),
+            ).wasCalledOnce();
         });
 
         it('should throw an error if fetch fails with 5 attempts', async () => {
@@ -129,22 +139,19 @@ describe('app-directory-applications.helper', () => {
             const mockError = new Error('Network error');
             (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(mockError);
 
-            // Mock console.error to prevent test output noise
-            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
             // Verify the function throws the expected error
             await expect(getAppDirectoryApplications(mockAppDirectoryUrl, { maxAttempts: 5 })).rejects.toThrow(
                 'Error occurred when reading apps from app directory after 5 attempts',
             );
 
             // Verify console.error was called with the original error
-            expect(consoleErrorSpy).toHaveBeenCalledWith(
-                `Max retries reached. Unable to fetch directory applications`,
-                { url: mockAppDirectoryUrl },
-            );
-
-            // Restore console.error
-            consoleErrorSpy.mockRestore();
+            expect(
+                mockConsole
+                    .withFunction('error')
+                    .withParametersEqualTo(`Max retries reached. Unable to fetch directory applications`, {
+                        url: mockAppDirectoryUrl,
+                    }),
+            ).wasCalledOnce();
         });
     });
 

@@ -60,7 +60,9 @@ describe('IframeRelay', () => {
         mockedBroadcastChannel = {
             postMessage: vi.fn(),
         } as any as BroadcastChannel;
-        vi.spyOn(window, 'BroadcastChannel').mockReturnValue(mockedBroadcastChannel);
+        (window as any).BroadcastChannel = function () {
+            return mockedBroadcastChannel;
+        };
 
         mockedMessagePort = {
             onmessage: null,

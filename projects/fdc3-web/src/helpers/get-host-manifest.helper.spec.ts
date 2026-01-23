@@ -8,21 +8,27 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
+import { Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationHostManifests } from '../app-directory.contracts.js';
 import { getHostManifest } from './get-host-manifest.helper.js';
 
 describe('getHostManifest', () => {
     let originalFetch: typeof global.fetch;
+    let mockConsole: ReturnType<typeof Mock.create<Console>>;
+    let originalConsole: Console;
 
     beforeEach(() => {
         originalFetch = global.fetch;
         global.fetch = vi.fn();
-        vi.spyOn(console, 'error').mockImplementation(() => {});
+        mockConsole = Mock.create<Console>().setup(setupFunction('error'));
+        originalConsole = globalThis.console;
+        globalThis.console = mockConsole.mock;
     });
 
     afterEach(() => {
         global.fetch = originalFetch;
+        globalThis.console = originalConsole;
         vi.restoreAllMocks();
     });
 
@@ -77,7 +83,7 @@ describe('getHostManifest', () => {
         };
 
         await expect(getHostManifest(manifests, 'testKey')).rejects.toThrow('Error occurred when fetching manifest');
-        expect(console.error).toHaveBeenCalled();
+        expect(mockConsole.withFunction('error')).wasCalledOnce();
     });
 
     it('should return undefined when manifests parameter is undefined', async () => {

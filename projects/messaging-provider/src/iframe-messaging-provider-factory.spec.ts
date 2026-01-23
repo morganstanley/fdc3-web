@@ -13,6 +13,8 @@ import { IframeMessagingProvider } from './iframe-messaging-provider.js';
 import { iframeMessagingProviderFactory } from './iframe-messaging-provider-factory.js';
 
 describe('iframeMessagingProviderFactory', () => {
+    let originalInitializeRelay: typeof IframeMessagingProvider.prototype.initializeRelay;
+
     beforeAll(() => {
         function channelMock() {}
         channelMock.prototype = {
@@ -34,10 +36,14 @@ describe('iframeMessagingProviderFactory', () => {
     });
 
     beforeEach(() => {
-        vi.spyOn(IframeMessagingProvider.prototype, 'initializeRelay').mockResolvedValue();
+        originalInitializeRelay = IframeMessagingProvider.prototype.initializeRelay;
+        IframeMessagingProvider.prototype.initializeRelay = async function () {
+            return Promise.resolve();
+        };
     });
 
     afterEach(() => {
+        IframeMessagingProvider.prototype.initializeRelay = originalInitializeRelay;
         vi.restoreAllMocks();
     });
 

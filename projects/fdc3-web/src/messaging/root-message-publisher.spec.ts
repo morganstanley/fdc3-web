@@ -17,7 +17,7 @@ import {
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
@@ -58,6 +58,8 @@ describe('RootMessagePublisher', () => {
         ) => void;
     }>;
     let generateUuidResult: string;
+    let mockConsole: IMocked<Console>;
+    let originalConsole: Console;
 
     beforeEach(() => {
         generateUuidResult = mockedRootGeneratedUuid;
@@ -82,6 +84,14 @@ describe('RootMessagePublisher', () => {
         );
 
         registerMock(helpersImport, mockedHelpers.mock);
+
+        mockConsole = Mock.create<Console>().setup(setupFunction('info'), setupFunction('error'));
+        originalConsole = globalThis.console;
+        globalThis.console = mockConsole.mock;
+    });
+
+    afterEach(() => {
+        globalThis.console = originalConsole;
     });
 
     function createInstance(): RootMessagePublisher {
@@ -185,7 +195,6 @@ describe('RootMessagePublisher', () => {
 
         it('should log an error if channelId cannot be resolved for unknown source app', async () => {
             const instance = createInstance();
-            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -193,18 +202,19 @@ describe('RootMessagePublisher', () => {
             };
             instance.publishResponseMessage(responseMessage, sourceAppOne);
 
-            expect(consoleError).toHaveBeenCalledWith(
-                `Could not resolve channelId for unknown source app: ${sourceAppId} (unknown-instance-id)`,
-            );
+            expect(
+                mockConsole
+                    .withFunction('error')
+                    .withParameters(
+                        `Could not resolve channelId for unknown source app: ${sourceAppId} (unknown-instance-id)`,
+                    ),
+            ).wasCalledOnce();
         });
     });
 
     describe('onMessage', () => {
         it('should log an error when source cannot be resolved for an unknown channelId', async () => {
             createInstance();
-
-            // Mock console.error
-            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             // Create a request message
             const requestMessage: BrowserTypes.GetInfoRequest = {
@@ -222,13 +232,11 @@ describe('RootMessagePublisher', () => {
                 channelId: 'unknown-channel-id',
             });
 
-            // The test passes if the error was logged
-            expect(consoleError).toHaveBeenCalledWith(
-                `Could not resolve source for unknown channelId: unknown-channel-id`,
-            );
-
-            // Clean up
-            consoleError.mockRestore();
+            expect(
+                mockConsole
+                    .withFunction('error')
+                    .withParameters(`Could not resolve source for unknown channelId: unknown-channel-id`),
+            ).wasCalledOnce();
         });
 
         it('should remove the app from the directory if a goodbye message is received', async () => {
@@ -352,7 +360,6 @@ describe('RootMessagePublisher', () => {
 
         it('should log an error if channelId cannot be resolved for unknown source app', async () => {
             const instance = createInstance();
-            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
             const sourceAppOne: FullyQualifiedAppIdentifier = {
                 appId: sourceAppId,
@@ -360,9 +367,13 @@ describe('RootMessagePublisher', () => {
             };
             instance.publishEvent(eventMessage, [sourceAppOne]);
 
-            expect(consoleError).toHaveBeenCalledWith(
-                `Could not resolve channelId for unknown source app: ${sourceAppId} (unknown-instance-id)`,
-            );
+            expect(
+                mockConsole
+                    .withFunction('error')
+                    .withParameters(
+                        `Could not resolve channelId for unknown source app: ${sourceAppId} (unknown-instance-id)`,
+                    ),
+            ).wasCalledOnce();
         });
     });
 

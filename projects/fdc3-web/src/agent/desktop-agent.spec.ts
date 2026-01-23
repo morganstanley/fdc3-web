@@ -774,10 +774,15 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 };
 
                 mockedHelpers.setupFunction('decodeUUUrl', value => {
-                    const parsed = JSON.parse(value);
-                    const { uuid, ...payload } = parsed;
+                    try {
+                        const parsed = JSON.parse(value);
+                        const { uuid, ...payload } = parsed;
 
-                    return { uuid, payload };
+                        return { uuid, payload };
+                    } catch (err) {
+                        console.log(`Error in mock decodeUUUrl parsing json:`, err);
+                        return undefined;
+                    }
                 });
             });
 
