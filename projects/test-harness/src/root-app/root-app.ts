@@ -28,6 +28,7 @@ import {
     LocalAppDirectory,
     mapLocalAppDirectory,
     OpenApplicationStrategyParams,
+    OpenApplicationStrategyResolverParams,
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
 } from '@morgan-stanley/fdc3-web';
@@ -135,9 +136,15 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
     private _appCount = 0;
 
-    public async open(params: OpenApplicationStrategyParams, context?: Context): Promise<string> {
+    public async open(params: OpenApplicationStrategyResolverParams): Promise<string> {
         if (isWebAppDetails(params.appDirectoryRecord.details)) {
-            this.log('Opening WebAppDetails', LogLevel.DEBUG, params, context);
+            params.appReadyPromise.then(identity =>
+                console.log(
+                    `[appReadyPromise] App opening complete: appId: '${identity.appId}'(${identity.instanceId})`,
+                ),
+            );
+
+            this.log('Opening WebAppDetails', LogLevel.DEBUG, params);
             const newWindow = (document.getElementById('openInWindow') as HTMLInputElement).checked;
 
             if (this.selectedApp != null) {

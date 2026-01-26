@@ -1741,28 +1741,30 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 delete recordWithNoManifests.hostManifests;
 
                 expect(
-                    mockOpenStrategy.withFunction('canOpen').withParametersEqualTo(
-                        {
-                            appDirectoryRecord: recordWithNoManifests,
-                            agent: instance,
-                            manifest: mockedApplication.hostManifests?.['mock-application'],
-                        },
-                        contact,
-                    ),
+                    mockOpenStrategy.withFunction('canOpen').withParametersEqualTo({
+                        appDirectoryRecord: recordWithNoManifests,
+                        agent: instance,
+                        manifest: mockedApplication.hostManifests?.['mock-application'],
+                        context: contact,
+                    }),
                 ).wasCalledOnce();
 
-                expect(
-                    mockOpenStrategy.withFunction('open').withParametersEqualTo(
-                        {
-                            appDirectoryRecord: recordWithNoManifests,
-                            agent: instance,
-                            manifest: mockedApplication.hostManifests?.['mock-application'],
-                        },
-                        contact,
-                    ),
-                ).wasCalledOnce();
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
 
                 expect(mockDisabledOpenStrategy.withFunction('open')).wasNotCalled();
+
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+
+                expect(openParams?.appDirectoryRecord).toEqual(recordWithNoManifests);
+                expect(openParams?.agent).toEqual(instance);
+                expect(openParams?.manifest).toEqual(mockedApplication.hostManifests?.['mock-application']);
+                expect(openParams?.context).toEqual(contact);
+
+                const resolvedApp = await mockOpenStrategy.functionCallLookup['open']?.[0][0].appReadyPromise;
+
+                expect(resolvedApp).toBeDefined();
+                expect(resolvedApp?.appId).toBe(mockedTargetAppId);
+                expect(resolvedApp?.instanceId).toBe(mockedGeneratedUuid);
             });
 
             it(`should not call open on a strategy that returns false for canOpen`, async () => {
