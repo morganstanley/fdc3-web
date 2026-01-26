@@ -9,11 +9,13 @@
  * and limitations under the License. */
 
 import { describe, expect, it } from 'vitest';
+import { IMSHostManifest } from '../app-directory.contracts.js';
 import {
     isChannel,
     isContext,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
+    isIMSHostManifest,
     isNonEmptyArray,
 } from './type-predicate.helper.js';
 
@@ -44,6 +46,26 @@ describe(`type-predicate.helper`, () => {
         isFullyQualifiedAppId,
         ['appId@hostname', 'fully-qualified-app-id@app-directory'],
         ['appId@', '@hostname', ' @', '@ ', '@', { something: 'not-an-app-id' }],
+    );
+
+    // we use a record here to ensure that we add a test for each property that we add to IMSHostManifest
+    const msHostManifestTests: Record<keyof IMSHostManifest, { successTests: IMSHostManifest[]; failureTests: any[] }> =
+        {
+            singleton: {
+                successTests: [{ singleton: true }, { singleton: false }],
+                failureTests: [{ singleton: 'yes' }, { singleton: 1 }],
+            },
+        };
+
+    const successTests = Object.values(msHostManifestTests).flatMap(value => value.successTests) as [
+        IMSHostManifest,
+        ...IMSHostManifest[],
+    ];
+
+    testTypePredicate(
+        isIMSHostManifest,
+        successTests,
+        Object.values(msHostManifestTests).flatMap(value => value.failureTests),
     );
 
     function testTypePredicate<T>(
