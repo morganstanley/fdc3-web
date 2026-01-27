@@ -218,19 +218,29 @@ export type ResolveForContextPayload = {
     appIntents?: AppIntent[];
 };
 
+export type ResolveForIntentResponse = {
+    app: AppIdentifier;
+};
+
 export type ResolveForContextResponse = {
     intent: Intent;
-    app: FullyQualifiedAppIdentifier;
+    app: AppIdentifier;
 };
 
 /**
- * Provides a mechanism for resolving an app from an unqualified identifier, an intent, a context or a combination
+ * Provides a mechanism for resolving an app from an unqualified identifier, an intent, a context or a combination.
+ *
+ * Resolvers are responsible for selecting an app or an existing instance of an app
+ * They may return:
+ * - A FullyQualifiedAppIdentifier (with instanceId) if an existing instance was selected
+ * - An AppIdentifier (without instanceId) if a new instance of an app should be opened
+ *
  */
 export interface IAppResolver {
     /**
      * Resolves an app in response to a raiseIntent() function call
      */
-    resolveAppForIntent(payload: ResolveForIntentPayload): Promise<FullyQualifiedAppIdentifier>;
+    resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier>;
     /**
      * resolves an app in response to a raiseIntentForContext() function call
      */

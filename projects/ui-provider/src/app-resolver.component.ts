@@ -8,13 +8,11 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppMetadata, Context, DesktopAgent, Icon, Intent } from '@finos/fdc3';
-import { OpenError, ResolveError } from '@finos/fdc3';
+import type { AppIdentifier, AppMetadata, Context, DesktopAgent, Icon, Intent } from '@finos/fdc3';
+import { ResolveError } from '@finos/fdc3';
 import {
     AppHostManifestLookup,
-    FullyQualifiedAppIdentifier,
     IAppResolver,
-    isFullyQualifiedAppIdentifier,
     ResolveForContextPayload,
     ResolveForContextResponse,
     ResolveForIntentPayload,
@@ -174,44 +172,28 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         this._forContextPopupState = null;
     }
 
-    public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<FullyQualifiedAppIdentifier> {
+    public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier> {
         const agent = await this.desktopAgentPromise;
 
         const appIntent = payload.appIntent ?? (await agent.findIntent(payload.intent, payload.context));
-        //filter to only apps with same appId as that of appIdentifier passed in payload, if one is given
         let apps: AppMetadata[] = appIntent.apps;
         if (payload.appIdentifier != null) {
             apps = apps.filter(app => app.appId === payload.appIdentifier?.appId);
         }
-        //returns appIdentifier immediately if there is only one possible app instance
-        if (apps.length === 1) {
-            if (apps[0].instanceId != null) {
-                // return existing fully qualified app instance
-                return { appId: apps[0].appId, instanceId: apps[0].instanceId };
-            } else {
-                // open new instance of unqualified app
-                const newInstance = await agent.open(apps[0], payload.context);
-
-                if (isFullyQualifiedAppIdentifier(newInstance)) {
-                    return newInstance;
-                } else {
-                    //if instanceId is still null, error has occurred, but this should be caught within open()
-                    return Promise.reject(OpenError.AppNotFound);
-                }
-            }
+        if (apps.length === 1 && apps[0] != null) {
+            return apps[0].instanceId != null
+                ? { appId: apps[0].appId, instanceId: apps[0].instanceId }
+                : { appId: apps[0].appId };
         }
         if (apps.length === 0) {
-            return Promise.reject(OpenError.AppNotFound);
+            return Promise.reject(ResolveError.NoAppsFound);
         }
-        //active app instances that can handle given intent
         const activeInstances = apps.filter(app => app.instanceId != null);
-        //apps that can handle given intent (excluding singletons which already have an active instance)
         const inactiveApps = apps.filter(app => this.filterInactiveApps(app, activeInstances, payload.appManifests));
 
         this._forIntentPopupState = { name: appIntent.intent.name, activeInstances, inactiveApps };
         this.togglePopup();
-        //return Promise which will either resolve to appIntent containing FullyQualifiedAppIdentifier, or reject with error message
-        return (await this.getSelectedApp(payload.context)).app;
+        return (await this.getSelectedApp()).app;
     }
 
     public async resolveAppForContext(payload: ResolveForContextPayload): Promise<ResolveForContextResponse> {
@@ -248,45 +230,28 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         this._passedContext = payload.context;
         this._forContextPopupState = tempState;
         this.togglePopup();
-        return this.getSelectedApp(payload.context);
+        return this.getSelectedApp();
     }
 
     /**
-     * @returns Promise containing FullyQualifiedAppIdentifier for app or app instance selected by user from popup
+     * @returns Promise containing AppIdentifier for app or app instance selected by user from popup.
      */
-    private async getSelectedApp(context: Context): Promise<ResolveForContextResponse> {
-        const agent = await this.desktopAgentPromise;
-
+    private getSelectedApp(): Promise<ResolveForContextResponse> {
         return new Promise((resolve, reject) => {
-            this.selectedAppCallback = async (app, intent) => {
+            this.selectedAppCallback = (app, intent) => {
                 if (app.appId == '') {
                     this.resetPopup();
                     reject(ResolveError.UserCancelled);
+                    return;
                 }
-                if (app.instanceId == null) {
-                    try {
-                        const appIdentifier = await agent.open({ appId: app.appId }, context);
-                        this.resetPopup();
-                        if (appIdentifier.instanceId != null) {
-                            resolve({
-                                intent,
-                                app: { appId: appIdentifier.appId, instanceId: appIdentifier.instanceId },
-                            });
-                        } else {
-                            //if instanceId is still null, error has occured, but this should be caught within open()
-                            reject(OpenError.AppNotFound);
-                        }
-                    } catch (err) {
-                        this.resetPopup();
-                        reject(err);
-                    }
-                } else {
-                    this.resetPopup();
-                    resolve({
-                        intent,
-                        app: { appId: app.appId, instanceId: app.instanceId },
-                    });
-                }
+                this.resetPopup();
+                resolve({
+                    intent,
+                    app:
+                        app.instanceId != null
+                            ? { appId: app.appId, instanceId: app.instanceId }
+                            : { appId: app.appId },
+                });
             };
         });
     }

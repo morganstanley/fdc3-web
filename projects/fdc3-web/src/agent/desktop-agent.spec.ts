@@ -129,10 +129,10 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 }
                 return;
             }),
-            setupFunction('resolveAppInstanceForIntent', (_intent, _context) =>
+            setupFunction('resolveAppForIntent', (_intent, _context) =>
                 Promise.resolve({ appId: mockedTargetAppId, instanceId: mockedTargetInstanceId }),
             ),
-            setupFunction('resolveAppInstanceForContext', _context =>
+            setupFunction('resolveAppForContext', _context =>
                 Promise.resolve({
                     intent: 'StartChat',
                     app: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
@@ -364,6 +364,64 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
                 ).wasCalledOnce();
+
+                expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
+            });
+
+            it(`should open new app instance if returned result is not fully qualified`, async () => {
+                const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(unqualifiedApp));
+
+                createInstance();
+
+                const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                    },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await postRequestMessage(addIntentListenerRequest, {
+                    appId: mockedTargetAppId,
+                    instanceId: mockedTargetInstanceId,
+                });
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                        context: contact,
+                    },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, source);
+
+                expect(
+                    mockRootPublisher.withFunction('sendMessage').withParametersEqualTo({
+                        payload: {
+                            type: 'openRequest',
+                            payload: {
+                                app: unqualifiedApp,
+                                context: contact,
+                            },
+                            meta: {
+                                requestUuid: mockedRequestUuid,
+                                timestamp: currentDate,
+                                source: appIdentifier,
+                            },
+                        },
+                    }),
+                ).wasCalledOnce();
             });
 
             it(`should publish RaiseIntentResponse`, async () => {
@@ -467,7 +525,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 expect(
                     mockAppDirectory
-                        .withFunction('resolveAppInstanceForIntent')
+                        .withFunction('resolveAppForIntent')
                         .withParameters('StartChat', contact, undefined),
                 ).wasCalledOnce();
 
@@ -477,9 +535,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             });
 
             it(`should return error from directory if one is returned`, async () => {
-                mockAppDirectory.setupFunction('resolveAppInstanceForIntent', () =>
-                    Promise.reject('UserCancelledResolution'),
-                );
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.reject('UserCancelledResolution'));
 
                 createInstance();
 
@@ -598,6 +654,64 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
                 ).wasCalledOnce();
+
+                expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
+            });
+
+            it(`should open new app instance if returned result is not fully qualified`, async () => {
+                const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
+                mockAppDirectory.setupFunction('resolveAppForContext', () =>
+                    Promise.resolve({ intent: 'StartChat', app: unqualifiedApp }),
+                );
+                createInstance();
+
+                const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                    },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await postRequestMessage(addIntentListenerRequest, {
+                    appId: mockedTargetAppId,
+                    instanceId: mockedTargetInstanceId,
+                });
+
+                const raiseIntentForContextRequest: BrowserTypes.RaiseIntentForContextRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        context: contact,
+                    },
+                    type: 'raiseIntentForContextRequest',
+                };
+
+                await postRequestMessage(raiseIntentForContextRequest, source);
+
+                expect(
+                    mockRootPublisher.withFunction('sendMessage').withParametersEqualTo({
+                        payload: {
+                            type: 'openRequest',
+                            payload: {
+                                app: unqualifiedApp,
+                                context: contact,
+                            },
+                            meta: {
+                                requestUuid: mockedRequestUuid,
+                                timestamp: currentDate,
+                                source: appIdentifier,
+                            },
+                        },
+                    }),
+                ).wasCalledOnce();
             });
 
             it(`should publish RaiseIntentForContextResponse`, async () => {
@@ -703,9 +817,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             });
 
             it(`should return error from directory if one is returned`, async () => {
-                mockAppDirectory.setupFunction('resolveAppInstanceForContext', () =>
-                    Promise.reject('UserCancelledResolution'),
-                );
+                mockAppDirectory.setupFunction('resolveAppForContext', () => Promise.reject('UserCancelledResolution'));
 
                 createInstance();
                 const raiseIntentRequest: BrowserTypes.RaiseIntentForContextRequest = {
@@ -980,9 +1092,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 await postRequestMessage(addIntentListenerMessage, qualifiedIdentifier);
 
-                mockAppDirectory.setupFunction('resolveAppInstanceForIntent', () =>
-                    Promise.resolve(qualifiedIdentifier),
-                );
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
 
                 const identifier = { appId: 'listenerAppId@mock-app-directory' };
 
@@ -1014,7 +1124,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 expect(
                     mockAppDirectory
-                        .withFunction('resolveAppInstanceForIntent')
+                        .withFunction('resolveAppForIntent')
                         .withParameters('StartChat', contact, identifier),
                 ).wasCalledOnce();
                 expect(
@@ -2657,7 +2767,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     // Reset publisher to track new messages
                     mockRootPublisher.functionCallLookup.publishResponseMessage = [];
 
-                    mockAppDirectory.setupFunction('resolveAppInstanceForIntent', () => Promise.resolve(source));
+                    mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(source));
 
                     // Try to send messages to both proxies
                     const firstProxyCheckMessage: BrowserTypes.RaiseIntentRequest = {
@@ -2678,7 +2788,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                     await postRequestMessage(firstProxyCheckMessage, source);
 
-                    mockAppDirectory.setupFunction('resolveAppInstanceForIntent', () => Promise.resolve(secondSource));
+                    mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(secondSource));
 
                     const secondProxyCheckMessage: BrowserTypes.RaiseIntentRequest = {
                         meta: {

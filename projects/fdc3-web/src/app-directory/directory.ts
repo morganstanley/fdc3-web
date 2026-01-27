@@ -91,15 +91,17 @@ export class AppDirectory {
     }
 
     /**
-     * Returns fully qualified appIdentifier with a populated instance ID
-     * If the passed in app is fully qualified that is returned
-     * If not the request is passed to the appResolver to determine which app to use (usually by launching a UI element)
+     * Returns an AppIdentifier for the app to handle the intent.
+     * If the passed in app is fully qualified that is returned.
+     * Otherwise the resolver determines which app to use (usually by launching a UI element).
+     * The returned AppIdentifier may or may not have an instanceId - the caller is responsible
+     * for opening a new instance if needed.
      */
-    public async resolveAppInstanceForIntent(
+    public async resolveAppForIntent(
         intent: Intent,
         context: Context,
         app?: AppIdentifier | string,
-    ): Promise<FullyQualifiedAppIdentifier | undefined> {
+    ): Promise<AppIdentifier | undefined> {
         const appIdentifier = this.getValidatedAppIdentifier(app);
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
@@ -122,10 +124,12 @@ export class AppDirectory {
     }
 
     /**
-     * Returns chosen intent and a fully qualified appIdentifier with a populated instance ID
-     * Request is passed to the appResolver to determine which intent and app to use (usually by launching a UI element)
+     * Returns chosen intent and an AppIdentifier for the app to handle the context.
+     * The resolver determines which intent and app to use (usually by launching a UI element).
+     * The returned AppIdentifier may or may not have an instanceId - the caller is responsible
+     * for opening a new instance if needed.
      */
-    public async resolveAppInstanceForContext(
+    public async resolveAppForContext(
         context: Context,
         app?: AppIdentifier | string,
     ): Promise<ResolveForContextResponse | undefined> {
