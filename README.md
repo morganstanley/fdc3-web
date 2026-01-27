@@ -31,7 +31,7 @@ const agent = await getAgent({
     new DesktopAgentFactory().createRoot({
       uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
       appDirectoryEntries: ['http://localhost:4299/v2/apps'],
-      openStrategies: [{
+      applicationStrategies: [{
         canOpen: (params: OpenApplicationStrategyParams, context?: Context) => { /* define whether an app should open */ },
         open: (params: OpenApplicationStrategyParams, context?: Context) => { /* define how an app should open */ }
       }],

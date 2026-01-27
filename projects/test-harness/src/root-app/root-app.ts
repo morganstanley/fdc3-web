@@ -14,6 +14,7 @@ import './app-container.js';
 import { AppIdentifier, Channel, Context, LogLevel, OpenError } from '@finos/fdc3';
 import {
     AppDirectoryApplication,
+    ApplicationStrategyParams,
     BackoffRetryParams,
     createLogger,
     createWebAppDirectoryEntry,
@@ -27,7 +28,6 @@ import {
     isWebAppDetails,
     LocalAppDirectory,
     mapLocalAppDirectory,
-    OpenApplicationStrategyParams,
     OpenApplicationStrategyResolverParams,
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
@@ -100,7 +100,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                     rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
                     appDirectoryEntries: appDirectoryUrls, //passes in app directory web service base url
-                    openStrategies: [this],
+                    applicationStrategies: [this],
                     backoffRetry: retryParams,
                 }),
         });
@@ -130,7 +130,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
-    public async canOpen(params: OpenApplicationStrategyParams): Promise<boolean> {
+    public async canOpen(params: ApplicationStrategyParams): Promise<boolean> {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 

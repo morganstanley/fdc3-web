@@ -39,6 +39,7 @@ import {
     EventMessage,
     FullyQualifiedAppIdentifier,
     IOpenApplicationStrategy,
+    ISelectApplicationStrategy,
     RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
@@ -259,7 +260,9 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         currentDate = mockedDate;
     });
 
-    function createInstance(openStrategies?: IOpenApplicationStrategy[]): DesktopAgent {
+    function createInstance(
+        applicationStrategies?: (IOpenApplicationStrategy | ISelectApplicationStrategy)[],
+    ): DesktopAgent {
         return new DesktopAgentImpl({
             appIdentifier,
             rootMessagePublisher: mockRootPublisher.mock,
@@ -269,7 +272,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 setupFunction('createChannels', () => Mock.create<Channels>().mock),
                 setupFunction('createMessageHandler', () => mockChannelHandler.mock),
             ).mock,
-            openStrategies,
+            applicationStrategies,
             window: mockWindow.mock,
         });
     }

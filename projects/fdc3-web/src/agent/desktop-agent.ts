@@ -30,6 +30,7 @@ import {
     EventListenerLookup,
     FullyQualifiedAppIdentifier,
     IOpenApplicationStrategy,
+    ISelectApplicationStrategy,
     RequestMessage,
 } from '../contracts.js';
 import {
@@ -46,6 +47,7 @@ import {
     isContext,
     isFindInstancesErrors,
     isFullyQualifiedAppIdentifier,
+    isOpenApplicationStrategy,
     isOpenError,
     isResponsePayloadError,
     isWCPGoodbye,
@@ -60,7 +62,7 @@ type RootDesktopAgentParams = {
     rootMessagePublisher: RootMessagePublisher;
     directory: AppDirectory;
     channelFactory: ChannelFactory;
-    openStrategies?: IOpenApplicationStrategy[];
+    applicationStrategies?: (IOpenApplicationStrategy | ISelectApplicationStrategy)[];
     window?: Window; //used for testing FallbackOpenStrategy
     logLevels?: GetAgentLogLevels;
 };
@@ -86,7 +88,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
     private directory: AppDirectory;
     private channelMessageHandler: ChannelMessageHandler;
-    private openStrategies: IOpenApplicationStrategy[];
+    private applicationStrategies: (IOpenApplicationStrategy | ISelectApplicationStrategy)[];
     private rootMessagePublisher: IRootPublisher;
 
     // Heartbeat tracking
@@ -113,7 +115,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         this.intentListenerCallbacks = new Map<string, (source: FullyQualifiedAppIdentifier, intent: string) => void>();
 
         //if no other strategy works, desktop agent will try the fallback strategy
-        this.openStrategies = [...(params.openStrategies ?? []), new FallbackOpenStrategy(params.window)];
+        this.applicationStrategies = [...(params.applicationStrategies ?? []), new FallbackOpenStrategy(params.window)];
     }
 
     private async onRequestMessage(
@@ -865,7 +867,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         this.proxyLog('OpenRequest application resolved', LogLevel.DEBUG, { application, source });
 
         const strategyCanOpenResults = await Promise.all(
-            this.openStrategies.map(async strategy => {
+            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => {
                 // if canOpen fails, do not use this strategy
                 const canOpen = await this.canStrategyOpenApp(
                     application,

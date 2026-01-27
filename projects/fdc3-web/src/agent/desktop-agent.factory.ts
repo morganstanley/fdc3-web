@@ -82,7 +82,7 @@ export class DesktopAgentFactory {
             rootMessagePublisher,
             directory: directory,
             channelFactory: new ChannelFactory(),
-            openStrategies: factoryParams.openStrategies,
+            applicationStrategies: factoryParams.applicationStrategies,
             logLevels: factoryParams.logLevels,
         });
 
