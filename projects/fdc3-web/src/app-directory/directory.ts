@@ -543,9 +543,16 @@ export class AppDirectory {
      * @param context is context object whose type is being checked for in array
      */
     private isContextInArray(contextArray: Context[], context?: Context): boolean {
-        if (context == null || contextArray.some(currentContext => currentContext.type === context.type)) {
+        if (
+            context == null ||
+            contextArray.length === 0 ||
+            contextArray.some(currentContext => currentContext.type === context.type)
+        ) {
+            console.log(`isContextInArray TRUE`, { contextArray, context });
+
             return true;
         }
+        console.log(`isContextInArray FALSE`, { contextArray, context });
         return false;
     }
 
