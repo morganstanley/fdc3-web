@@ -11,6 +11,7 @@
 import type { AppMetadata, Context, DesktopAgent, Icon, Intent } from '@finos/fdc3';
 import { OpenError, ResolveError } from '@finos/fdc3';
 import {
+    AppHostManifestLookup,
     FullyQualifiedAppIdentifier,
     IAppResolver,
     isFullyQualifiedAppIdentifier,
@@ -185,7 +186,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         //returns appIdentifier immediately if there is only one possible app instance
         if (apps.length === 1) {
             if (apps[0].instanceId != null) {
-                // return existing fully qualiofied app instance
+                // return existing fully qualified app instance
                 return { appId: apps[0].appId, instanceId: apps[0].instanceId };
             } else {
                 // open new instance of unqualified app
@@ -194,7 +195,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                 if (isFullyQualifiedAppIdentifier(newInstance)) {
                     return newInstance;
                 } else {
-                    //if instanceId is still null, error has occured, but this should be caught within open()
+                    //if instanceId is still null, error has occurred, but this should be caught within open()
                     return Promise.reject(OpenError.AppNotFound);
                 }
             }
@@ -204,8 +205,8 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         }
         //active app instances that can handle given intent
         const activeInstances = apps.filter(app => app.instanceId != null);
-        //apps that can handle given intent
-        const inactiveApps = apps.filter(app => app.instanceId == null);
+        //apps that can handle given intent (excluding singletons which already have an active instance)
+        const inactiveApps = apps.filter(app => this.filterInactiveApps(app, activeInstances, payload.appManifests));
 
         this._forIntentPopupState = { name: appIntent.intent.name, activeInstances, inactiveApps };
         this.togglePopup();
@@ -233,8 +234,10 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
             .forEach(appIntent => {
                 //active app instances that can handle given intent
                 const activeInstances = appIntent.apps.filter(app => app.instanceId != null);
-                //apps that can handle given intent
-                const inactiveApps = appIntent.apps.filter(app => app.instanceId == null);
+                //apps that can handle given intent (excluding singletons which already have an active instance)
+                const inactiveApps = appIntent.apps.filter(app =>
+                    this.filterInactiveApps(app, activeInstances, payload.appManifests),
+                );
                 tempState[appIntent.intent.name] = { activeInstances, inactiveApps };
             });
 
@@ -292,6 +295,18 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         this._forIntentPopupState = null;
         this._forContextPopupState = null;
         this.togglePopup();
+    }
+
+    private filterInactiveApps(
+        app: AppMetadata,
+        activeInstances: AppMetadata[],
+        appManifests: AppHostManifestLookup,
+    ): boolean {
+        return (
+            app.instanceId == null &&
+            (appManifests[app.appId]?.singleton !== true ||
+                !activeInstances.some(instance => instance.appId === app.appId))
+        );
     }
 
     /**

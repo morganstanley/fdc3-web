@@ -44,6 +44,23 @@ open(params: OpenApplicationStrategyResolverParams): Promise<string>;
 ### Added
 
  * `appReadyPromise` property added to `IOpenApplicationStrategy.open()` function. This promise resolves when the application that is being opened is ready and has had an `instanceId` assigned
+ * Singleton app support added. If an application is marked as a singleton it will not appear in the `New Instance` section of the app resolver if an instance already exists. This means that the user cannot open more than one instance of an app using the app resolver as a result of a `raiseIntent` or `raiseIntentForContext` call. Add an entry to `hostManifests` within your app directory record to enable this:
+
+ ```json
+{
+    "title": "My App",
+    "appId": "my-app",
+    "type": "web",
+    "details": {
+        "url": "http://localhost:4302/app-b.html"
+    },
+    "hostManifests": {
+        "MorganStanley.fdc3-web": {
+            "singleton": true
+        }
+    }
+}
+ ```
 
 ## 0.9.2 (2025-12-01)
 

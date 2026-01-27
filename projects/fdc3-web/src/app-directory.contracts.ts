@@ -75,3 +75,10 @@ export type LocalAppDirectory = {
      */
     updates?: AsyncIterator<AppDirectoryApplication | AppDirectoryApplication[]>;
 };
+
+/**
+ * Host Manifest record specifically for morgan stanley desktop agent
+ */
+export interface IMSHostManifest {
+    singleton?: boolean;
+}

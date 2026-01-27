@@ -107,6 +107,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                 intent: intent.name,
                 appIdentifier: { appId: 'app-two' },
                 context,
+                appManifests: {},
             });
 
             await expect(appIdentifierPromise).resolves.toEqual({
@@ -126,6 +127,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                 intent: intent.name,
                 appIdentifier: { appId: 'app-six' },
                 context,
+                appManifests: {},
             });
 
             await expect(appIdentifierPromise).resolves.toEqual({
@@ -142,6 +144,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                 // you would not normally pass a fully qualified identifier but we want to make sure that it is returned if we do
                 appIdentifier: { appId: 'unknown-app-id' },
                 context,
+                appManifests: {},
             });
 
             await expect(appIdentifierPromise).rejects.toEqual(OpenError.AppNotFound);
@@ -153,6 +156,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
+                appManifests: {},
             });
 
             expect(mockDocument.querySelector('body')?.querySelector('ms-app-resolver')).toBeDefined();
@@ -165,6 +169,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                 intent: intent.name,
                 appIdentifier: { appId: 'app-one' },
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -177,12 +182,74 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             ).toEqual(3);
         });
 
+        it('should filter out singleton apps from inactiveApps when they have an active instance', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForIntent({
+                intent: intent.name,
+                context,
+                appManifests: {
+                    'app-one': { singleton: true },
+                },
+            });
+
+            await wait();
+
+            expect(instance.forIntentPopupState?.activeInstances.map(app => app.appId)).toEqual([
+                'app-one',
+                'app-one',
+                'app-two',
+            ]);
+            expect(instance.forIntentPopupState?.inactiveApps.map(app => app.appId)).toEqual(['app-six']);
+        });
+
+        it('should include singleton apps in inactiveApps when they do not have an active instance', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForIntent({
+                intent: intent.name,
+                context,
+                appManifests: {
+                    'app-six': { singleton: true },
+                },
+            });
+
+            await wait();
+
+            expect(instance.forIntentPopupState?.activeInstances.map(app => app.appId)).toEqual([
+                'app-one',
+                'app-one',
+                'app-two',
+            ]);
+            expect(instance.forIntentPopupState?.inactiveApps.map(app => app.appId)).toEqual(['app-one', 'app-six']);
+        });
+
+        it('should not filter out non-singleton apps from inactiveApps', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForIntent({
+                intent: intent.name,
+                context,
+                appManifests: {},
+            });
+
+            await wait();
+
+            expect(instance.forIntentPopupState?.activeInstances.map(app => app.appId)).toEqual([
+                'app-one',
+                'app-one',
+                'app-two',
+            ]);
+            expect(instance.forIntentPopupState?.inactiveApps.map(app => app.appId)).toEqual(['app-one', 'app-six']);
+        });
+
         it('should call open() on desktop agent with appIdentifier user chose if appIdentifier is not FullyQualified', async () => {
             const instance = createInstance();
 
             instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -216,6 +283,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             const appIdentifierPromise = instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -250,6 +318,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             const appIntentPromise = instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -276,7 +345,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         it('should add popup html to body with active instances and inactive apps that can handle given intent for all intents which can resolve given context', () => {
             const instance = createInstance();
 
-            instance.resolveAppForContext({ context });
+            instance.resolveAppForContext({ context, appManifests: {} });
 
             expect(mockDocument.querySelector('body')?.querySelector('ms-app-resolver')).toBeDefined();
         });
@@ -287,6 +356,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             instance.resolveAppForContext({
                 appIdentifier: { appId: 'app-one' },
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -303,6 +373,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             instance.resolveAppForContext({
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -320,6 +391,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             instance.resolveAppForContext({
                 appIdentifier: { appId: 'app-three' },
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -337,6 +409,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                 instance.resolveAppForContext({
                     appIdentifier: { appId: 'app-five' },
                     context,
+                    appManifests: {},
                 }),
             ).rejects.toBe(ResolveError.NoAppsFound);
 
@@ -348,18 +421,63 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             mockDesktopAgent.setupFunction('findIntentsByContext', () => Promise.resolve([]));
             const instance = createInstance();
 
-            await expect(instance.resolveAppForContext({ context: { type: 'unknown.context' } })).rejects.toBe(
-                ResolveError.NoAppsFound,
-            );
+            await expect(
+                instance.resolveAppForContext({ context: { type: 'unknown.context' }, appManifests: {} }),
+            ).rejects.toBe(ResolveError.NoAppsFound);
 
             expect(instance.forContextPopupState?.[intent.name]).toBeUndefined();
             expect(instance.forContextPopupState?.[intentTwo.name]).toBeUndefined();
         });
 
+        it('should filter out singleton apps from inactiveApps when they have an active instance', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForContext({
+                context,
+                appManifests: {
+                    'app-one': { singleton: true },
+                },
+            });
+
+            await wait();
+
+            expect(instance.forContextPopupState?.[intent.name].activeInstances.map(app => app.appId)).toEqual([
+                'app-one',
+                'app-one',
+                'app-two',
+            ]);
+            expect(instance.forContextPopupState?.[intent.name].inactiveApps.map(app => app.appId)).toEqual([
+                'app-six',
+            ]);
+        });
+
+        it('should include singleton apps in inactiveApps when they do not have an active instance', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForContext({
+                context,
+                appManifests: {
+                    'app-six': { singleton: true },
+                },
+            });
+
+            await wait();
+
+            expect(instance.forContextPopupState?.[intent.name].activeInstances.map(app => app.appId)).toEqual([
+                'app-one',
+                'app-one',
+                'app-two',
+            ]);
+            expect(instance.forContextPopupState?.[intent.name].inactiveApps.map(app => app.appId)).toEqual([
+                'app-one',
+                'app-six',
+            ]);
+        });
+
         it('should call open() on desktop agent with appIdentifier user chose if appIdentifier is not FullyQualified', async () => {
             const instance = createInstance();
 
-            instance.resolveAppForContext({ context });
+            instance.resolveAppForContext({ context, appManifests: {} });
 
             await wait();
 
@@ -389,7 +507,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         it('should return promise which resolves to ResolveForContextResponse containing FullyQualifiedAppIdentifier and intent chosen by user', async () => {
             const instance = createInstance();
 
-            const appIntentPromise = instance.resolveAppForContext({ context });
+            const appIntentPromise = instance.resolveAppForContext({ context, appManifests: {} });
 
             await wait();
 
@@ -422,6 +540,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             const appIntentPromise = instance.resolveAppForContext({
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -451,6 +570,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             const appIdentifierPromise = instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
+                appManifests: {},
             });
 
             await wait();
@@ -476,6 +596,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             const appIdentifierPromise = instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
+                appManifests: {},
             });
 
             await wait();

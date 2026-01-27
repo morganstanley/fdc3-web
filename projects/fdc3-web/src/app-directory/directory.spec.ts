@@ -183,6 +183,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 context: contact,
                 intent: 'StartChat',
                 appIdentifier: identifier,
+                appManifests: {},
                 appIntent: {
                     apps: [
                         {
@@ -272,6 +273,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const expectedPayload: ResolveForContextPayload = {
                 context: contact,
                 appIdentifier: undefined,
+                appManifests: {},
                 appIntents: [
                     {
                         apps: [
@@ -1087,6 +1089,157 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             const appInstances = await instance.getAppInstances(mockedAppIdOne);
             expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+        });
+    });
+
+    describe('buildAppHostManifestLookup', () => {
+        const msHostManifestKey = 'MorganStanley.fdc3-web';
+
+        const mockedApplicationWithHostManifest: AppDirectoryApplication = {
+            appId: 'app-id-with-manifest',
+            title: 'app-with-manifest',
+            type: mockedApplicationType,
+            details: {
+                url: 'https://mock-url-manifest',
+            },
+            hostManifests: {
+                [msHostManifestKey]: { singleton: true },
+            },
+        };
+
+        const mockedApplicationWithNonMSHostManifest: AppDirectoryApplication = {
+            appId: 'app-id-other-manifest',
+            title: 'app-with-other-manifest',
+            type: mockedApplicationType,
+            details: {
+                url: 'https://mock-url-other-manifest',
+            },
+            hostManifests: {
+                'other-manifest-key': { someProperty: 'value' },
+            },
+        };
+
+        const mockedApplicationWithInvalidHostManifest: AppDirectoryApplication = {
+            appId: 'app-id-invalid-manifest',
+            title: 'app-with-invalid-manifest',
+            type: mockedApplicationType,
+            details: {
+                url: 'https://mock-url-invalid-manifest',
+            },
+            hostManifests: {
+                [msHostManifestKey]: 'https://some-uri-string',
+            },
+        };
+
+        it('should include apps with valid MS host manifest in appManifests passed to resolver', async () => {
+            mockedHelpers.setupFunction('getAppDirectoryApplications', () =>
+                Promise.resolve([mockedApplicationWithHostManifest]),
+            );
+
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                appId: 'app-id-with-manifest@mock-app-directory',
+                instanceId: 'resolved-instance',
+            };
+            mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
+
+            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
+            expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({
+                'app-id-with-manifest@mock-app-directory': { singleton: true },
+            });
+        });
+
+        it('should return empty appManifests when no apps have MS host manifest', async () => {
+            mockedHelpers.setupFunction('getAppDirectoryApplications', () =>
+                Promise.resolve([mockedApplicationWithNonMSHostManifest]),
+            );
+
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                appId: 'app-id-other-manifest@mock-app-directory',
+                instanceId: 'resolved-instance',
+            };
+            mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
+
+            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
+            expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({});
+        });
+
+        it('should exclude apps with invalid (non-object) MS host manifest', async () => {
+            mockedHelpers.setupFunction('getAppDirectoryApplications', () =>
+                Promise.resolve([mockedApplicationWithInvalidHostManifest]),
+            );
+
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                appId: 'app-id-invalid-manifest@mock-app-directory',
+                instanceId: 'resolved-instance',
+            };
+            mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
+
+            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
+            expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({});
+        });
+
+        it('should include multiple apps with valid MS host manifests', async () => {
+            const anotherAppWithManifest: AppDirectoryApplication = {
+                appId: 'app-id-another-manifest',
+                title: 'another-app-with-manifest',
+                type: mockedApplicationType,
+                details: {
+                    url: 'https://mock-url-another',
+                },
+                hostManifests: {
+                    [msHostManifestKey]: { singleton: false },
+                },
+            };
+
+            mockedHelpers.setupFunction('getAppDirectoryApplications', () =>
+                Promise.resolve([mockedApplicationWithHostManifest, anotherAppWithManifest]),
+            );
+
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                appId: 'app-id-with-manifest@mock-app-directory',
+                instanceId: 'resolved-instance',
+            };
+            mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
+
+            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
+            expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({
+                'app-id-with-manifest@mock-app-directory': { singleton: true },
+                'app-id-another-manifest@mock-app-directory': { singleton: false },
+            });
+        });
+
+        it('should include MS host manifest in appManifests passed to resolveAppForContext', async () => {
+            mockedHelpers.setupFunction('getAppDirectoryApplications', () =>
+                Promise.resolve([mockedApplicationWithHostManifest]),
+            );
+
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                appId: 'app-id-with-manifest@mock-app-directory',
+                instanceId: 'resolved-instance',
+            };
+            mockResolver.setupFunction('resolveAppForContext', () =>
+                Promise.resolve({ intent: 'SomeIntent', app: qualifiedIdentifier }),
+            );
+
+            await instance.resolveAppInstanceForContext(contact, undefined);
+
+            expect(mockResolver.withFunction('resolveAppForContext')).wasCalledOnce();
+            expect(mockResolver.functionCallLookup['resolveAppForContext']?.[0][0].appManifests).toEqual({
+                'app-id-with-manifest@mock-app-directory': { singleton: true },
+            });
         });
     });
 

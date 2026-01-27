@@ -178,6 +178,7 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                         appId: mockedTargetAppId,
                     },
                     intent: 'StartEmail',
+                    appManifests: {},
                 };
 
                 if (appsInPayload) {
@@ -357,6 +358,7 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                     appIdentifier: {
                         appId: mockedTargetAppId,
                     },
+                    appManifests: {},
                 };
 
                 const appIntents: AppIntent[] = intents.map(intentAndApps => ({
