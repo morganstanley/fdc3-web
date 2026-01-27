@@ -677,6 +677,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             await registerApp(instance, mockedApplicationOne, 'StartChat', [contact]);
             await registerApp(instance, mockedApplicationTwo, 'StartEmail', [contact]);
             await registerApp(instance, mockedApplicationTwo, 'StartChat', []);
+            await registerApp(instance, mockedApplicationTwo, 'StartChat', [{ type: 'some other context' }]);
             await registerApp(instance, mockedApplicationThree, 'ViewHoldings', []);
 
             const result = await instance.getAppIntent('StartChat', contact);
@@ -690,6 +691,16 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         instanceId: 'instanceOne',
                         screenshots: undefined,
                         title: 'app-title-one',
+                        tooltip: undefined,
+                        version: undefined,
+                    },
+                    {
+                        appId: mockedAppIdTwo,
+                        description: undefined,
+                        icons: undefined,
+                        instanceId: 'instanceThree',
+                        screenshots: undefined,
+                        title: 'app-title-two',
                         tooltip: undefined,
                         version: undefined,
                     },
@@ -717,6 +728,46 @@ describe(`${AppDirectory.name} (directory)`, () => {
                     },
                 ],
                 intent: { displayName: 'ViewChart', name: 'ViewChart' },
+            });
+        });
+
+        it(`should include apps with empty context array when context is passed (dynamic intent listeners)`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', [contact]);
+            await registerApp(instance, mockedApplicationTwo, 'StartChat', []);
+
+            const result = await instance.getAppIntent('StartChat', contact);
+
+            expect(result.apps.length).toBe(2);
+
+            expect(result).toEqual({
+                apps: [
+                    {
+                        appId: mockedAppIdOne,
+                        description: undefined,
+                        icons: undefined,
+                        instanceId: 'instanceOne',
+                        screenshots: undefined,
+                        title: 'app-title-one',
+                        tooltip: undefined,
+                        version: undefined,
+                    },
+                    {
+                        appId: mockedAppIdTwo,
+                        description: undefined,
+                        icons: undefined,
+                        instanceId: 'instanceTwo',
+                        screenshots: undefined,
+                        title: 'app-title-two',
+                        tooltip: undefined,
+                        version: undefined,
+                    },
+                ],
+                intent: {
+                    displayName: 'StartChat',
+                    name: 'StartChat',
+                },
             });
         });
     });
