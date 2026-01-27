@@ -548,11 +548,8 @@ export class AppDirectory {
             contextArray.length === 0 ||
             contextArray.some(currentContext => currentContext.type === context.type)
         ) {
-            console.log(`isContextInArray TRUE`, { contextArray, context });
-
             return true;
         }
-        console.log(`isContextInArray FALSE`, { contextArray, context });
         return false;
     }
 
