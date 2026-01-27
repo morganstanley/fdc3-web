@@ -326,6 +326,17 @@ export interface IOpenApplicationStrategy {
     open(params: OpenApplicationStrategyResolverParams): Promise<string>;
 }
 
+export type SelectApplicationStrategyParams = {
+    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    agent: DesktopAgent;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
+    manifest?: unknown;
+    context?: Context;
+    appIdentifier: FullyQualifiedAppIdentifier;
+};
+
 /**
  * allows an application that has already been opened to be selected or focussed
  * This might involve restoring a minimised window or bringing a window to the front so that it is visible to the user
@@ -342,12 +353,12 @@ export interface ISelectApplicationStrategy {
      * If false is returned the strategy will not be used by the desktop agent and the next one will be tried
      */
 
-    canSelectApp(params: ApplicationStrategyParams): Promise<boolean>;
+    canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean>;
 
     /**
      * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
      * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
      * @param params
      */
-    selectApp(params: OpenApplicationStrategyResolverParams): Promise<string>;
+    selectApp(params: SelectApplicationStrategyParams): Promise<void>;
 }

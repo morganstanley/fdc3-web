@@ -91,9 +91,15 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
     let mockedApplication: AppDirectoryApplication;
 
     let mockWindow: IMocked<Window>;
+    let mockSelectStrategy: IMocked<ISelectApplicationStrategy>;
 
     beforeEach(() => {
         mockWindow = Mock.create<Window>().setup(setupFunction('open', () => mockWindow.mock));
+
+        mockSelectStrategy = Mock.create<ISelectApplicationStrategy>().setup(
+            setupFunction('canSelectApp', () => Promise.resolve(true)),
+            setupFunction('selectApp', () => Promise.resolve()),
+        );
 
         contact = {
             type: 'fdc3.contact',
@@ -310,7 +316,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
         describe(`raiseIntentRequest`, () => {
             it(`should publish IntentEvent to chosen app instance`, async () => {
-                createInstance();
+                createInstance([mockSelectStrategy.mock]);
 
                 const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
                     meta: {
@@ -365,6 +371,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
                 ).wasCalledOnce();
 
+                expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
                 expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
             });
 
@@ -422,6 +429,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         },
                     }),
                 ).wasCalledOnce();
+
+                expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
 
             it(`should publish RaiseIntentResponse`, async () => {
@@ -601,7 +610,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
         describe(`raiseIntentForContextRequest`, () => {
             it(`should publish IntentEvent to chosen app instance`, async () => {
-                createInstance();
+                createInstance([mockSelectStrategy.mock]);
 
                 const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
                     meta: {
@@ -655,6 +664,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
                 ).wasCalledOnce();
 
+                expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
                 expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
             });
 
@@ -712,6 +722,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         },
                     }),
                 ).wasCalledOnce();
+
+                expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
 
             it(`should publish RaiseIntentForContextResponse`, async () => {

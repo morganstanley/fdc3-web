@@ -87,8 +87,8 @@ describe(`type-predicate.helper`, () => {
     testTypePredicate(
         isSelectApplicationStrategy,
         [
-            { canSelectApp: () => Promise.resolve(true), selectApp: () => Promise.resolve('uuid') },
-            { canSelectApp: async () => true, selectApp: async () => 'uuid', manifestKey: 'key' },
+            { canSelectApp: () => Promise.resolve(true), selectApp: () => Promise.resolve() },
+            { canSelectApp: async () => true, selectApp: async () => Promise.resolve(), manifestKey: 'key' },
         ],
         [
             { canSelectApp: () => Promise.resolve(true) },

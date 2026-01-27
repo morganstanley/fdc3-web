@@ -24,11 +24,13 @@ import {
     getAgent,
     getAppDirectoryApplications,
     IOpenApplicationStrategy,
+    ISelectApplicationStrategy,
     isFullyQualifiedAppId,
     isWebAppDetails,
     LocalAppDirectory,
     mapLocalAppDirectory,
     OpenApplicationStrategyResolverParams,
+    SelectApplicationStrategyParams,
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
 } from '@morgan-stanley/fdc3-web';
@@ -75,8 +77,10 @@ const retryParams: BackoffRetryParams = {
  * and rendering the main UI components including the header, app containers, and settings panel.
  */
 @customElement('root-app')
-export class RootApp extends LitElement implements IOpenApplicationStrategy {
+export class RootApp extends LitElement implements IOpenApplicationStrategy, ISelectApplicationStrategy {
     private log = createLogger(RootApp, 'proxy');
+
+    private windowLookup: Record<string, WindowProxy> = {};
 
     @state()
     private appDetails: WebAppDetails[] = [];
@@ -203,6 +207,8 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                         return Promise.reject(`Window was null`); // TODO: use an approved error type
                     }
 
+                    params.appReadyPromise.then(identity => (this.windowLookup[identity.instanceId] = windowProxy));
+
                     return new Promise(resolve => {
                         const subscriber = subscribeToConnectionAttemptUuids(
                             window,
@@ -242,6 +248,18 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         }
 
         return Promise.reject(OpenError.ResolverUnavailable);
+    }
+
+    public async canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean> {
+        return this.windowLookup[params.appIdentifier.instanceId] != null;
+    }
+
+    public async selectApp(params: SelectApplicationStrategyParams): Promise<void> {
+        const window = this.windowLookup[params.appIdentifier.instanceId];
+        if (window != null) {
+            console.log(`Focussing window for app ${params.appIdentifier.appId}(${params.appIdentifier.instanceId})`);
+            window.focus();
+        }
     }
 
     private async initApp(): Promise<void> {
