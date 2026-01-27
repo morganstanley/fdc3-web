@@ -19,7 +19,9 @@ import {
     ResolveError,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
+import { MS_HOST_MANIFEST_KEY } from '../constants.js';
 import {
+    AppHostManifestLookup,
     BackoffRetryParams,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
@@ -32,6 +34,7 @@ import {
     getAppDirectoryApplications,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
+    isIMSHostManifest,
     isWebAppDetails,
     mapApplicationToMetadata,
     mapLocalAppDirectory,
@@ -107,14 +110,14 @@ export class AppDirectory {
             return Promise.reject(appIdentifier);
         }
 
-        //TODO should we pass context to getAppIntent? Causes a problem for some dynamic intentListeners if they don't have any registered contexts
-        const appIntent = await this.getAppIntent(intent);
+        const appIntent = await this.getAppIntent(intent, context);
 
         return (await this.appResolverPromise).resolveAppForIntent({
             intent,
             appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
             context,
             appIntent,
+            appManifests: this.buildAppHostManifestLookup(),
         });
     }
 
@@ -138,6 +141,7 @@ export class AppDirectory {
             context,
             appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
             appIntents,
+            appManifests: this.buildAppHostManifestLookup(),
         });
     }
 
@@ -686,5 +690,22 @@ export class AppDirectory {
         if (instanceIndex != null && instanceIndex >= 0) {
             appInstances?.instances.splice(instanceIndex, 1);
         }
+    }
+
+    private buildAppHostManifestLookup(): AppHostManifestLookup {
+        return Object.entries(this.directory)
+            .map(([appId, appRecord]) => {
+                const manifest = appRecord?.application?.hostManifests?.[MS_HOST_MANIFEST_KEY];
+
+                return {
+                    appId,
+                    appManifest: isIMSHostManifest(manifest) ? manifest : undefined,
+                };
+            })
+            .filter(({ appId, appManifest }) => appId != null && appManifest != null)
+            .reduce<AppHostManifestLookup>(
+                (lookup, { appId, appManifest }) => ({ ...lookup, [appId]: appManifest }),
+                {},
+            );
     }
 }

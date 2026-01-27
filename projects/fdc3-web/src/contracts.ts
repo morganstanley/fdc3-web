@@ -20,7 +20,7 @@ import type {
     Intent,
     PrivateChannelEvent,
 } from '@finos/fdc3';
-import { AppDirectoryApplication, LocalAppDirectory } from './app-directory.contracts.js';
+import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -189,13 +189,18 @@ export type EventListenerLookup = Partial<Record<EventListenerKey, AppIdentifier
 
 export type UnqualifiedAppIdentifier = Omit<AppIdentifier, 'instanceId'>;
 export type FullyQualifiedAppIdentifier = Required<Pick<AppIdentifier, 'appId' | 'instanceId'>>;
+
 //fullyQualifiedAppId is globally unique: appId@hostname
 export type FullyQualifiedAppId = `${string}@${string}`;
+
+export type AppHostManifestLookup = Partial<Record<string, IMSHostManifest>>;
 
 export type ResolveForIntentPayload = {
     context: Context;
     appIdentifier?: UnqualifiedAppIdentifier;
     intent: Intent;
+    // used to indicate if an app is a singleton app
+    appManifests: AppHostManifestLookup;
     /**
      * Optional app intent data which contains a list of apps and app instances. If this is not passed the resolver should lookup the list of apps and app instances using desktopAgent.findIntent()
      */
@@ -205,6 +210,8 @@ export type ResolveForIntentPayload = {
 export type ResolveForContextPayload = {
     context: Context;
     appIdentifier?: UnqualifiedAppIdentifier;
+    // used to indicate if an app is a singleton app
+    appManifests: AppHostManifestLookup;
     /**
      * Optional list of app intents for this context that each contain a list of apps and app instances. If this is not passed the resolver should lookup the list of apps and app instances using desktopAgent.findIntentsByContext()
      */

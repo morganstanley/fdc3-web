@@ -190,6 +190,11 @@
             "details": {
                 "url": "http://localhost:4302/app-b.html"
             },
+            "hostManifests": {
+                "MorganStanley.fdc3-web": {
+                    "singleton": true
+                }
+            },
             "interop": {
                 "intents": {
                     "listensFor": {
