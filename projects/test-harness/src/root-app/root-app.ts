@@ -134,6 +134,10 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
         return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
+    /**
+     * IOpenApplicationStrategy implementation
+     */
+
     public async canOpen(params: ApplicationStrategyParams): Promise<boolean> {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
@@ -250,6 +254,14 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
         return Promise.reject(OpenError.ResolverUnavailable);
     }
 
+    /**
+     * IOpenApplicationStrategy implementation END
+     */
+
+    /**
+     * ISelectApplicationStrategy implementation
+     */
+
     public async canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean> {
         return this.windowLookup[params.appIdentifier.instanceId] != null;
     }
@@ -261,6 +273,10 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
             window.focus();
         }
     }
+
+    /**
+     * ISelectApplicationStrategy implementation END
+     */
 
     private async initApp(): Promise<void> {
         //open all apps in root domain by default

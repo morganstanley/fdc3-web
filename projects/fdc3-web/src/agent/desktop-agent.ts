@@ -47,6 +47,7 @@ import {
     getHostManifest,
     getImplementationMetadata,
     isContext,
+    isDefined,
     isFindInstancesErrors,
     isFullyQualifiedAppIdentifier,
     isOpenApplicationStrategy,
@@ -263,6 +264,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             };
 
             if (isFullyQualifiedAppIdentifier(appIdentifier)) {
+                // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
+                // try and select the existing application
                 this.selectApp(fullyQualifiedAppIdentifier);
             }
         } else {
@@ -334,7 +337,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
 
         try {
-            //selects intent to handle context and app to resolve it (may or may not have instanceId)
+            //selects intent to handle context and app to resolve it
             const resolutionResponse = await this.directory.resolveAppForContext(
                 requestMessage.payload.context,
                 requestMessage.payload.app,
@@ -376,6 +379,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             };
 
             if (isFullyQualifiedAppIdentifier(resolutionResponse.app)) {
+                // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
+                // try and select the existing application
                 this.selectApp(fullyQualifiedAppIdentifier);
             }
 
@@ -1259,6 +1264,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
     }
 
+    /**
+     * Uses registered strategies to select an app.
+     * This will typically be done if the user raises an intent and selects an existing app.
+     * In this case we may want to restore a browser window, bring the window to the front or even switch to a div that contains an iframe that contains the app
+     * THe selection mechanism is implemented by the strategy, all we do is look for the first strategy that can select the app then invoke the selectApp function
+     * @param appIdentifier
+     * @returns
+     */
     private async selectApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<void> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
@@ -1267,21 +1280,19 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             return;
         }
 
-        const strategyCanSelectResults = await Promise.all(
-            this.applicationStrategies.filter(isSelectApplicationStrategy).map(async strategy => {
-                const canSelect = await this.canStrategySelectApp(appIdentifier, application, strategy).catch(
-                    () => false,
-                );
-                return { canSelect, strategy };
-            }),
-        );
+        const strategyCanSelectResults = (
+            await Promise.all(
+                this.applicationStrategies.filter(isSelectApplicationStrategy).map(async strategy => {
+                    const canSelect = await this.canStrategySelectApp(appIdentifier, application, strategy).catch(
+                        () => false,
+                    );
+                    return canSelect ? strategy : undefined;
+                }),
+            )
+        ).filter(isDefined);
 
-        const validStrategies = strategyCanSelectResults
-            .filter(({ canSelect }) => canSelect)
-            .map(({ strategy }) => strategy);
-
-        if (validStrategies.length > 0) {
-            const strategy = validStrategies[0];
+        if (strategyCanSelectResults.length > 0) {
+            const strategy = strategyCanSelectResults[0];
             await this.selectAppWithStrategy(appIdentifier, strategy, application);
         }
     }
@@ -1297,9 +1308,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         const { hostManifests, ...appDirectoryRecord } = application;
 
-        const canSelect = await strategy.canSelectApp({ agent: this, appDirectoryRecord, manifest, appIdentifier });
-
-        return canSelect;
+        return strategy.canSelectApp({ agent: this, appDirectoryRecord, manifest, appIdentifier });
     }
 
     private async selectAppWithStrategy(

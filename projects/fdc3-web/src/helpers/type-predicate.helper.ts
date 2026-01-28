@@ -90,3 +90,7 @@ export function isSelectApplicationStrategy(value: any): value is ISelectApplica
 
     return strategy != null && typeof strategy.canSelectApp === 'function' && typeof strategy.selectApp === 'function';
 }
+
+export function isDefined<T>(value: T | null | undefined): value is T {
+    return value != null;
+}
