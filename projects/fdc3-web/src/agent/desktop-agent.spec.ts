@@ -36,6 +36,7 @@ import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
 import {
+    DesktopAgentStrategies,
     EventMessage,
     FullyQualifiedAppIdentifier,
     IOpenApplicationStrategy,
@@ -266,9 +267,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         currentDate = mockedDate;
     });
 
-    function createInstance(
-        applicationStrategies?: (IOpenApplicationStrategy | ISelectApplicationStrategy)[],
-    ): DesktopAgent {
+    function createInstance(applicationStrategies?: DesktopAgentStrategies[]): DesktopAgent {
         return new DesktopAgentImpl({
             appIdentifier,
             rootMessagePublisher: mockRootPublisher.mock,

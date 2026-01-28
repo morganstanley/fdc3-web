@@ -28,6 +28,7 @@ import { HEARTBEAT } from '../constants.js';
 import { IRootPublisher } from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
+    DesktopAgentStrategies,
     EventListenerKey,
     EventListenerLookup,
     FullyQualifiedAppIdentifier,
@@ -66,7 +67,7 @@ type RootDesktopAgentParams = {
     rootMessagePublisher: RootMessagePublisher;
     directory: AppDirectory;
     channelFactory: ChannelFactory;
-    applicationStrategies?: (IOpenApplicationStrategy | ISelectApplicationStrategy)[];
+    applicationStrategies?: DesktopAgentStrategies[];
     window?: Window; //used for testing FallbackOpenStrategy
     logLevels?: GetAgentLogLevels;
 };
@@ -92,7 +93,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
     private directory: AppDirectory;
     private channelMessageHandler: ChannelMessageHandler;
-    private applicationStrategies: (IOpenApplicationStrategy | ISelectApplicationStrategy)[];
+    private applicationStrategies: DesktopAgentStrategies[];
     private rootMessagePublisher: IRootPublisher;
 
     // Heartbeat tracking
@@ -246,7 +247,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         if (appIdentifier != null) {
             // If the selected app doesn't have an instanceId, open a new instance
-            const fullyQualifiedAppIdentifier = await this.ensureFullyQualifiedAppIdentifier(
+            const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
                 appIdentifier,
                 requestMessage.payload.context,
             );
@@ -266,7 +267,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             if (isFullyQualifiedAppIdentifier(appIdentifier)) {
                 // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
                 // try and select the existing application
-                this.selectApp(fullyQualifiedAppIdentifier);
+                this.tryToSelectApp(fullyQualifiedAppIdentifier);
             }
         } else {
             const error = isFindInstancesErrors(resolveError) ? resolveError : ResolveError.NoAppsFound;
@@ -359,7 +360,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             }
 
             // If the selected app doesn't have an instanceId, open a new instance
-            const fullyQualifiedAppIdentifier = await this.ensureFullyQualifiedAppIdentifier(
+            const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
                 resolutionResponse.app,
                 requestMessage.payload.context,
             );
@@ -381,7 +382,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             if (isFullyQualifiedAppIdentifier(resolutionResponse.app)) {
                 // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
                 // try and select the existing application
-                this.selectApp(fullyQualifiedAppIdentifier);
+                this.tryToSelectApp(fullyQualifiedAppIdentifier);
             }
 
             this.rootMessagePublisher.publishResponseMessage(
@@ -1266,13 +1267,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
     /**
      * Uses registered strategies to select an app.
+     * An app will only be selected if selection strategies have been provided and at least one returns true for canSelect()
      * This will typically be done if the user raises an intent and selects an existing app.
      * In this case we may want to restore a browser window, bring the window to the front or even switch to a div that contains an iframe that contains the app
      * THe selection mechanism is implemented by the strategy, all we do is look for the first strategy that can select the app then invoke the selectApp function
      * @param appIdentifier
      * @returns
      */
-    private async selectApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<void> {
+    private async tryToSelectApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<void> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
         if (application == null) {
@@ -1338,7 +1340,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
      * If the app already has an instanceId, it is returned as-is.
      * If not, a new instance is opened.
      */
-    private async ensureFullyQualifiedAppIdentifier(
+    private async returnOrLaunchAppInstance(
         app: AppIdentifier,
         context?: Context,
     ): Promise<FullyQualifiedAppIdentifier> {

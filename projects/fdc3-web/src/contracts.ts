@@ -271,7 +271,7 @@ export type RootDesktopAgentFactoryParams = {
     messagingProviderFactory?: MessagingProviderFactory<IRootMessagingProvider>;
     uiProvider?: UIProviderFactory;
     appDirectoryEntries?: (string | LocalAppDirectory)[];
-    applicationStrategies?: (IOpenApplicationStrategy | ISelectApplicationStrategy)[];
+    applicationStrategies?: DesktopAgentStrategies[];
     identityUrl?: string;
     /**
      * retry parameters for the root agent to retry loading the app directory urls
@@ -299,6 +299,8 @@ export type ApplicationStrategyParams = {
 export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & {
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
 };
+
+export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy;
 
 /**
  * Replaces the default mechanism used to open new applications
