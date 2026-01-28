@@ -8,8 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier, Context, DesktopAgent } from '@finos/fdc3';
-import { OpenError, ResolveError } from '@finos/fdc3';
+import type { AppIdentifier, DesktopAgent } from '@finos/fdc3';
+import { ResolveError } from '@finos/fdc3';
 import {
     FullyQualifiedAppIdentifier,
     IAppResolver,
@@ -24,18 +24,20 @@ import { isFullyQualifiedAppIdentifier } from '../helpers/index.js';
  * It will return the only app that matches the intent or context if only 1 match is found
  * If more than one match or no apps are found then an error is returned
  * If resolving app for context, it will also return an intent which handles given context and is resolved by selected app
+ *
+ * Note: This resolver only selects apps - it does not open new instances.
+ * The caller (AppDirectory) is responsible for opening new instances when
+ * an AppIdentifier without instanceId is returned.
  */
 export class DefaultResolver implements IAppResolver {
     constructor(private readonly desktopAgentPromise: Promise<DesktopAgent>) {}
 
-    public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<FullyQualifiedAppIdentifier> {
+    public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier> {
         const agent = await this.desktopAgentPromise;
 
         const appIntent = payload.appIntent ?? (await agent.findIntent(payload.intent, payload.context));
 
-        const singleInstance = await this.findSingleMatchingApp(payload.appIdentifier, appIntent.apps);
-
-        return this.openNewInstance(singleInstance, agent, payload.context);
+        return this.findSingleMatchingApp(payload.appIdentifier, appIntent.apps);
     }
 
     public async resolveAppForContext(payload: ResolveForContextPayload): Promise<ResolveForContextResponse> {
@@ -55,35 +57,12 @@ export class DefaultResolver implements IAppResolver {
         const appIdentifier = await this.findSingleMatchingApp(payload.appIdentifier, Object.values(appsLookup));
         const appIntent = intents.find(appIntent => appIntent.apps.includes(appIdentifier));
         if (appIntent != null) {
-            return this.openNewInstance(appIdentifier, agent, payload.context).then(appInstance => ({
+            return {
                 intent: appIntent.intent.name,
-                app: appInstance,
-            }));
+                app: appIdentifier,
+            };
         }
         return Promise.reject(ResolveError.NoAppsFound);
-    }
-
-    /**
-     * If the app is not an app instance a new instance will be opened and returned.
-     * If it is a fully qualified app it will be returned as is.
-     */
-    private async openNewInstance(
-        app: AppIdentifier,
-        agent: DesktopAgent,
-        context?: Context,
-    ): Promise<FullyQualifiedAppIdentifier> {
-        if (isFullyQualifiedAppIdentifier(app)) {
-            return app;
-        } else {
-            const newInstance = await agent.open(app, context);
-
-            if (isFullyQualifiedAppIdentifier(newInstance)) {
-                return newInstance;
-            } else {
-                //if instanceId is still null, error has occured, but this should be caught within open()
-                return Promise.reject(OpenError.AppNotFound);
-            }
-        }
     }
 
     private async findSingleMatchingApp(

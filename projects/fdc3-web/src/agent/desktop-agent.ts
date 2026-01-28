@@ -9,7 +9,9 @@
  * and limitations under the License. */
 
 import {
+    type AppIdentifier,
     BrowserTypes,
+    type Context,
     DesktopAgent,
     GetAgentLogLevels,
     ImplementationMetadata,
@@ -26,10 +28,12 @@ import { HEARTBEAT } from '../constants.js';
 import { IRootPublisher } from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
+    DesktopAgentStrategies,
     EventListenerKey,
     EventListenerLookup,
     FullyQualifiedAppIdentifier,
     IOpenApplicationStrategy,
+    ISelectApplicationStrategy,
     RequestMessage,
 } from '../contracts.js';
 import {
@@ -44,10 +48,13 @@ import {
     getHostManifest,
     getImplementationMetadata,
     isContext,
+    isDefined,
     isFindInstancesErrors,
     isFullyQualifiedAppIdentifier,
+    isOpenApplicationStrategy,
     isOpenError,
     isResponsePayloadError,
+    isSelectApplicationStrategy,
     isWCPGoodbye,
     LoggerFunction,
 } from '../helpers/index.js';
@@ -60,7 +67,7 @@ type RootDesktopAgentParams = {
     rootMessagePublisher: RootMessagePublisher;
     directory: AppDirectory;
     channelFactory: ChannelFactory;
-    openStrategies?: IOpenApplicationStrategy[];
+    applicationStrategies?: DesktopAgentStrategies[];
     window?: Window; //used for testing FallbackOpenStrategy
     logLevels?: GetAgentLogLevels;
 };
@@ -86,7 +93,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
     private directory: AppDirectory;
     private channelMessageHandler: ChannelMessageHandler;
-    private openStrategies: IOpenApplicationStrategy[];
+    private applicationStrategies: DesktopAgentStrategies[];
     private rootMessagePublisher: IRootPublisher;
 
     // Heartbeat tracking
@@ -113,7 +120,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         this.intentListenerCallbacks = new Map<string, (source: FullyQualifiedAppIdentifier, intent: string) => void>();
 
         //if no other strategy works, desktop agent will try the fallback strategy
-        this.openStrategies = [...(params.openStrategies ?? []), new FallbackOpenStrategy(params.window)];
+        this.applicationStrategies = [...(params.applicationStrategies ?? []), new FallbackOpenStrategy(params.window)];
     }
 
     private async onRequestMessage(
@@ -224,9 +231,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         let resolveError: any;
 
-        //selects app instance to resolve intent
+        //selects app to resolve intent (may or may not have instanceId)
         const appIdentifier = await this.directory
-            .resolveAppInstanceForIntent(
+            .resolveAppForIntent(
                 requestMessage.payload.intent,
                 requestMessage.payload.context,
                 requestMessage.payload.app,
@@ -239,21 +246,29 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         const payload: BrowserTypes.RaiseIntentResponsePayload = {};
 
         if (appIdentifier != null) {
+            // If the selected app doesn't have an instanceId, open a new instance
+            const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
+                appIdentifier,
+                requestMessage.payload.context,
+            );
+
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(appIdentifier, requestMessage.payload.intent);
+            await this.awaitIntentListener(fullyQualifiedAppIdentifier, requestMessage.payload.intent);
 
             //publishes IntentEvent to chosen app to let it know it has been selected to resolve given intent
-            this.publishIntentEvent(
-                requestMessage,
-                requestMessage.payload.intent,
-                { appId: appIdentifier.appId, instanceId: appIdentifier.instanceId },
-                source,
-            );
+            this.publishIntentEvent(requestMessage, requestMessage.payload.intent, fullyQualifiedAppIdentifier, source);
+
             //any results from chosen app resolving intent are sent in a RaiseIntentResultResponse message once intent has been resolved
             payload.intentResolution = {
                 source: appIdentifier,
                 intent: requestMessage.payload.intent,
             };
+
+            if (isFullyQualifiedAppIdentifier(appIdentifier)) {
+                // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
+                // try and select the existing application
+                this.tryToSelectApp(fullyQualifiedAppIdentifier);
+            }
         } else {
             const error = isFindInstancesErrors(resolveError) ? resolveError : ResolveError.NoAppsFound;
 
@@ -323,8 +338,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         }
 
         try {
-            //selects intent to handle context and app instance to resolve it
-            const resolutionResponse = await this.directory.resolveAppInstanceForContext(
+            //selects intent to handle context and app to resolve it
+            const resolutionResponse = await this.directory.resolveAppForContext(
                 requestMessage.payload.context,
                 requestMessage.payload.app,
             );
@@ -344,26 +359,31 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
                 return;
             }
 
-            const appIdentifier = resolutionResponse.app;
+            // If the selected app doesn't have an instanceId, open a new instance
+            const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
+                resolutionResponse.app,
+                requestMessage.payload.context,
+            );
 
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(appIdentifier, resolutionResponse.intent);
+            await this.awaitIntentListener(fullyQualifiedAppIdentifier, resolutionResponse.intent);
 
             //publishes IntentEvent to chosen app to let it know it has been selected to resolve chosen intent
-            this.publishIntentEvent(
-                requestMessage,
-                resolutionResponse.intent,
-                { appId: appIdentifier.appId, instanceId: appIdentifier.instanceId },
-                source,
-            );
+            this.publishIntentEvent(requestMessage, resolutionResponse.intent, fullyQualifiedAppIdentifier, source);
 
             //responds with chosen intent and appIdentifier of the app chosen to resolve it
             const payload = {
                 intentResolution: {
                     intent: resolutionResponse.intent,
-                    source: appIdentifier,
+                    source: fullyQualifiedAppIdentifier,
                 },
             };
+
+            if (isFullyQualifiedAppIdentifier(resolutionResponse.app)) {
+                // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
+                // try and select the existing application
+                this.tryToSelectApp(fullyQualifiedAppIdentifier);
+            }
 
             this.rootMessagePublisher.publishResponseMessage(
                 createResponseMessage<BrowserTypes.RaiseIntentForContextResponse>(
@@ -865,7 +885,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         this.proxyLog('OpenRequest application resolved', LogLevel.DEBUG, { application, source });
 
         const strategyCanOpenResults = await Promise.all(
-            this.openStrategies.map(async strategy => {
+            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => {
                 // if canOpen fails, do not use this strategy
                 const canOpen = await this.canStrategyOpenApp(
                     application,
@@ -1243,5 +1263,97 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         for (const key of callbacksToRemove) {
             this.intentListenerCallbacks.delete(key);
         }
+    }
+
+    /**
+     * Uses registered strategies to select an app.
+     * An app will only be selected if selection strategies have been provided and at least one returns true for canSelect()
+     * This will typically be done if the user raises an intent and selects an existing app.
+     * In this case we may want to restore a browser window, bring the window to the front or even switch to a div that contains an iframe that contains the app
+     * THe selection mechanism is implemented by the strategy, all we do is look for the first strategy that can select the app then invoke the selectApp function
+     * @param appIdentifier
+     * @returns
+     */
+    private async tryToSelectApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<void> {
+        const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
+
+        if (application == null) {
+            this.proxyLog('selectApp AppNotFound', LogLevel.ERROR, { appIdentifier });
+            return;
+        }
+
+        const strategyCanSelectResults = (
+            await Promise.all(
+                this.applicationStrategies.filter(isSelectApplicationStrategy).map(async strategy => {
+                    const canSelect = await this.canStrategySelectApp(appIdentifier, application, strategy).catch(
+                        () => false,
+                    );
+                    return canSelect ? strategy : undefined;
+                }),
+            )
+        ).filter(isDefined);
+
+        if (strategyCanSelectResults.length > 0) {
+            const strategy = strategyCanSelectResults[0];
+            await this.selectAppWithStrategy(appIdentifier, strategy, application);
+        }
+    }
+
+    private async canStrategySelectApp(
+        appIdentifier: FullyQualifiedAppIdentifier,
+        application: AppDirectoryApplication,
+        strategy: ISelectApplicationStrategy,
+    ): Promise<boolean> {
+        const manifest = await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
+            console.error(err),
+        );
+
+        const { hostManifests, ...appDirectoryRecord } = application;
+
+        return strategy.canSelectApp({ agent: this, appDirectoryRecord, manifest, appIdentifier });
+    }
+
+    private async selectAppWithStrategy(
+        appIdentifier: FullyQualifiedAppIdentifier,
+        strategy: ISelectApplicationStrategy,
+        appDirectoryRecord: AppDirectoryApplication,
+    ): Promise<void> {
+        const { hostManifests, ...noManifests } = appDirectoryRecord;
+
+        await strategy
+            .selectApp({
+                appIdentifier,
+                appDirectoryRecord: noManifests,
+                agent: this,
+                manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err => console.error(err)),
+            })
+            .catch(err =>
+                this.proxyLog(`Error selecting app: ${err}`, LogLevel.DEBUG, {
+                    application: appDirectoryRecord,
+                    appIdentifier,
+                }),
+            );
+    }
+
+    /**
+     * Ensures an AppIdentifier is fully qualified (has an instanceId).
+     * If the app already has an instanceId, it is returned as-is.
+     * If not, a new instance is opened.
+     */
+    private async returnOrLaunchAppInstance(
+        app: AppIdentifier,
+        context?: Context,
+    ): Promise<FullyQualifiedAppIdentifier> {
+        if (isFullyQualifiedAppIdentifier(app)) {
+            return app;
+        }
+
+        const opened = await this.open(app, context);
+
+        if (isFullyQualifiedAppIdentifier(opened)) {
+            return opened;
+        }
+
+        return Promise.reject(OpenError.AppNotFound);
     }
 }

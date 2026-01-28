@@ -31,7 +31,7 @@ const agent = await getAgent({
     new DesktopAgentFactory().createRoot({
       uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
       appDirectoryEntries: ['http://localhost:4299/v2/apps'],
-      openStrategies: [{
+      applicationStrategies: [{
         canOpen: (params: OpenApplicationStrategyParams, context?: Context) => { /* define whether an app should open */ },
         open: (params: OpenApplicationStrategyParams, context?: Context) => { /* define how an app should open */ }
       }],
@@ -117,6 +117,136 @@ const agent = await getAgent({
 ```
 
 For more advanced usage, see the [test-harness](./projects/test-harness/README.md) example app.
+
+#### Local App Directories with Live Updates
+
+Local app directories can receive live updates via an async iterator. This is useful for dynamically adding or updating app definitions at runtime:
+
+```ts
+const updates: AsyncIterator<AppDirectoryApplication | AppDirectoryApplication[]>;
+
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      appDirectoryEntries: [
+        {
+          host: 'my-domain.com',
+          apps: [
+            { appId: 'static-app', title: 'Static App', type: 'web', details: { url: 'https://example.com/static' } }
+          ],
+          updates,
+        }
+      ],
+    }),
+});
+```
+
+### Singleton Apps
+
+Apps can be configured as singletons to prevent multiple instances from being opened. When the intent resolver UI is displayed, singleton apps with an active instance will not appear in the "Open New" section. Users can only select the existing instance.
+
+Configure singleton behavior via the `hostManifests` property in your app directory entry:
+
+```ts
+{
+  appId: 'my-singleton-app',
+  title: 'My Singleton App',
+  type: 'web',
+  details: { url: 'https://example.com/singleton' },
+  hostManifests: {
+    'MorganStanley.fdc3-web': { singleton: true }
+  }
+}
+```
+
+## Custom Application Strategies
+
+Application strategies control how apps are opened and selected. There are two types of strategies:
+
+### Open Application Strategy
+
+Defines how new app instances are launched. Implement `IOpenApplicationStrategy`:
+
+```js
+import { subscribeToConnectionAttemptUuids } from "@morgan-stanley/fdc3-web";
+
+const customOpenStrategy = {
+  manifestKey: 'MyCustomManifest', // Optional: key to extract from hostManifests
+  
+  canOpen: async (params) => {
+    // Return true if this strategy can open the app
+    return params.appDirectoryRecord.type === 'web';
+  },
+  
+  open: async (params) => {
+    const newWindow = window.open(params.appDirectoryRecord.details.url);
+    // return connectionAttemptUUID received from new window
+    return new Promise(resolve => {
+        const subscriber = subscribeToConnectionAttemptUuids(
+            window, // the current window
+            newWindow,
+            connectionAttemptUuid => {
+                subscriber.unsubscribe();
+
+                resolve(connectionAttemptUuid);
+            },
+        );
+    });
+  }
+};
+```
+
+### Select Application Strategy
+
+Defines how existing app instances are focused or brought to the foreground. Implement `ISelectApplicationStrategy`:
+
+```js
+const customSelectStrategy = {
+  manifestKey: 'MyCustomManifest', // Optional: key to extract from hostManifests
+  
+  canSelectApp: async (params) => {
+    // Return true if this strategy can select/focus the app
+    return true;
+  },
+  
+  selectApp: async (params) => {
+    // Focus or bring the existing app instance to the foreground
+    // params.appIdentifier contains the instanceId of the target app
+  }
+};
+```
+
+Pass strategies when creating the root agent:
+
+```js
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      applicationStrategies: [customOpenStrategy, customSelectStrategy],
+    }),
+});
+```
+
+Strategies are evaluated in order. The first strategy where `canOpen()` or `canSelectApp()` returns `true` will be used.
+
+## Backoff Retry for App Directory Loading
+
+When loading remote app directories, the agent can retry failed requests with exponential backoff:
+
+```js
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      appDirectoryEntries: ['https://my-app-directory.com/v2/apps'],
+      backoffRetry: {
+        maxAttempts: 5,    // Maximum number of retry attempts (default: 3)
+        baseDelay: 500     // Initial delay in ms, doubles with each retry (default: 250)
+      }
+    }),
+});
+```
+
+With `baseDelay: 500` and `maxAttempts: 5`, retries would occur at approximately 500ms, 1000ms, 2000ms, and 4000ms intervals.
 
 ### Controlling Logging Levels
 

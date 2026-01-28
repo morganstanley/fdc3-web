@@ -141,7 +141,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
         expect(typeof instance.rootAppIdentifier.instanceId).toBe('string');
     });
 
-    describe(`resolveAppInstanceForIntent`, () => {
+    describe(`resolveAppForIntent`, () => {
         it(`should return passed app identifier if instance id is populated`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
@@ -152,7 +152,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 instanceId: 'instanceOne',
             };
 
-            const result = await instance.resolveAppInstanceForIntent('StartChat', { type: 'contact' }, identifier);
+            const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
             expect(result).toStrictEqual(identifier);
             expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
@@ -177,7 +177,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
 
-            const result = await instance.resolveAppInstanceForIntent('StartChat', contact, identifier);
+            const result = await instance.resolveAppForIntent('StartChat', contact, identifier);
 
             const expectedPayload: ResolveForIntentPayload = {
                 context: contact,
@@ -224,7 +224,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 appId: 'non-fully-qualified-appid',
             };
 
-            const result = instance.resolveAppInstanceForIntent('StartChat', { type: 'contact' }, identifier);
+            const result = instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
             await expect(result).rejects.toEqual(ResolveError.TargetAppUnavailable);
             expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
@@ -240,14 +240,14 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 instanceId: 'unknown-instance-id',
             };
 
-            const result = instance.resolveAppInstanceForIntent('StartChat', { type: 'contact' }, identifier);
+            const result = instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
             await expect(result).rejects.toEqual(ResolveError.TargetInstanceUnavailable);
             expect(mockResolver.withFunction('resolveAppForContext')).wasNotCalled();
         });
     });
 
-    describe(`resolveAppInstanceForContext`, () => {
+    describe(`resolveAppForContext`, () => {
         it(`should return ResolveForContextResponse containing app and intent from resolver`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
@@ -268,7 +268,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 }),
             );
 
-            const result = await instance.resolveAppInstanceForContext(contact);
+            const result = await instance.resolveAppForContext(contact);
 
             const expectedPayload: ResolveForContextPayload = {
                 context: contact,
@@ -339,7 +339,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 appId: `non-fully-qualified-app-id`,
             };
 
-            const result = instance.resolveAppInstanceForContext(contact, identifier);
+            const result = instance.resolveAppForContext(contact, identifier);
 
             await expect(result).rejects.toEqual(ResolveError.TargetAppUnavailable);
             expect(mockResolver.withFunction('resolveAppForContext')).wasNotCalled();
@@ -358,7 +358,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 instanceId: 'unknown-instance-id',
             };
 
-            const result = instance.resolveAppInstanceForContext(contact, identifier);
+            const result = instance.resolveAppForContext(contact, identifier);
 
             await expect(result).rejects.toEqual(ResolveError.TargetInstanceUnavailable);
             expect(mockResolver.withFunction('resolveAppForContext')).wasNotCalled();
@@ -1143,7 +1143,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             };
             mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
 
-            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+            await instance.resolveAppForIntent('SomeIntent', contact, undefined);
 
             expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
             expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({
@@ -1163,7 +1163,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             };
             mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
 
-            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+            await instance.resolveAppForIntent('SomeIntent', contact, undefined);
 
             expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
             expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({});
@@ -1181,7 +1181,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             };
             mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
 
-            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+            await instance.resolveAppForIntent('SomeIntent', contact, undefined);
 
             expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
             expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({});
@@ -1211,7 +1211,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             };
             mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
 
-            await instance.resolveAppInstanceForIntent('SomeIntent', contact, undefined);
+            await instance.resolveAppForIntent('SomeIntent', contact, undefined);
 
             expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
             expect(mockResolver.functionCallLookup['resolveAppForIntent']?.[0][0].appManifests).toEqual({
@@ -1234,7 +1234,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 Promise.resolve({ intent: 'SomeIntent', app: qualifiedIdentifier }),
             );
 
-            await instance.resolveAppInstanceForContext(contact, undefined);
+            await instance.resolveAppForContext(contact, undefined);
 
             expect(mockResolver.withFunction('resolveAppForContext')).wasCalledOnce();
             expect(mockResolver.functionCallLookup['resolveAppForContext']?.[0][0].appManifests).toEqual({

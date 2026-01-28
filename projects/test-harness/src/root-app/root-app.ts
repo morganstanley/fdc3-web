@@ -14,6 +14,7 @@ import './app-container.js';
 import { AppIdentifier, Channel, Context, LogLevel, OpenError } from '@finos/fdc3';
 import {
     AppDirectoryApplication,
+    ApplicationStrategyParams,
     BackoffRetryParams,
     createLogger,
     createWebAppDirectoryEntry,
@@ -23,12 +24,13 @@ import {
     getAgent,
     getAppDirectoryApplications,
     IOpenApplicationStrategy,
+    ISelectApplicationStrategy,
     isFullyQualifiedAppId,
     isWebAppDetails,
     LocalAppDirectory,
     mapLocalAppDirectory,
-    OpenApplicationStrategyParams,
     OpenApplicationStrategyResolverParams,
+    SelectApplicationStrategyParams,
     subscribeToConnectionAttemptUuids,
     WebAppDetails,
 } from '@morgan-stanley/fdc3-web';
@@ -75,8 +77,10 @@ const retryParams: BackoffRetryParams = {
  * and rendering the main UI components including the header, app containers, and settings panel.
  */
 @customElement('root-app')
-export class RootApp extends LitElement implements IOpenApplicationStrategy {
+export class RootApp extends LitElement implements IOpenApplicationStrategy, ISelectApplicationStrategy {
     private log = createLogger(RootApp, 'proxy');
+
+    private windowLookup: Record<string, WindowProxy> = {};
 
     @state()
     private appDetails: WebAppDetails[] = [];
@@ -100,7 +104,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                     rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
                     appDirectoryEntries: appDirectoryUrls, //passes in app directory web service base url
-                    openStrategies: [this],
+                    applicationStrategies: [this],
                     backoffRetry: retryParams,
                 }),
         });
@@ -130,7 +134,11 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
         return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
-    public async canOpen(params: OpenApplicationStrategyParams): Promise<boolean> {
+    /**
+     * IOpenApplicationStrategy implementation
+     */
+
+    public async canOpen(params: ApplicationStrategyParams): Promise<boolean> {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 
@@ -203,6 +211,8 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
                         return Promise.reject(`Window was null`); // TODO: use an approved error type
                     }
 
+                    params.appReadyPromise.then(identity => (this.windowLookup[identity.instanceId] = windowProxy));
+
                     return new Promise(resolve => {
                         const subscriber = subscribeToConnectionAttemptUuids(
                             window,
@@ -243,6 +253,30 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy {
 
         return Promise.reject(OpenError.ResolverUnavailable);
     }
+
+    /**
+     * IOpenApplicationStrategy implementation END
+     */
+
+    /**
+     * ISelectApplicationStrategy implementation
+     */
+
+    public async canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean> {
+        return this.windowLookup[params.appIdentifier.instanceId] != null;
+    }
+
+    public async selectApp(params: SelectApplicationStrategyParams): Promise<void> {
+        const window = this.windowLookup[params.appIdentifier.instanceId];
+        if (window != null) {
+            console.log(`Focussing window for app ${params.appIdentifier.appId}(${params.appIdentifier.instanceId})`);
+            window.focus();
+        }
+    }
+
+    /**
+     * ISelectApplicationStrategy implementation END
+     */
 
     private async initApp(): Promise<void> {
         //open all apps in root domain by default

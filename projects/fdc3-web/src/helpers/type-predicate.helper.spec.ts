@@ -17,6 +17,8 @@ import {
     isFullyQualifiedAppIdentifier,
     isIMSHostManifest,
     isNonEmptyArray,
+    isOpenApplicationStrategy,
+    isSelectApplicationStrategy,
 } from './type-predicate.helper.js';
 
 const defaultInvalidValues: unknown[] = ['', 'simpleString', [], {}, null, undefined];
@@ -66,6 +68,35 @@ describe(`type-predicate.helper`, () => {
         isIMSHostManifest,
         successTests,
         Object.values(msHostManifestTests).flatMap(value => value.failureTests),
+    );
+
+    testTypePredicate(
+        isOpenApplicationStrategy,
+        [
+            { canOpen: () => Promise.resolve(true), open: () => Promise.resolve('uuid') },
+            { canOpen: async () => true, open: async () => 'uuid', manifestKey: 'key' },
+        ],
+        [
+            { canOpen: () => Promise.resolve(true) },
+            { open: () => Promise.resolve('uuid') },
+            { canOpen: 'notAFunction', open: () => Promise.resolve('uuid') },
+            { canOpen: () => Promise.resolve(true), open: 'notAFunction' },
+        ],
+    );
+
+    testTypePredicate(
+        isSelectApplicationStrategy,
+        [
+            { canSelectApp: () => Promise.resolve(true), selectApp: () => Promise.resolve() },
+            { canSelectApp: async () => true, selectApp: async () => Promise.resolve(), manifestKey: 'key' },
+        ],
+        [
+            { canSelectApp: () => Promise.resolve(true) },
+            { selectApp: () => Promise.resolve('uuid') },
+            { canSelectApp: 'notAFunction', selectApp: () => Promise.resolve('uuid') },
+            { canSelectApp: () => Promise.resolve(true), selectApp: 'notAFunction' },
+            { canOpen: () => Promise.resolve(true), open: () => Promise.resolve('uuid') },
+        ],
     );
 
     function testTypePredicate<T>(

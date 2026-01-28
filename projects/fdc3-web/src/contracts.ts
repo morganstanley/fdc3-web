@@ -218,19 +218,29 @@ export type ResolveForContextPayload = {
     appIntents?: AppIntent[];
 };
 
+export type ResolveForIntentResponse = {
+    app: AppIdentifier;
+};
+
 export type ResolveForContextResponse = {
     intent: Intent;
-    app: FullyQualifiedAppIdentifier;
+    app: AppIdentifier;
 };
 
 /**
- * Provides a mechanism for resolving an app from an unqualified identifier, an intent, a context or a combination
+ * Provides a mechanism for resolving an app from an unqualified identifier, an intent, a context or a combination.
+ *
+ * Resolvers are responsible for selecting an app or an existing instance of an app
+ * They may return:
+ * - A FullyQualifiedAppIdentifier (with instanceId) if an existing instance was selected
+ * - An AppIdentifier (without instanceId) if a new instance of an app should be opened
+ *
  */
 export interface IAppResolver {
     /**
      * Resolves an app in response to a raiseIntent() function call
      */
-    resolveAppForIntent(payload: ResolveForIntentPayload): Promise<FullyQualifiedAppIdentifier>;
+    resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier>;
     /**
      * resolves an app in response to a raiseIntentForContext() function call
      */
@@ -261,7 +271,7 @@ export type RootDesktopAgentFactoryParams = {
     messagingProviderFactory?: MessagingProviderFactory<IRootMessagingProvider>;
     uiProvider?: UIProviderFactory;
     appDirectoryEntries?: (string | LocalAppDirectory)[];
-    openStrategies?: IOpenApplicationStrategy[];
+    applicationStrategies?: DesktopAgentStrategies[];
     identityUrl?: string;
     /**
      * retry parameters for the root agent to retry loading the app directory urls
@@ -276,7 +286,7 @@ export type ProxyDesktopAgentFactoryParams = {
     logLevels?: GetAgentLogLevels;
 };
 
-export type OpenApplicationStrategyParams = {
+export type ApplicationStrategyParams = {
     appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
     agent: DesktopAgent;
     /**
@@ -286,10 +296,16 @@ export type OpenApplicationStrategyParams = {
     context?: Context;
 };
 
-export type OpenApplicationStrategyResolverParams = OpenApplicationStrategyParams & {
+export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & {
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
 };
 
+export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy;
+
+/**
+ * Replaces the default mechanism used to open new applications
+ * This is triggered by agent.open(), agent.raiseIntent() and agent.raiseIntentForContext()
+ */
 export interface IOpenApplicationStrategy {
     /**
      * Used to identify the manifest key that is used to lookup the specific manifest from the appDirectory record's hostManifests
@@ -302,7 +318,7 @@ export interface IOpenApplicationStrategy {
      * If false is returned the strategy will not be used by the desktop agent and the next one will be tried
      */
 
-    canOpen(params: OpenApplicationStrategyParams): Promise<boolean>;
+    canOpen(params: ApplicationStrategyParams): Promise<boolean>;
 
     /**
      * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
@@ -310,4 +326,41 @@ export interface IOpenApplicationStrategy {
      * @param params
      */
     open(params: OpenApplicationStrategyResolverParams): Promise<string>;
+}
+
+export type SelectApplicationStrategyParams = {
+    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    agent: DesktopAgent;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
+    manifest?: unknown;
+    context?: Context;
+    appIdentifier: FullyQualifiedAppIdentifier;
+};
+
+/**
+ * allows an application that has already been opened to be selected or focussed
+ * This might involve restoring a minimised window or bringing a window to the front so that it is visible to the user
+ */
+export interface ISelectApplicationStrategy {
+    /**
+     * Used to identify the manifest key that is used to lookup the specific manifest from the appDirectory record's hostManifests
+     * The manifest identified through this key will then be passed to the open() and canOpen() functions
+     */
+    manifestKey?: string;
+
+    /**
+     * if the strategy is able to open a given application returns true
+     * If false is returned the strategy will not be used by the desktop agent and the next one will be tried
+     */
+
+    canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean>;
+
+    /**
+     * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
+     * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
+     * @param params
+     */
+    selectApp(params: SelectApplicationStrategyParams): Promise<void>;
 }

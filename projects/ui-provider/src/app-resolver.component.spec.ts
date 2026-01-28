@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AppIdentifier, AppIntent, Context, DesktopAgent, IntentMetadata, OpenError, ResolveError } from '@finos/fdc3';
+import { AppIdentifier, AppIntent, Context, DesktopAgent, IntentMetadata, ResolveError } from '@finos/fdc3';
 import { IMocked, Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppResolverComponent } from './app-resolver.component.js';
@@ -116,12 +116,8 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             });
         });
 
-        it("should open a new instance of an app and return it's identifier if there is only 1 matching app", async () => {
+        it('should return AppIdentifier without instanceId if there is only 1 matching app without instance (caller is responsible for opening)', async () => {
             const instance = createInstance();
-
-            mockDesktopAgent.setupFunction('open', (_name, _context) =>
-                Promise.resolve({ appId: 'app-six', instanceId: 'newInstance' }),
-            );
 
             const appIdentifierPromise = instance.resolveAppForIntent({
                 intent: intent.name,
@@ -132,8 +128,8 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await expect(appIdentifierPromise).resolves.toEqual({
                 appId: 'app-six',
-                instanceId: 'newInstance',
             });
+            expect(mockDesktopAgent.withFunction('open')).wasNotCalled();
         });
 
         it('should throw an error if there are no matching apps', async () => {
@@ -141,13 +137,12 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             const appIdentifierPromise = instance.resolveAppForIntent({
                 intent: intent.name,
-                // you would not normally pass a fully qualified identifier but we want to make sure that it is returned if we do
                 appIdentifier: { appId: 'unknown-app-id' },
                 context,
                 appManifests: {},
             });
 
-            await expect(appIdentifierPromise).rejects.toEqual(OpenError.AppNotFound);
+            await expect(appIdentifierPromise).rejects.toEqual(ResolveError.NoAppsFound);
         });
 
         it('should add popup html to body with active instances and inactive apps that can handle given intent', () => {
@@ -243,10 +238,10 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             expect(instance.forIntentPopupState?.inactiveApps.map(app => app.appId)).toEqual(['app-one', 'app-six']);
         });
 
-        it('should call open() on desktop agent with appIdentifier user chose if appIdentifier is not FullyQualified', async () => {
+        it('should return AppIdentifier without instanceId when user selects an inactive app (caller is responsible for opening)', async () => {
             const instance = createInstance();
 
-            instance.resolveAppForIntent({
+            const promise = instance.resolveAppForIntent({
                 intent: intent.name,
                 context,
                 appManifests: {},
@@ -272,9 +267,8 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                     ) as HTMLElement
             ).click();
 
-            await wait();
-
-            expect(mockDesktopAgent.withFunction('open')).wasCalledOnce();
+            await expect(promise).resolves.toEqual({ appId: 'app-one' });
+            expect(mockDesktopAgent.withFunction('open')).wasNotCalled();
         });
 
         it('should return promise which resolves to FullyQualifiedAppIdentifier chosen by user', async () => {
@@ -474,10 +468,10 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             ]);
         });
 
-        it('should call open() on desktop agent with appIdentifier user chose if appIdentifier is not FullyQualified', async () => {
+        it('should return AppIdentifier without instanceId when user selects an inactive app (caller is responsible for opening)', async () => {
             const instance = createInstance();
 
-            instance.resolveAppForContext({ context, appManifests: {} });
+            const promise = instance.resolveAppForContext({ context, appManifests: {} });
 
             await wait();
 
@@ -499,12 +493,11 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                     ) as HTMLElement
             ).click();
 
-            await wait();
-
-            expect(mockDesktopAgent.withFunction('open')).wasCalledOnce();
+            await expect(promise).resolves.toEqual({ intent: intent.name, app: { appId: 'app-one' } });
+            expect(mockDesktopAgent.withFunction('open')).wasNotCalled();
         });
 
-        it('should return promise which resolves to ResolveForContextResponse containing FullyQualifiedAppIdentifier and intent chosen by user', async () => {
+        it('should return promise which resolves to ResolveForContextResponse containing AppIdentifier and intent chosen by user', async () => {
             const instance = createInstance();
 
             const appIntentPromise = instance.resolveAppForContext({ context, appManifests: {} });

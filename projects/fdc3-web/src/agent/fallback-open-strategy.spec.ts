@@ -20,7 +20,7 @@ import {
 } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplicationType } from '../app-directory.contracts.js';
-import { OpenApplicationStrategyParams } from '../contracts.js';
+import { ApplicationStrategyParams } from '../contracts.js';
 import * as helpersImport from '../helpers/index.js';
 import { FallbackOpenStrategy } from './fallback-open-strategy.js';
 
@@ -148,7 +148,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
         it(`should reject Promise with OpenError.ErrorOnLaunch message if app is not a web app with a valid url`, async () => {
             const instance = createInstance(mockWindow.mock);
 
-            const params: OpenApplicationStrategyParams = {
+            const params: ApplicationStrategyParams = {
                 appDirectoryRecord: mockedIncorrectOtherApplication,
                 agent: mockDesktopAgent.mock,
             };
@@ -159,7 +159,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
         it(`should reject Promise with OpenError.ErrorOnLaunch message if web app could not be opened in new window`, async () => {
             const instance = createInstance(mockWindow.mock);
 
-            const params: OpenApplicationStrategyParams = {
+            const params: ApplicationStrategyParams = {
                 appDirectoryRecord: mockedIncorrectWebApplication,
                 agent: mockDesktopAgent.mock,
             };
@@ -170,7 +170,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
         it(`should return fullyQualifiedAppIdentifier if web app was successfully opened in a new window`, async () => {
             const instance = createInstance(mockWindow.mock);
 
-            const params: OpenApplicationStrategyParams = {
+            const params: ApplicationStrategyParams = {
                 appDirectoryRecord: mockedApplication,
                 agent: mockDesktopAgent.mock,
             };
