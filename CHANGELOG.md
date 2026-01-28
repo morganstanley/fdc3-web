@@ -61,6 +61,20 @@ open(params: OpenApplicationStrategyResolverParams): Promise<string>;
     }
 }
  ```
+  * `applicationStrategies` parameter in `RootDesktopAgentFactoryParams` now accepts `(IOpenApplicationStrategy | ISelectApplicationStrategy)[]` instead of just `IOpenApplicationStrategy[]`
+ * `ISelectApplicationStrategy` - new interface for selecting/focusing existing application instances. This allows strategies to restore minimised windows or bring windows to the front. Define strategies with `canSelectApp()` and `selectApp()` methods:
+
+ ```ts
+export interface ISelectApplicationStrategy {
+    manifestKey?: string;
+    canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean>;
+    selectApp(params: SelectApplicationStrategyParams): Promise<void>;
+}
+ ```
+
+ ### Changed
+
+  * IAppResolver  implementations no longer have to return an `FullyQualifiedAppIdentifier`. Instead they can just return an `AppIdentifier`. If a non-qualified identifier is returned the Desktop Agent will handle the responsibility of opening a new instance of that app.
 
 ## 0.9.2 (2025-12-01)
 
