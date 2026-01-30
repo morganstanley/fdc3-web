@@ -8,15 +8,18 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier, AppIntent, Context, DesktopAgent, Intent } from '@finos/fdc3';
+import type { AppIdentifier, AppIntent, DesktopAgent } from '@finos/fdc3';
 import { ResolveError } from '@finos/fdc3';
 import { IMocked, Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ResolveForContextPayload, ResolveForIntentPayload } from '../contracts.js';
+import {
+    AppHostManifestLookup,
+    ResolveForContextPayload,
+    ResolveForContextResponse,
+    ResolveForIntentPayload,
+} from '../contracts.js';
+import { isDefined } from '../helpers/type-predicate.helper.js';
 import { DefaultResolver } from './app-resolver.default.js';
-
-const mockedTargetAppId = 'target-app-id';
-const mockedTargetInstanceId = 'target-instanceid';
 
 describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
     let mockAgent: IMocked<DesktopAgent>;
@@ -42,116 +45,126 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
         { appsInPayload: false, message: '(apps not in payload)' },
     ];
 
+    function create(id: number, instanceId?: number): AppIdentifier {
+        const identifier: AppIdentifier = { appId: String(id) };
+
+        if (instanceId != null) {
+            return { ...identifier, instanceId: String(instanceId) };
+        }
+
+        return identifier;
+    }
+
+    interface ResolveIntentTest {
+        message: string;
+        apps: AppIdentifier[];
+        /**
+         * index of the expected app. If undefined then we expect an error
+         */
+        expected?: number;
+        /**
+         * optional app Id to filter the available apps
+         */
+        filter?: number;
+        /**
+         * optional app id of singleton apps
+         */
+        singleton?: number | number[];
+    }
+
+    const scenarios: ResolveIntentTest[] = [
+        { message: `return an error when no apps available`, apps: [] },
+        { message: `return single app when only 1 available`, apps: [create(1)], expected: 0 },
+        { message: `throw an error when multiple apps available`, apps: [create(1), create(1, 1), create(2)] },
+        {
+            message: `throw an error when multiple apps match the appId`,
+            apps: [create(1), create(2), create(3), create(2, 1)],
+            filter: 2,
+        },
+        {
+            message: `throw an error when no apps match the appId`,
+            apps: [create(1), create(2), create(3), create(2, 1)],
+            filter: 6,
+        },
+        {
+            message: `return only matching app when appId only matches one app`,
+            apps: [create(1), create(2), create(3)],
+            filter: 2,
+            expected: 1,
+        },
+        {
+            message: `return inactive app when app is singleton and no active apps passed`,
+            apps: [create(1)],
+            singleton: 1,
+            expected: 0,
+        },
+        {
+            message: `return only active app when app is singleton and active and inactive passed`,
+            apps: [create(1), create(1, 1)],
+            singleton: 1,
+            expected: 1,
+        },
+        {
+            message: `throw error for singleton app when multiple active instances passed`,
+            apps: [create(1), create(1, 1), create(1, 2), create(1, 3)],
+            singleton: 1,
+        },
+        {
+            message: `throw an error when multiple singleton apps passed`,
+            apps: [create(1), create(1, 1), create(2), create(2, 2), create(3), create(3, 3)],
+            singleton: [1, 2, 3],
+        },
+        {
+            message: `throw an error when multiple singleton apps present`,
+            apps: [create(1), create(2), create(2, 2), create(3), create(4), create(4, 4)],
+            singleton: [1, 2, 3],
+        },
+    ];
+
     withOrWithoutPayload.forEach(({ message, appsInPayload }) => {
         describe(`resolveAppForIntent ${message}`, () => {
-            it(`should return app in payload if only 1 app present`, async () => {
-                const instance = createInstance();
+            scenarios.forEach(({ message, apps, expected, filter, singleton }) => {
+                it(`should ${message}`, async () => {
+                    const instance = createInstance();
 
-                const payload = createIntentPayload(appsInPayload, [
-                    { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                ]);
+                    const filterApp = filter != null ? { appId: String(filter) } : undefined;
+                    const singletonLookup = (Array.isArray(singleton) ? singleton : [singleton])
+                        .filter(isDefined)
+                        .map(String)
+                        .reduce<AppHostManifestLookup>(
+                            (lookup, appId) => ({ ...lookup, [appId]: { singleton: true } }),
+                            {},
+                        );
+                    const payload = createIntentPayload(appsInPayload, apps, filterApp, singletonLookup);
+                    const expectedApp = expected != null ? apps[expected] : undefined;
 
-                await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({
-                    appId: mockedTargetAppId,
-                    instanceId: mockedTargetInstanceId,
+                    if (expectedApp != null) {
+                        await expect(instance.resolveAppForIntent(payload)).resolves.toBe(expectedApp);
+                    } else {
+                        await expect(instance.resolveAppForIntent(payload)).rejects.toBe(ResolveError.NoAppsFound);
+                    }
+
+                    if (appsInPayload) {
+                        expect(mockAgent.withFunction('findIntent')).wasNotCalled();
+                    } else {
+                        expect(
+                            mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
+                        ).wasCalledOnce();
+                    }
                 });
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
-                    ).wasCalledOnce();
-                }
             });
 
-            it(`should return app if only 1 fully qualified app present with correct id`, async () => {
-                const instance = createInstance();
-
-                const payload = createIntentPayload(appsInPayload, [
-                    { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                    { appId: 'another-app-id', instanceId: 'another-instance-id' },
-                ]);
-
-                await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({
-                    appId: mockedTargetAppId,
-                    instanceId: mockedTargetInstanceId,
-                });
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should return app without instanceId if only 1 matching app has no instance id`, async () => {
-                const instance = createInstance();
-
-                const payload = createIntentPayload(appsInPayload, [
-                    { appId: mockedTargetAppId },
-                    { appId: 'another-app-id' },
-                ]);
-
-                await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({
-                    appId: mockedTargetAppId,
-                });
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should return an error if more than one app matches`, async () => {
-                const instance = createInstance();
-
-                const payload = createIntentPayload(appsInPayload, [
-                    { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                    { appId: mockedTargetAppId, instanceId: 'anotherInstanceId' },
-                ]);
-
-                await expect(instance.resolveAppForIntent(payload)).rejects.toBe(ResolveError.NoAppsFound);
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should not select only app if appId is defined and does not match`, async () => {
-                const instance = createInstance();
-
-                const payload = createIntentPayload(appsInPayload, [
-                    { appId: 'otherAppId', instanceId: 'otherInstanceId' },
-                ]);
-                await expect(instance.resolveAppForIntent(payload)).rejects.toBe(ResolveError.NoAppsFound);
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntent')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntent').withParameters(payload.intent, payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            function createIntentPayload(appsInPayload: boolean, apps: AppIdentifier[]): ResolveForIntentPayload {
+            function createIntentPayload(
+                appsInPayload: boolean,
+                apps: AppIdentifier[],
+                appIdentifier?: AppIdentifier,
+                appManifests: AppHostManifestLookup = {},
+            ): ResolveForIntentPayload {
                 const payload: ResolveForIntentPayload = {
                     context: { type: 'contact' },
-                    appIdentifier: {
-                        appId: mockedTargetAppId,
-                    },
+                    appIdentifier,
                     intent: 'StartEmail',
-                    appManifests: {},
+                    appManifests,
                 };
 
                 if (appsInPayload) {
@@ -172,166 +185,107 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
             }
         });
 
+        type IntentApps = { intent: string; apps: AppIdentifier[] };
+
+        interface ResolveContextTest extends Omit<ResolveIntentTest, 'apps' | 'expected'> {
+            intents: IntentApps[];
+            // the index of the intent and the app within the intent that is expected to be returned
+            expected?: { app: number; intent: number };
+        }
+
+        const contextScenarios: ResolveContextTest[] = [
+            ...scenarios.map(scenario => ({
+                ...scenario,
+                intents: [{ intent: 'SendEmail', apps: scenario.apps }],
+                expected: scenario.expected != null ? { intent: 0, app: scenario.expected } : undefined,
+            })),
+            { message: `return an error when no intents available`, intents: [] },
+            {
+                message: 'return error if multiple apps across multiple intents',
+                intents: [
+                    { intent: 'SendEmail', apps: [create(1)] },
+                    { intent: 'StartChat', apps: [create(2)] },
+                ],
+            },
+            {
+                message: 'return error when multiple apps across intents match appId',
+                intents: [
+                    { intent: 'SendEmail', apps: [create(1)] },
+                    { intent: 'StartChat', apps: [create(1)] },
+                    { intent: 'StartCall', apps: [create(2), create(1, 1)] },
+                ],
+                filter: 1,
+            },
+            {
+                message: 'return matching app when only 1 matches appId',
+                intents: [
+                    { intent: 'SendEmail', apps: [create(1)] },
+                    { intent: 'StartChat', apps: [create(1)] },
+                    { intent: 'StartCall', apps: [create(2), create(1, 1)] },
+                ],
+                filter: 2,
+                expected: { intent: 2, app: 0 },
+            },
+            {
+                message: 'return only active app across intents when app is singleton',
+                intents: [
+                    { intent: 'SendEmail', apps: [create(1)] },
+                    { intent: 'StartChat', apps: [create(1)] },
+                    { intent: 'StartCall', apps: [create(1), create(1, 1)] },
+                ],
+                singleton: 1,
+                expected: { intent: 2, app: 1 },
+            },
+        ];
+
         describe(`resolveAppForContext ${message}`, () => {
-            it(`should return ResolveForContextResponse containing only app in payload if only 1 app present`, async () => {
-                const instance = createInstance();
+            contextScenarios.forEach(({ message, intents, expected, filter, singleton }) => {
+                it(`should ${message}`, async () => {
+                    const instance = createInstance();
 
-                const payload = createContextPayload(appsInPayload, [
-                    { intent: 'SendEmail', apps: [{ appId: mockedTargetAppId, instanceId: mockedTargetInstanceId }] },
-                ]);
+                    const filterApp = filter != null ? { appId: String(filter) } : undefined;
+                    const singletonLookup = (Array.isArray(singleton) ? singleton : [singleton])
+                        .filter(isDefined)
+                        .map(String)
+                        .reduce<AppHostManifestLookup>(
+                            (lookup, appId) => ({ ...lookup, [appId]: { singleton: true } }),
+                            {},
+                        );
+                    const payload = createContextPayload(appsInPayload, intents, filterApp, singletonLookup);
 
-                await expect(instance.resolveAppForContext(payload)).resolves.toEqual({
-                    intent: 'SendEmail',
-                    app: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    let expectedResult: ResolveForContextResponse | undefined;
+
+                    if (expected != null) {
+                        const intent = intents[expected.intent];
+                        expectedResult = { intent: intent.intent, app: intent.apps[expected.app] };
+                    }
+
+                    if (expectedResult != null) {
+                        await expect(instance.resolveAppForContext(payload)).resolves.toEqual(expectedResult);
+                    } else {
+                        await expect(instance.resolveAppForContext(payload)).rejects.toBe(ResolveError.NoAppsFound);
+                    }
+
+                    if (appsInPayload) {
+                        expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
+                    } else {
+                        expect(
+                            mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
+                        ).wasCalledOnce();
+                    }
                 });
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should return ResolveForContextResponse containing only app in payload if only 1 app present and returned for multiple intents`, async () => {
-                const instance = createInstance();
-
-                const payload = createContextPayload(appsInPayload, [
-                    { intent: 'SendEmail', apps: [{ appId: mockedTargetAppId, instanceId: mockedTargetInstanceId }] },
-                    { intent: 'StartChat', apps: [{ appId: mockedTargetAppId, instanceId: mockedTargetInstanceId }] },
-                ]);
-
-                await expect(instance.resolveAppForContext(payload)).resolves.toEqual({
-                    intent: 'StartChat',
-                    app: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                });
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should return ResolveForContextResponse containing app if only 1 app present with correct id`, async () => {
-                const instance = createInstance();
-
-                const payload = createContextPayload(appsInPayload, [
-                    {
-                        intent: 'SendEmail',
-                        apps: [
-                            { appId: 'another-one-id', instanceId: 'another-one-instance-id' },
-                            { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                        ],
-                    },
-                    { intent: 'SendEmail', apps: [{ appId: 'another-two-id', instanceId: 'another-two-instance-id' }] },
-                ]);
-
-                await expect(instance.resolveAppForContext(payload)).resolves.toEqual({
-                    intent: 'SendEmail',
-                    app: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                });
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should return an error if more than one app across intents matches`, async () => {
-                const instance = createInstance();
-
-                const payload = createContextPayload(appsInPayload, [
-                    { intent: 'SendEmail', apps: [{ appId: mockedTargetAppId, instanceId: mockedTargetInstanceId }] },
-                    { intent: 'StartChat', apps: [{ appId: mockedTargetAppId, instanceId: 'another-instance-id' }] },
-                ]);
-
-                await expect(instance.resolveAppForContext(payload)).rejects.toBe(ResolveError.NoAppsFound);
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should return an error if more than one app within an intent matches`, async () => {
-                const instance = createInstance();
-
-                const payload = createContextPayload(appsInPayload, [
-                    {
-                        intent: 'SendEmail',
-                        apps: [
-                            { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                            { appId: mockedTargetAppId, instanceId: 'another-instance-id' },
-                        ],
-                    },
-                ]);
-
-                await expect(instance.resolveAppForContext(payload)).rejects.toBe(ResolveError.NoAppsFound);
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it('should return an error if no intent found', async () => {
-                const instance = createInstance();
-
-                const payload = createContextPayload(appsInPayload, [], { type: 'unknownContext' });
-
-                await expect(instance.resolveAppForContext(payload)).rejects.toEqual(ResolveError.NoAppsFound);
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
-            });
-
-            it(`should not select only app if appId is defined and does not match`, async () => {
-                const instance = createInstance();
-
-                const payload = createContextPayload(appsInPayload, [
-                    { intent: 'SendEmail', apps: [{ appId: 'otherAppId', instanceId: 'otherInstanceId' }] },
-                ]);
-
-                await expect(instance.resolveAppForContext(payload)).rejects.toBe(ResolveError.NoAppsFound);
-
-                if (appsInPayload) {
-                    expect(mockAgent.withFunction('findIntentsByContext')).wasNotCalled();
-                } else {
-                    expect(
-                        mockAgent.withFunction('findIntentsByContext').withParameters(payload.context),
-                    ).wasCalledOnce();
-                }
             });
 
             function createContextPayload(
                 appsInPayload: boolean,
-                intents: { intent: Intent; apps: AppIdentifier[] }[],
-                context: Context = { type: 'contact' },
+                intents: IntentApps[],
+                appIdentifier?: AppIdentifier,
+                appManifests: AppHostManifestLookup = {},
             ): ResolveForContextPayload {
                 const payload: ResolveForContextPayload = {
-                    context: context,
-                    appIdentifier: {
-                        appId: mockedTargetAppId,
-                    },
-                    appManifests: {},
+                    context: { type: 'contact' },
+                    appIdentifier,
+                    appManifests,
                 };
 
                 const appIntents: AppIntent[] = intents.map(intentAndApps => ({
@@ -343,9 +297,7 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
                     payload.appIntents = appIntents;
                 }
 
-                mockAgent.setupFunction('findIntentsByContext', contextParam =>
-                    Promise.resolve(contextParam.type === context.type ? appIntents : []),
-                );
+                mockAgent.setupFunction('findIntentsByContext', () => Promise.resolve(appIntents));
 
                 return payload;
             }

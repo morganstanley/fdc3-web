@@ -8,16 +8,15 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier, DesktopAgent } from '@finos/fdc3';
+import type { AppIdentifier, AppMetadata, DesktopAgent } from '@finos/fdc3';
 import { ResolveError } from '@finos/fdc3';
 import {
-    FullyQualifiedAppIdentifier,
     IAppResolver,
     ResolveForContextPayload,
     ResolveForContextResponse,
     ResolveForIntentPayload,
 } from '../contracts.js';
-import { isFullyQualifiedAppIdentifier } from '../helpers/index.js';
+import { filterActiveApps, filterInactiveApps } from '../helpers/index.js';
 
 /**
  * If no IUIProvider is present then this class is used to resolve apps.
@@ -37,31 +36,58 @@ export class DefaultResolver implements IAppResolver {
 
         const appIntent = payload.appIntent ?? (await agent.findIntent(payload.intent, payload.context));
 
-        return this.findSingleMatchingApp(payload.appIdentifier, appIntent.apps);
+        const activeApps = appIntent.apps.filter(filterActiveApps);
+        const inactiveApps = appIntent.apps.filter(app => filterInactiveApps(app, activeApps, payload.appManifests));
+
+        return this.findSingleMatchingApp(payload.appIdentifier, [...activeApps, ...inactiveApps]);
     }
 
     public async resolveAppForContext(payload: ResolveForContextPayload): Promise<ResolveForContextResponse> {
         const agent = await this.desktopAgentPromise;
 
-        const intents = payload.appIntents ?? (await agent.findIntentsByContext(payload.context));
+        const appIntents = payload.appIntents ?? (await agent.findIntentsByContext(payload.context));
 
-        const appsLookup = intents
-            .flatMap(intent => intent.apps)
-            .filter(isFullyQualifiedAppIdentifier)
-            // remove duplicate apps that might be registered for multiple intents
-            .reduce<Record<string, FullyQualifiedAppIdentifier>>(
-                (lookup, app) => ({ ...lookup, [app.instanceId]: app }),
-                {},
-            );
+        // keep a track of all active apps so we can determine if we are able to open a new instance of an app marked as a singleton
+        const globalActiveInstances = appIntents.flatMap(intent => intent.apps).filter(filterActiveApps);
 
-        const appIdentifier = await this.findSingleMatchingApp(payload.appIdentifier, Object.values(appsLookup));
-        const appIntent = intents.find(appIntent => appIntent.apps.includes(appIdentifier));
-        if (appIntent != null) {
+        const intentLookup =
+            //collects all apps and app instances that can handle each intent
+            appIntents
+                //filters out intents which cannot be handled by given AppIdentifier if one is provided
+                .map(appIntent => {
+                    const apps =
+                        payload.appIdentifier != null
+                            ? appIntent.apps.filter(app => app.appId === payload.appIdentifier?.appId)
+                            : appIntent.apps;
+
+                    return { ...appIntent, apps };
+                })
+                .filter(appIntent => appIntent.apps.length > 0)
+                .reduce<Record<string, { activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] }>>(
+                    (lookup, appIntent) => {
+                        //active app instances that can handle given intent
+                        const activeInstances = appIntent.apps.filter(filterActiveApps);
+                        //apps that can handle given intent (excluding singletons which already have an active instance)
+                        const inactiveApps = appIntent.apps.filter(app =>
+                            filterInactiveApps(app, globalActiveInstances, payload.appManifests),
+                        );
+
+                        return { ...lookup, [appIntent.intent.name]: { activeInstances, inactiveApps } };
+                    },
+                    {},
+                );
+
+        const appCandidates = Object.entries(intentLookup).flatMap(([intent, apps]) =>
+            [...apps.activeInstances, ...apps.inactiveApps].map(app => ({ intent, app })),
+        );
+
+        if (appCandidates.length === 1) {
             return {
-                intent: appIntent.intent.name,
-                app: appIdentifier,
+                intent: appCandidates[0].intent,
+                app: { appId: appCandidates[0].app.appId, instanceId: appCandidates[0].app.instanceId },
             };
         }
+
         return Promise.reject(ResolveError.NoAppsFound);
     }
 
