@@ -11,7 +11,12 @@
 import { AppMetadata, BrowserTypes, ImplementationMetadata } from '@finos/fdc3';
 import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
 import { defaultBackoffRetry, FDC3_PROVIDER, FDC3_VERSION } from '../constants.js';
-import { BackoffRetryParams, FullyQualifiedAppId, FullyQualifiedAppIdentifier } from '../contracts.js';
+import {
+    AppHostManifestLookup,
+    BackoffRetryParams,
+    FullyQualifiedAppId,
+    FullyQualifiedAppIdentifier,
+} from '../contracts.js';
 import { isFullyQualifiedAppId } from './type-predicate.helper.js';
 
 export type FullyQualifiedAppDirectoryApplication = AppDirectoryApplication & { appId: FullyQualifiedAppId };
@@ -135,4 +140,29 @@ export function createWebAppDirectoryEntry(
     directoryDetails: Partial<Omit<AppDirectoryApplication, 'appId' | 'title' | 'type' | 'details'>> = {},
 ): AppDirectoryApplication {
     return { appId, title, type: 'web', details: { url }, ...directoryDetails };
+}
+
+/**
+ * Filters app records (without instanceId) to determine which can be opened as new instances.
+ * Returns true if:
+ * - The app has no instanceId (is an app record, not an active instance), AND
+ * - Either the app is not a singleton, OR no active instance of this app exists
+ * This excludes singleton apps from the "open new" list when they already have a running instance.
+ */
+export function filterInactiveApps(
+    app: AppMetadata,
+    activeInstances: AppMetadata[],
+    appManifests: AppHostManifestLookup,
+): boolean {
+    return (
+        app.instanceId == null &&
+        (appManifests[app.appId]?.singleton !== true || !activeInstances.some(instance => instance.appId === app.appId))
+    );
+}
+
+/**
+ * Filters to include only active app instances (apps with an instanceId).
+ */
+export function filterActiveApps(app: AppMetadata): boolean {
+    return app.instanceId != null;
 }

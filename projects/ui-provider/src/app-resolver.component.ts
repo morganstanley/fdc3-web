@@ -11,7 +11,8 @@
 import type { AppIdentifier, AppMetadata, Context, DesktopAgent, Icon, Intent } from '@finos/fdc3';
 import { ResolveError } from '@finos/fdc3';
 import {
-    AppHostManifestLookup,
+    filterActiveApps,
+    filterInactiveApps,
     IAppResolver,
     ResolveForContextPayload,
     ResolveForContextResponse,
@@ -180,18 +181,23 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         if (payload.appIdentifier != null) {
             apps = apps.filter(app => app.appId === payload.appIdentifier?.appId);
         }
-        if (apps.length === 1 && apps[0] != null) {
-            return apps[0].instanceId != null
-                ? { appId: apps[0].appId, instanceId: apps[0].instanceId }
-                : { appId: apps[0].appId };
+
+        const activeInstances = apps.filter(app => app.instanceId != null);
+        const inactiveApps = apps.filter(app => filterInactiveApps(app, activeInstances, payload.appManifests));
+
+        // active and inactive apps. If we only have 1 then we can return it straight away
+        const candidates = [...activeInstances, ...inactiveApps];
+
+        if (candidates.length === 1 && candidates[0] != null) {
+            return candidates[0];
         }
-        if (apps.length === 0) {
+
+        if (candidates.length === 0) {
             return Promise.reject(ResolveError.NoAppsFound);
         }
-        const activeInstances = apps.filter(app => app.instanceId != null);
-        const inactiveApps = apps.filter(app => this.filterInactiveApps(app, activeInstances, payload.appManifests));
 
         this._forIntentPopupState = { name: appIntent.intent.name, activeInstances, inactiveApps };
+
         this.togglePopup();
         return (await this.getSelectedApp()).app;
     }
@@ -200,35 +206,52 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         const agent = await this.desktopAgentPromise;
 
         const appIntents = payload.appIntents ?? (await agent.findIntentsByContext(payload.context));
-        const tempState: Record<string, { activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] }> = {};
-        appIntents
-            //filters out intents which cannot be handled by given AppIdentifier if one is provided
-            .map(appIntent => {
-                const apps =
-                    payload.appIdentifier != null
-                        ? appIntent.apps.filter(app => app.appId === payload.appIdentifier?.appId)
-                        : appIntent.apps;
 
-                return { ...appIntent, apps };
-            })
-            .filter(appIntent => appIntent.apps.length > 0)
+        // keep a track of all active apps so we can determine if we are able to open a new instance of an app marked as a singleton
+        const globalActiveInstances = appIntents.flatMap(intent => intent.apps).filter(filterActiveApps);
+
+        const intentLookup =
             //collects all apps and app instances that can handle each intent
-            .forEach(appIntent => {
-                //active app instances that can handle given intent
-                const activeInstances = appIntent.apps.filter(app => app.instanceId != null);
-                //apps that can handle given intent (excluding singletons which already have an active instance)
-                const inactiveApps = appIntent.apps.filter(app =>
-                    this.filterInactiveApps(app, activeInstances, payload.appManifests),
-                );
-                tempState[appIntent.intent.name] = { activeInstances, inactiveApps };
-            });
+            appIntents
+                //filters out intents which cannot be handled by given AppIdentifier if one is provided
+                .map(appIntent => {
+                    const apps =
+                        payload.appIdentifier != null
+                            ? appIntent.apps.filter(app => app.appId === payload.appIdentifier?.appId)
+                            : appIntent.apps;
 
-        if (Object.keys(tempState).length === 0) {
+                    return { ...appIntent, apps };
+                })
+                .filter(appIntent => appIntent.apps.length > 0)
+                .reduce<Record<string, { activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] }>>(
+                    (lookup, appIntent) => {
+                        //active app instances that can handle given intent
+                        const activeInstances = appIntent.apps.filter(filterActiveApps);
+                        //apps that can handle given intent (excluding singletons which already have an active instance)
+                        const inactiveApps = appIntent.apps.filter(app =>
+                            filterInactiveApps(app, globalActiveInstances, payload.appManifests),
+                        );
+
+                        return { ...lookup, [appIntent.intent.name]: { activeInstances, inactiveApps } };
+                    },
+                    {},
+                );
+
+        const appCandidates = Object.entries(intentLookup).flatMap(([intent, apps]) =>
+            [...apps.activeInstances, ...apps.inactiveApps].map(app => ({ intent, app })),
+        );
+
+        if (appCandidates.length === 1) {
+            return {
+                intent: appCandidates[0].intent,
+                app: appCandidates[0].app,
+            };
+        } else if (appCandidates.length === 0) {
             return Promise.reject(ResolveError.NoAppsFound);
         }
 
         this._passedContext = payload.context;
-        this._forContextPopupState = tempState;
+        this._forContextPopupState = intentLookup;
         this.togglePopup();
         return this.getSelectedApp();
     }
@@ -260,18 +283,6 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         this._forIntentPopupState = null;
         this._forContextPopupState = null;
         this.togglePopup();
-    }
-
-    private filterInactiveApps(
-        app: AppMetadata,
-        activeInstances: AppMetadata[],
-        appManifests: AppHostManifestLookup,
-    ): boolean {
-        return (
-            app.instanceId == null &&
-            (appManifests[app.appId]?.singleton !== true ||
-                !activeInstances.some(instance => instance.appId === app.appId))
-        );
     }
 
     /**
