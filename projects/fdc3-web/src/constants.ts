@@ -47,5 +47,3 @@ export const defaultBackoffRetry: Required<BackoffRetryParams> = {
     maxAttempts: 3,
     baseDelay: 250,
 };
-
-export const MS_HOST_MANIFEST_KEY = 'MorganStanley.fdc3-web';
