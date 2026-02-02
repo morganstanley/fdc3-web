@@ -67,7 +67,7 @@
         "sass-embedded": "^1.97.3",
         "swc-loader": "0.2.7",
         "tslib": "^2.8.1",
-        "typedoc": "^0.28.15",
+        "typedoc": "^0.28.16",
         "typescript": "~5.9.3",
         "typescript-eslint": "^8.54.0",
         "uuid": "^11.1.0",
