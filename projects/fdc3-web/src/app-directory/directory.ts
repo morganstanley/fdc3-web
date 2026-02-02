@@ -18,8 +18,7 @@ import {
     OpenError,
     ResolveError,
 } from '@finos/fdc3';
-import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
-import { MS_HOST_MANIFEST_KEY } from '../constants.js';
+import { AppDirectoryApplication, LocalAppDirectory, MS_HOST_MANIFEST_KEY } from '../app-directory.contracts.js';
 import {
     AppHostManifestLookup,
     BackoffRetryParams,
