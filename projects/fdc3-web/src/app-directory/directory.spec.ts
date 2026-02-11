@@ -39,6 +39,11 @@ const mockedAppIdThree = `app-id-three@mock-app-directory`;
 const mockedAppIdFour = `app-id-four@mock-app-directory`;
 
 const mockedAppDirectoryUrl = `https://mock-app-directory`;
+const mockedAlternateAppDirectoryUrl = `https://mock-alternate-directory`;
+
+const appOneAlternateUrl = 'https://mock-alternate-url-one';
+const appTwoAlternateUrl = 'https://mock-alternate-url-two';
+const appThreeAlternateUrl = 'https://mock-alternate-url-three';
 
 const mockedApplicationType: AppDirectoryApplicationType = 'web';
 const mockedApplicationOne: AppDirectoryApplication = {
@@ -107,10 +112,19 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         mockedHelpers.setup(
             setupFunction('getAppDirectoryApplications', url => {
-                if (url === mockedAppDirectoryUrl) {
-                    return Promise.resolve([mockedApplicationOne, mockedApplicationTwo, mockedApplicationThree]);
-                } else {
-                    return Promise.reject('Error occurred when reading apps from app directory');
+                switch (url) {
+                    case mockedAppDirectoryUrl:
+                        return Promise.resolve([mockedApplicationOne, mockedApplicationTwo, mockedApplicationThree]);
+
+                    case mockedAlternateAppDirectoryUrl:
+                        return Promise.resolve([
+                            { ...mockedApplicationOne, details: { url: appOneAlternateUrl } },
+                            { ...mockedApplicationTwo, details: { url: appTwoAlternateUrl } },
+                            { ...mockedApplicationThree, details: { url: appThreeAlternateUrl } },
+                        ]);
+
+                    default:
+                        return Promise.reject('Error occurred when reading apps from app directory');
                 }
             }),
             setupFunction('generateUUID', () => mockedInstanceIds.shift() ?? `no-more-instance-ids_${uuidCount++}`),
@@ -221,12 +235,50 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
             const identifier = {
-                appId: 'non-fully-qualified-appid',
+                appId: 'completely-unknown-appid',
             };
 
             const result = instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
             await expect(result).rejects.toEqual(ResolveError.TargetAppUnavailable);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+        });
+
+        it(`should resolve unqualified appId to known fully-qualified appId`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const identifier: AppIdentifier = {
+                appId: 'app-id-one',
+            };
+
+            const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                appId: mockedAppIdOne,
+                instanceId: 'fully-qualified-instanceid',
+            };
+
+            mockResolver.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
+
+            const result = await instance.resolveAppForIntent('StartChat', contact, identifier);
+
+            expect(result).toStrictEqual(qualifiedIdentifier);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
+        });
+
+        it(`should resolve fully-qualified appId from different hostname by matching unqualified part`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const identifier: FullyQualifiedAppIdentifier = {
+                appId: 'app-id-one@different-hostname',
+                instanceId: 'instanceOne',
+            };
+
+            const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
+
+            expect(result).toStrictEqual({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
             expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
         });
 
@@ -479,6 +531,45 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             expect(result).toBeUndefined();
         });
+
+        it(`should resolve unqualified appId to matching fully-qualified appId`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const result = await instance.getAppInstances('app-id-one');
+
+            expect(result).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+        });
+
+        it(`should resolve fully-qualified appId from a different hostname to matching unqualified part`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const result = await instance.getAppInstances('app-id-one@different-hostname');
+
+            expect(result).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+        });
+
+        it('should return multiple app instances from different hostnames that match the unqualified appId if multiple fully qualified appIds exist in the directory', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl, mockedAlternateAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+            await registerApp(
+                instance,
+                { ...mockedApplicationOne, details: { url: appOneAlternateUrl } },
+                'StartChat',
+                [],
+            );
+
+            const result = await instance.getAppInstances('app-id-one');
+
+            expect(result).toEqual([
+                { appId: mockedAppIdOne, instanceId: 'instanceOne' },
+                { appId: 'app-id-one@mock-alternate-directory', instanceId: 'instanceTwo' },
+            ]);
+        });
     });
 
     describe(`getAppMetadata`, () => {
@@ -505,11 +596,52 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
             const result = await instance.getAppMetadata({
-                appId: `non-fully-qualified-app-id`,
+                appId: `completely-unknown-app-id`,
                 instanceId: 'instanceOne',
             });
 
             expect(result).toBeUndefined();
+        });
+
+        it(`should resolve unqualified appId to matching fully-qualified appId`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const result = await instance.getAppMetadata({ appId: 'app-id-one', instanceId: 'instanceOne' });
+
+            expect(result).toEqual({
+                appId: 'app-id-one',
+                instanceId: 'instanceOne',
+                description: undefined,
+                icons: undefined,
+                screenshots: undefined,
+                title: 'app-title-one',
+                tooltip: undefined,
+                version: undefined,
+            });
+        });
+
+        it(`should resolve fully-qualified appId from different hostname by matching unqualified part`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const result = await instance.getAppMetadata({
+                appId: 'app-id-one@different-hostname',
+                instanceId: 'instanceOne',
+            });
+
+            expect(result).toEqual({
+                appId: 'app-id-one@different-hostname',
+                instanceId: 'instanceOne',
+                description: undefined,
+                icons: undefined,
+                screenshots: undefined,
+                title: 'app-title-one',
+                tooltip: undefined,
+                version: undefined,
+            });
         });
     });
 
@@ -1053,6 +1185,21 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const app = await instance.getAppDirectoryApplication('unknown-app-id');
 
             expect(app).toBeUndefined();
+        });
+
+        it(`should resolve unqualified appId to matching fully-qualified appId`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            const app = await instance.getAppDirectoryApplication('app-id-one');
+
+            expect(app).toEqual({
+                appId: mockedAppIdOne,
+                details: {
+                    url: 'https://mock-url-one',
+                },
+                title: 'app-title-one',
+                type: 'web',
+            });
         });
     });
 
