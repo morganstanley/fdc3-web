@@ -1303,9 +1303,12 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             console.error(err),
         );
 
-        const appDirectoryRecord = application ? (({ hostManifests, ...rest }) => rest)(application) : undefined;
-
-        return strategy.canSelectApp({ agent: this, appDirectoryRecord, manifest, appIdentifier });
+        return strategy.canSelectApp({
+            agent: this,
+            appDirectoryRecord: removeHostManifests(application),
+            manifest,
+            appIdentifier,
+        });
     }
 
     private async selectAppWithStrategy(
@@ -1313,12 +1316,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         strategy: ISelectApplicationStrategy,
         application?: AppDirectoryApplication,
     ): Promise<void> {
-        const appDirectoryRecord = application ? (({ hostManifests, ...rest }) => rest)(application) : undefined;
-
         await strategy
             .selectApp({
                 appIdentifier,
-                appDirectoryRecord,
+                appDirectoryRecord: removeHostManifests(application),
                 agent: this,
                 manifest: await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
                     console.error(err),
@@ -1353,4 +1354,16 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
         return Promise.reject(OpenError.AppNotFound);
     }
+}
+
+function removeHostManifests(
+    application?: AppDirectoryApplication,
+): Omit<AppDirectoryApplication, 'hostManifests'> | undefined {
+    if (application == null) {
+        return undefined;
+    }
+
+    const { hostManifests, ...partialAppDirectory } = application;
+
+    return partialAppDirectory;
 }
