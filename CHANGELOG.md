@@ -1,3 +1,7 @@
+## 0.11.0 (2026-02-12)
+
+Make `appDirectoryRecord` optional in `ISelectApplicationStrategy` function calls
+
 ## 0.10.0 (2026-01-23)
 
 ### Breaking
