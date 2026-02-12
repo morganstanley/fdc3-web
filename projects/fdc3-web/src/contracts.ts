@@ -329,7 +329,7 @@ export interface IOpenApplicationStrategy {
 }
 
 export type SelectApplicationStrategyParams = {
-    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    appDirectoryRecord?: Omit<AppDirectoryApplication, 'hostManifests'>;
     agent: DesktopAgent;
     /**
      * manifest from the app directory record identified by the strategy's manifestKey

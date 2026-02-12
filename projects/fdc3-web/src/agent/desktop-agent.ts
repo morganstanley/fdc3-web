@@ -1277,15 +1277,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
     private async tryToSelectApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<void> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
-        if (application == null) {
-            this.proxyLog('selectApp AppNotFound', LogLevel.ERROR, { appIdentifier });
-            return;
-        }
-
         const strategyCanSelectResults = (
             await Promise.all(
                 this.applicationStrategies.filter(isSelectApplicationStrategy).map(async strategy => {
-                    const canSelect = await this.canStrategySelectApp(appIdentifier, application, strategy).catch(
+                    const canSelect = await this.canStrategySelectApp(appIdentifier, strategy, application).catch(
                         () => false,
                     );
                     return canSelect ? strategy : undefined;
@@ -1301,14 +1296,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
     private async canStrategySelectApp(
         appIdentifier: FullyQualifiedAppIdentifier,
-        application: AppDirectoryApplication,
         strategy: ISelectApplicationStrategy,
+        application?: AppDirectoryApplication,
     ): Promise<boolean> {
-        const manifest = await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
+        const manifest = await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
             console.error(err),
         );
 
-        const { hostManifests, ...appDirectoryRecord } = application;
+        const appDirectoryRecord = application ? (({ hostManifests, ...rest }) => rest)(application) : undefined;
 
         return strategy.canSelectApp({ agent: this, appDirectoryRecord, manifest, appIdentifier });
     }
@@ -1316,20 +1311,22 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
     private async selectAppWithStrategy(
         appIdentifier: FullyQualifiedAppIdentifier,
         strategy: ISelectApplicationStrategy,
-        appDirectoryRecord: AppDirectoryApplication,
+        application?: AppDirectoryApplication,
     ): Promise<void> {
-        const { hostManifests, ...noManifests } = appDirectoryRecord;
+        const appDirectoryRecord = application ? (({ hostManifests, ...rest }) => rest)(application) : undefined;
 
         await strategy
             .selectApp({
                 appIdentifier,
-                appDirectoryRecord: noManifests,
+                appDirectoryRecord,
                 agent: this,
-                manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err => console.error(err)),
+                manifest: await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
+                    console.error(err),
+                ),
             })
             .catch(err =>
                 this.proxyLog(`Error selecting app: ${err}`, LogLevel.DEBUG, {
-                    application: appDirectoryRecord,
+                    application,
                     appIdentifier,
                 }),
             );
