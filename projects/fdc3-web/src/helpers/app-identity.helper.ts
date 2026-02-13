@@ -10,6 +10,7 @@
 
 import type { AppIdentifier } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier } from '../contracts.js';
+import { isFullyQualifiedAppId } from './type-predicate.helper.js';
 
 /**
  * compares two app identifiers and ensures that the app id and instance id are the same
@@ -48,4 +49,8 @@ export function resolveAppIdentifier(
 
         return identifier;
     }
+}
+
+export function toUnqualifiedAppId(appId: string): string {
+    return isFullyQualifiedAppId(appId) ? appId.split('@')[0] : appId;
 }

@@ -1,6 +1,13 @@
 ## 0.11.0 (2026-02-12)
 
-Make `appDirectoryRecord` optional in `ISelectApplicationStrategy` function calls
+### Changed
+
+ * Make `appDirectoryRecord` optional in `ISelectApplicationStrategy` function calls
+
+ ### Fixed
+
+ * Unqualified and cross-domain `appId` resolution now follows the FDC3 [Fully-Qualified AppId](https://fdc3.finos.org/docs/next/api/spec#fully-qualified-appids) resolution algorithm. An unqualified `appId` (e.g. `my-app`) or a fully-qualified `appId` from a different hostname (e.g. `my-app@other-host`) will now be matched against known directory entries by their unqualified portion. This affects `resolveAppForIntent`, `getAppInstances`, `getAppMetadata`, `getAppDirectoryApplication`, and `removeDisconnectedApp`.
+ * `getAppInstances` now returns instances from all matching fully-qualified app IDs when multiple directory sources define the same unqualified `appId`.
 
 ## 0.10.0 (2026-01-23)
 
