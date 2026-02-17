@@ -1,3 +1,9 @@
+## 0.11.1 (2026-02-17)
+
+### Updated
+
+ * updated versions of dependencies to be a version range
+
 ## 0.11.0 (2026-02-12)
 
 ### Changed
