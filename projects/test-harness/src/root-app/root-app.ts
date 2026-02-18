@@ -52,7 +52,7 @@ import {
     SelectAppContextType,
 } from '../contracts.js';
 
-const appDirectoryUrls: (string | LocalAppDirectory)[] = [
+const defaultAppDirectoryUrls: (string | LocalAppDirectory)[] = [
     'http://localhost:4299/v2/apps',
     {
         host: 'fdc3.finos.org',
@@ -65,6 +65,17 @@ const appDirectoryUrls: (string | LocalAppDirectory)[] = [
         ],
     },
 ];
+
+function getAppDirectoryUrls(): (string | LocalAppDirectory)[] {
+    const params = new URLSearchParams(window.location.search);
+    const appDirectoryUrl = params.get('appDirectoryUrl');
+
+    if (appDirectoryUrl != null) {
+        return [appDirectoryUrl];
+    }
+
+    return defaultAppDirectoryUrls;
+}
 
 const retryParams: BackoffRetryParams = {
     maxAttempts: 5,
@@ -106,7 +117,7 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
                 const agent = await new DesktopAgentFactory().createRoot({
                     rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
-                    appDirectoryEntries: appDirectoryUrls, //passes in app directory web service base url
+                    appDirectoryEntries: getAppDirectoryUrls(), //passes in app directory web service base url
                     applicationStrategies: [this],
                     backoffRetry: retryParams,
                 });
