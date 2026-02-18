@@ -65,7 +65,13 @@ export class SettingsPanel extends LitElement {
     private renderOpenInWindowSwitch(): TemplateResult {
         return html`
             <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="openInWindow" .checked=${this.openInWindowDefault} />
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
+                    id="openInWindow"
+                    .checked=${this.openInWindowDefault}
+                />
                 <label class="form-check-label" for="openInWindow">Open In New Window</label>
             </div>
         `;

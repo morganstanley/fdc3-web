@@ -13,6 +13,7 @@ import './settings-panel.js';
 import './app-container.js';
 import { AppIdentifier, Channel, Context, LogLevel, OpenError } from '@finos/fdc3';
 import {
+    AppDirectory,
     AppDirectoryApplication,
     ApplicationStrategyParams,
     BackoffRetryParams,
@@ -22,13 +23,11 @@ import {
     FullyQualifiedAppIdentifier,
     generateUUID,
     getAgent,
-    getAppDirectoryApplications,
     IOpenApplicationStrategy,
     ISelectApplicationStrategy,
     isFullyQualifiedAppId,
     isWebAppDetails,
     LocalAppDirectory,
-    mapLocalAppDirectory,
     OpenApplicationStrategyResolverParams,
     SelectApplicationStrategyParams,
     subscribeToConnectionAttemptUuids,
@@ -46,6 +45,7 @@ import {
     type ISelectAppContext,
     OpenAppContextType,
     OpenAppIntent,
+    OpenAppOptionsContext,
     SelectableAppsIntent,
     SelectableAppsRequestContextType,
     SelectableAppsResponseContextType,
@@ -92,46 +92,34 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
 
     private openedWindowChannel?: Channel;
 
-    @state()
-    private applications: AppDirectoryApplication[] = [];
+    private directory: AppDirectory | undefined;
+
+    private get applications(): AppDirectoryApplication[] {
+        return this.directory?.applications ?? [];
+    }
 
     constructor() {
         super();
 
         getAgent({
-            failover: () =>
-                new DesktopAgentFactory().createRoot({
+            failover: async () => {
+                const agent = await new DesktopAgentFactory().createRoot({
                     rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
                     appDirectoryEntries: appDirectoryUrls, //passes in app directory web service base url
                     applicationStrategies: [this],
                     backoffRetry: retryParams,
-                }),
+                });
+
+                this.directory = agent.directory;
+
+                this.directory.loadDirectoryPromise.then(() => this.onAppDirectoryLoaded());
+
+                return agent;
+            },
         });
 
-        this.loadApplications();
-    }
-
-    private async loadApplications(): Promise<void> {
-        const directoryResults = await Promise.allSettled(
-            appDirectoryUrls.map(directory =>
-                typeof directory === 'string' ? this.loadAppDirectory(directory) : mapLocalAppDirectory(directory),
-            ),
-        );
-
-        this.applications = directoryResults
-            .filter(result => result.status === 'fulfilled')
-            .flatMap(result => result.value);
-
         this.initApp();
-    }
-
-    private async loadAppDirectory(directory: string): Promise<AppDirectoryApplication[]> {
-        const hostname = new URL(directory).hostname;
-
-        const applications = await getAppDirectoryApplications(directory, retryParams).catch(() => []);
-
-        return applications.map(app => ({ ...app, appId: `${app.appId}@${hostname}` })); //make appIds fully qualified
     }
 
     /**
@@ -152,8 +140,11 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
                 ),
             );
 
+            const forceIframe =
+                params.context?.type === OpenAppOptionsContext && (params.context as any).forceIframe === true;
+
             this.log('Opening WebAppDetails', LogLevel.DEBUG, params);
-            const newWindow = (document.getElementById('openInWindow') as HTMLInputElement).checked;
+            const newWindow = !forceIframe && (document.getElementById('openInWindow') as HTMLInputElement).checked;
 
             if (this.selectedApp != null) {
                 const openAppContext: IOpenAppContext = {
@@ -278,12 +269,16 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
      * ISelectApplicationStrategy implementation END
      */
 
-    private async initApp(): Promise<void> {
+    private onAppDirectoryLoaded(): void {
         //open all apps in root domain by default
         this.applications
             .filter(application => application.appId.includes('root'))
-            .forEach(application => this.openAppInfo(application));
+            .forEach(application => this.openAppInfo(application, true));
 
+        this.requestUpdate();
+    }
+
+    private async initApp(): Promise<void> {
         await this.subscribeToSelectedApp().catch(err =>
             this.log('Error subscribing to selected app', LogLevel.ERROR, err),
         );
@@ -401,11 +396,14 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
         await this.openAppInfo(application);
     }
 
-    private async openAppInfo(application: AppDirectoryApplication): Promise<AppIdentifier> {
+    private async openAppInfo(application: AppDirectoryApplication, forceIframe = false): Promise<AppIdentifier> {
         const agent = await getAgent();
 
         if (isFullyQualifiedAppId(application.appId)) {
-            const identifier = await agent.open({ appId: application.appId });
+            const identifier = await agent.open(
+                { appId: application.appId },
+                { type: OpenAppOptionsContext, forceIframe },
+            );
 
             console.log(`[root-app] opened new app:`, { identifier });
 

@@ -91,7 +91,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
     private readonly eventListeners: EventListenerLookup = {};
 
-    private directory: AppDirectory;
+    public readonly directory: AppDirectory;
     private channelMessageHandler: ChannelMessageHandler;
     private applicationStrategies: DesktopAgentStrategies[];
     private rootMessagePublisher: IRootPublisher;
