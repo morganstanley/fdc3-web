@@ -260,7 +260,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
 
             //any results from chosen app resolving intent are sent in a RaiseIntentResultResponse message once intent has been resolved
             payload.intentResolution = {
-                source: appIdentifier,
+                source: fullyQualifiedAppIdentifier,
                 intent: requestMessage.payload.intent,
             };
 
