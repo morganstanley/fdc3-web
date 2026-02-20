@@ -495,22 +495,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         //fetch context info for app and intent from app directory
         const contexts = await this.directory.getContextForAppIntent(source, requestMessage.payload.intent);
 
-        if (contexts == null) {
-            this.rootMessagePublisher.publishResponseMessage(
-                createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
-                    'addIntentListenerResponse',
-                    { error: ResolveError.TargetInstanceUnavailable },
-                    requestMessage.meta.requestUuid,
-                    source,
-                ),
-                source,
-            );
-            return;
-        }
-
         try {
             //this should not occur as error should have been caught by directory.getContextForAppIntent
-            await this.directory.registerIntentListener(source, requestMessage.payload.intent, contexts);
+            await this.directory.registerIntentListener(source, requestMessage.payload.intent, contexts ?? []);
         } catch (error) {
             if (error === ResolveError.TargetInstanceUnavailable) {
                 this.rootMessagePublisher.publishResponseMessage(

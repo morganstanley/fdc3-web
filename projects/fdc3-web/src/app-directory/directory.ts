@@ -44,14 +44,15 @@ import {
     urlContainsAllElements,
 } from '../helpers/index.js';
 
-type IntentContextLookup = { intent: Intent; context: Context[] };
 type DirectoryEntry = { application?: AppDirectoryApplication; instances: string[] };
+
+type IntentToContextLookup = Partial<Record<Intent, Context[]>>;
 
 export class AppDirectory {
     private log = createLogger(AppDirectory, 'proxy');
 
     private readonly directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = {}; //indexed by appId
-    private readonly instanceLookup: Partial<Record<string, Set<IntentContextLookup>>> = {}; //indexed by instanceId
+    private readonly instanceLookup: Partial<Record<string, IntentToContextLookup>> = {}; //indexed by instanceId
 
     private readonly appDirectoryEntries: (string | LocalAppDirectory)[];
     public readonly loadDirectoryPromise: Promise<void>;
@@ -89,7 +90,7 @@ export class AppDirectory {
         const rootAppIdentifier = { appId, instanceId: generateUUID() };
 
         this.directory[appId] = { instances: [rootAppIdentifier.instanceId] };
-        this.instanceLookup[rootAppIdentifier.instanceId] = new Set();
+        this.instanceLookup[rootAppIdentifier.instanceId] = {}
 
         return rootAppIdentifier;
     }
@@ -109,6 +110,13 @@ export class AppDirectory {
         const appIdentifier = this.getValidatedAppIdentifier(app);
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
+            const contextLookup = this.instanceLookup[appIdentifier.instanceId]?.[intent];
+
+            if (contextLookup != null && contextLookup.length > 0 && contextLookup.every(knownContext => knownContext.type != context.type)) {
+                // the specified app does not support the provided intent / context combination
+                return Promise.reject(ResolveError.NoAppsFound);
+            }
+
             return appIdentifier;
         }
 
@@ -204,13 +212,12 @@ export class AppDirectory {
         appEntry.instances.push(identifier.instanceId);
 
         //copy across intents app listens for
-        this.instanceLookup[identifier.instanceId] = new Set(
-            Object.entries(appEntry.application?.interop?.intents?.listensFor ?? {})?.map(
-                ([intent, contextResultTypePair]) => ({
-                    intent,
-                    context: contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
-                }),
-            ),
+        this.instanceLookup[identifier.instanceId] = Object.entries(appEntry.application?.interop?.intents?.listensFor ?? {}).reduce<IntentToContextLookup>(
+            (lookup, [intent, contextResultTypePair]) => ({
+                ...lookup,
+                [intent]: contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
+            }),
+            {},
         );
 
         return { identifier, application };
@@ -380,11 +387,7 @@ export class AppDirectory {
 
         //if AppIdentifier is fully qualified, return contexts for specific instance intent pair
         if (app.instanceId != null) {
-            return (
-                [...(this.instanceLookup[app.instanceId] ?? [])].find(
-                    intentContextLookup => intentContextLookup.intent === intent,
-                )?.context ?? []
-            );
+            return this.instanceLookup[app.instanceId]?.[intent];
         }
 
         // if we are given an unqualified appId we need to find all matching fully qualified appIds as there may be multiple matches and we want to return contexts for all matches
@@ -452,11 +455,11 @@ export class AppDirectory {
                 //need to check intents defined for instances as well since intentListeners can be added dynamically during runtime
                 ...Object.values(this.instanceLookup)
                     .filter(intentContextLookups => intentContextLookups != null)
-                    .flatMap(intentContextLookups => [...intentContextLookups])
-                    .filter(intentContextLookup =>
-                        intentContextLookup.context.some(possibleContext => possibleContext.type === context.type),
+                    .flatMap(intentContextLookups => Object.entries(intentContextLookups))
+                    .filter(([_, contexts]) =>
+                        contexts?.some(possibleContext => possibleContext.type === context.type),
                     )
-                    .map(intentContextLookup => intentContextLookup.intent),
+                    .map(([intent]) => intent),
             ]),
         ];
     }
@@ -566,13 +569,12 @@ export class AppDirectory {
      * Returns true if app instance resolves given intent and handles given context. Returns false otherwise
      */
     private checkInstanceResolvesIntent(instanceId: string, intent: Intent, context?: Context): boolean {
-        if (
-            [...(this.instanceLookup[instanceId] ?? [])].some(
-                intentContextLookup =>
-                    intentContextLookup.intent === intent &&
-                    this.isContextInArray(intentContextLookup.context, context),
-            )
-        ) {
+        const lookup = this.instanceLookup[instanceId];
+        if (lookup == null) {
+            return false;
+        }
+        const contexts = lookup[intent];
+        if (contexts != null && this.isContextInArray(contexts, context)) {
             return true;
         }
         return false;
@@ -672,23 +674,23 @@ export class AppDirectory {
      * @param newIntentContextLookup being added
      * @returns true if intentContextLookup was added, and false otherwise
      */
-    private addNewIntentContextLookup(instanceId: string, newIntentContextLookup: IntentContextLookup): boolean {
-        const intentContextLookups = this.instanceLookup[instanceId];
-        if (intentContextLookups == null) {
+    private addNewIntentContextLookup(instanceId: string, newIntentContextLookup: { intent: Intent; context: Context[] }): boolean {
+        const lookup = this.instanceLookup[instanceId];
+        if (lookup == null) {
             return false;
         }
-        const intentContextLookup = [...intentContextLookups].find(
-            intentContextLookup => intentContextLookup.intent === newIntentContextLookup.intent,
-        );
+        const existingContexts = lookup[newIntentContextLookup.intent];
 
-        if (intentContextLookup != null) {
+        if (existingContexts != null) {
             //intent is already registered so add contexts without duplicating
-            intentContextLookup.context = [
-                ...new Set([...intentContextLookup.context, ...newIntentContextLookup.context]),
+            const existingTypes = new Set(existingContexts.map(c => c.type));
+            lookup[newIntentContextLookup.intent] = [
+                ...existingContexts,
+                ...newIntentContextLookup.context.filter(c => !existingTypes.has(c.type)),
             ];
         } else {
-            //add completely new intentContextLookup
-            intentContextLookups.add(newIntentContextLookup);
+            //add completely new intent context mapping
+            lookup[newIntentContextLookup.intent] = [...newIntentContextLookup.context];
         }
         return true;
     }
