@@ -31,6 +31,7 @@ import {
     createLogger,
     generateUUID,
     getAppDirectoryApplications,
+    isDefined,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
     isIMSHostManifest,
@@ -53,7 +54,7 @@ export class AppDirectory {
     private readonly instanceLookup: Partial<Record<string, Set<IntentContextLookup>>> = {}; //indexed by instanceId
 
     private readonly appDirectoryEntries: (string | LocalAppDirectory)[];
-    private loadDirectoryPromise: Promise<void>;
+    public readonly loadDirectoryPromise: Promise<void>;
 
     constructor(
         rootAppId: string,
@@ -69,6 +70,12 @@ export class AppDirectory {
     }
 
     private _rootAppIdentifier: FullyQualifiedAppIdentifier;
+
+    public get applications(): AppDirectoryApplication[] {
+        return Object.values(this.directory)
+            .map(entry => entry?.application)
+            .filter(isDefined);
+    }
 
     public get rootAppIdentifier(): FullyQualifiedAppIdentifier {
         return this._rootAppIdentifier;

@@ -279,6 +279,45 @@ Available log levels from `@finos/fdc3` are:
 
 For most development running `npm start` will be sufficient to test implementation and cross-frame / cross origin communication. This will build and run `test-harness`.
 
+
+### Running Conformance Tests
+
+Purpose: Run the FDC3 website conformance test suite using the test harness UI.
+
+Prerequisites
+
+- Ensure any popup blockers or strict cross-origin blocking are disabled for the test hosts
+
+Start the test harness
+
+```bash
+git clone https://github.com/morganstanley/fdc3-web.git
+cd fdc3-web
+npm ci
+npm run start
+```
+
+The dev server serves the test UI (commonly at `http://localhost:4200`).
+
+Open the Conformance test app
+
+- The harness accepts query parameters to override the app directory and to force apps to open in new windows.
+- Use this example URL to run the website conformance directory and open apps in new windows:
+
+```
+http://localhost:4200/root-app.html?openInWindow=true&appDirectoryUrl=https://fdc3.finos.org/toolbox/fdc3-conformance/directories/website-conformance.v2.json
+```
+
+- `appDirectoryUrl`: JSON directory used by the conformance suite (when provided, it replaces the default directories).
+- `openInWindow=true`: defaults the harness to open apps in new browser windows (recommended for conformance runs).
+
+Run tests in the UI
+
+1. In the harness UI select the "Conformance" test app from the app dropdown.
+2. Click `Add App` to launch the conformance app instance.
+3. Use the conformance app UI to start individual tests or run the full suite.
+
+
 ### Commands
 
 ```bash

@@ -13,3 +13,4 @@ export * from './contracts.js';
 export * from './helpers/index.js';
 export * from './get-agent/index.js';
 export * from './app-directory.contracts.js';
+export * from './app-directory/directory.js';

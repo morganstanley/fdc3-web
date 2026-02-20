@@ -25,6 +25,7 @@ export const OpenAppContextType = 'ms.fdc3.test-harness.open-app' as const;
 export const AppOpenedContextType = 'ms.fdc3.test-harness.app-opened' as const;
 export const SelectableAppsResponseContextType = `ms.fdc3.test-harness.selectable-apps.response` as const;
 export const SelectableAppsRequestContextType = `ms.fdc3.test-harness.selectable-apps.request` as const;
+export const OpenAppOptionsContext = 'ms.fdc3.test-harness.open-app-options' as const;
 
 export interface ISelectAppContext extends Context {
     type: typeof SelectAppContextType;

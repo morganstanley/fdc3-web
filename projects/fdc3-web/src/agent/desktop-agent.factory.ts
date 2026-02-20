@@ -46,7 +46,7 @@ export class DesktopAgentFactory {
      * Creates a new instance of DesktopAgent
      * @returns DesktopAgent
      */
-    public async createRoot(factoryParams: RootDesktopAgentFactoryParams): Promise<DesktopAgent> {
+    public async createRoot(factoryParams: RootDesktopAgentFactoryParams): Promise<DesktopAgentImpl> {
         const log = createLogger(DesktopAgentFactory, 'proxy', factoryParams.logLevels);
 
         let agentResolve: (value: DesktopAgent) => void = () => {
