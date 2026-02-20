@@ -473,16 +473,27 @@ export class AppDirectory {
         const appsForIntent = await this.getAppsForIntent(intent, context, resultType);
 
         return {
-            apps: appsForIntent,
-            intent: { name: intent, displayName: intent },
+            apps: appsForIntent.map(result => result.metadata),
+            intent: { name: intent, displayName: this.getIntentDisplayName(intent, appsForIntent.map(result => result.application).filter(isDefined)) },
         };
+    }
+
+    private getIntentDisplayName(intent: Intent, apps: AppDirectoryApplication[]): string {
+        for (const app of apps) {
+            const displayName = app.interop?.intents?.listensFor?.[intent]?.displayName;
+            if (displayName != null) {
+                return displayName;
+            }
+        }
+
+        return intent;
     }
 
     /**
      * Returns appMetadata for all apps and app instances that resolve given intent, handle given context, and return result of given resultType
      */
-    private async getAppsForIntent(intent: Intent, context?: Context, resultType?: string): Promise<AppMetadata[]> {
-        const apps: AppMetadata[] = [];
+    private async getAppsForIntent(intent: Intent, context?: Context, resultType?: string): Promise<{ metadata: AppMetadata, application?: AppDirectoryApplication }[]> {
+        const apps: { metadata: AppMetadata, application?: AppDirectoryApplication }[] = [];
 
         await Promise.all(
             Object.entries(this.directory).map(async ([appId, entry]) => {
@@ -496,7 +507,7 @@ export class AppDirectory {
                     const appMetadata = await this.getAppMetadata({ appId });
                     if (appMetadata != null) {
                         //this should always be the case as the app is definitely defined in the directory
-                        apps.push(appMetadata);
+                        apps.push({ metadata: appMetadata, application: entry.application });
                     }
                 }
                 //this should always be true
@@ -535,7 +546,7 @@ export class AppDirectory {
         appId: FullyQualifiedAppId,
         intent: Intent,
         context?: Context,
-    ): Promise<AppMetadata[]> {
+    ): Promise<{ metadata: AppMetadata, application?: AppDirectoryApplication }[]> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
@@ -543,8 +554,10 @@ export class AppDirectory {
             this.directory[appId]?.instances
                 .filter(instanceId => this.checkInstanceResolvesIntent(instanceId, intent, context))
                 //should always return result of this.getAppMetadata() as app is definitely defined in directory
-                .map(instanceId =>
-                    this.getAppMetadata({ appId, instanceId })?.then(metadata => metadata ?? { appId, instanceId }),
+                .map(instanceId => {
+                    const application = this.directory[appId]?.application;
+                    return this.getAppMetadata({ appId, instanceId })?.then(metadata => metadata != null ? { metadata, application } : { metadata: { appId, instanceId }, application });
+                },
                 ) ?? [],
         );
     }

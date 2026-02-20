@@ -25,7 +25,7 @@ export type AppDirectoryApplicationDetails =
 
 //manifest key can map to manifest object or URI from which manifest can be retrieved
 export type ApplicationHostManifests = { [key: string]: object | string };
-export type AppDirectoryContextResultTypePair = { contexts: string[]; resultType?: string };
+export type AppDirectoryContextResultTypePair = { contexts: string[]; resultType?: string; displayName?: string };
 type AppDirectoryInterop = {
     intents?: {
         listensFor?: { [key: string]: AppDirectoryContextResultTypePair };

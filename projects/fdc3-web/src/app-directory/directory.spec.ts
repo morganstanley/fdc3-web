@@ -64,7 +64,7 @@ const mockedApplicationTwo: AppDirectoryApplication = {
     interop: {
         intents: {
             listensFor: {
-                ViewChart: { contexts: ['fdc3.chart'], resultType: 'fdc3.currency' },
+                ViewChart: { contexts: ['fdc3.chart'], resultType: 'fdc3.currency', displayName: 'View Chart' },
             },
         },
     },
@@ -761,7 +761,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             version: undefined,
                         },
                     ],
-                    intent: { displayName: 'ViewChart', name: 'ViewChart' },
+                    intent: { displayName: 'View Chart', name: 'ViewChart' },
                 },
             ]);
         });
@@ -861,7 +861,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         version: undefined,
                     },
                 ],
-                intent: { displayName: 'ViewChart', name: 'ViewChart' },
+                intent: { displayName: 'View Chart', name: 'ViewChart' },
             });
         });
 
