@@ -90,7 +90,7 @@ export class AppDirectory {
         const rootAppIdentifier = { appId, instanceId: generateUUID() };
 
         this.directory[appId] = { instances: [rootAppIdentifier.instanceId] };
-        this.instanceLookup[rootAppIdentifier.instanceId] = {}
+        this.instanceLookup[rootAppIdentifier.instanceId] = {};
 
         return rootAppIdentifier;
     }
@@ -106,22 +106,27 @@ export class AppDirectory {
         intent: Intent,
         context: Context,
         app?: AppIdentifier | string,
-    ): Promise<AppIdentifier | undefined> {
+    ): Promise<AppIdentifier> {
         const appIdentifier = this.getValidatedAppIdentifier(app);
+
+        if (typeof appIdentifier === 'string') {
+            // if we got a resolve error return it.
+            return Promise.reject(appIdentifier);
+        }
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
             const contextLookup = this.instanceLookup[appIdentifier.instanceId]?.[intent];
 
-            if (contextLookup != null && contextLookup.length > 0 && contextLookup.every(knownContext => knownContext.type != context.type)) {
-                // the specified app does not support the provided intent / context combination
+            if (
+                contextLookup != null &&
+                contextLookup.length > 0 &&
+                contextLookup.every(knownContext => knownContext.type != context.type)
+            ) {
+                // the specified app instance does not support the provided intent / context combination
                 return Promise.reject(ResolveError.NoAppsFound);
             }
 
             return appIdentifier;
-        }
-
-        if (typeof appIdentifier === 'string') {
-            return Promise.reject(appIdentifier);
         }
 
         const appIntent = await this.getAppIntent(intent, context);
@@ -212,7 +217,9 @@ export class AppDirectory {
         appEntry.instances.push(identifier.instanceId);
 
         //copy across intents app listens for
-        this.instanceLookup[identifier.instanceId] = Object.entries(appEntry.application?.interop?.intents?.listensFor ?? {}).reduce<IntentToContextLookup>(
+        this.instanceLookup[identifier.instanceId] = Object.entries(
+            appEntry.application?.interop?.intents?.listensFor ?? {},
+        ).reduce<IntentToContextLookup>(
             (lookup, [intent, contextResultTypePair]) => ({
                 ...lookup,
                 [intent]: contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
@@ -282,15 +289,15 @@ export class AppDirectory {
      */
     private getValidatedAppIdentifier(
         identifier: AppIdentifier | string,
-    ): (AppIdentifier & { appId: FullyQualifiedAppId }) | string; // TODO: sort out this return type in next PR
+    ): (AppIdentifier & { appId: FullyQualifiedAppId }) | ResolveError; // TODO: sort out this return type in next PR
 
     private getValidatedAppIdentifier(
         identifier?: AppIdentifier | string,
-    ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | string;
+    ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError;
 
     private getValidatedAppIdentifier(
         identifier?: AppIdentifier | string,
-    ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | string {
+    ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError {
         const appIdentifier = resolveAppIdentifier(identifier);
 
         if (appIdentifier == null) {
@@ -456,9 +463,7 @@ export class AppDirectory {
                 ...Object.values(this.instanceLookup)
                     .filter(intentContextLookups => intentContextLookups != null)
                     .flatMap(intentContextLookups => Object.entries(intentContextLookups))
-                    .filter(([_, contexts]) =>
-                        contexts?.some(possibleContext => possibleContext.type === context.type),
-                    )
+                    .filter(([_, contexts]) => contexts?.some(possibleContext => possibleContext.type === context.type))
                     .map(([intent]) => intent),
             ]),
         ];
@@ -477,7 +482,13 @@ export class AppDirectory {
 
         return {
             apps: appsForIntent.map(result => result.metadata),
-            intent: { name: intent, displayName: this.getIntentDisplayName(intent, appsForIntent.map(result => result.application).filter(isDefined)) },
+            intent: {
+                name: intent,
+                displayName: this.getIntentDisplayName(
+                    intent,
+                    appsForIntent.map(result => result.application).filter(isDefined),
+                ),
+            },
         };
     }
 
@@ -495,8 +506,12 @@ export class AppDirectory {
     /**
      * Returns appMetadata for all apps and app instances that resolve given intent, handle given context, and return result of given resultType
      */
-    private async getAppsForIntent(intent: Intent, context?: Context, resultType?: string): Promise<{ metadata: AppMetadata, application?: AppDirectoryApplication }[]> {
-        const apps: { metadata: AppMetadata, application?: AppDirectoryApplication }[] = [];
+    private async getAppsForIntent(
+        intent: Intent,
+        context?: Context,
+        resultType?: string,
+    ): Promise<{ metadata: AppMetadata; application?: AppDirectoryApplication }[]> {
+        const apps: { metadata: AppMetadata; application?: AppDirectoryApplication }[] = [];
 
         await Promise.all(
             Object.entries(this.directory).map(async ([appId, entry]) => {
@@ -549,7 +564,7 @@ export class AppDirectory {
         appId: FullyQualifiedAppId,
         intent: Intent,
         context?: Context,
-    ): Promise<{ metadata: AppMetadata, application?: AppDirectoryApplication }[]> {
+    ): Promise<{ metadata: AppMetadata; application?: AppDirectoryApplication }[]> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
@@ -559,9 +574,10 @@ export class AppDirectory {
                 //should always return result of this.getAppMetadata() as app is definitely defined in directory
                 .map(instanceId => {
                     const application = this.directory[appId]?.application;
-                    return this.getAppMetadata({ appId, instanceId })?.then(metadata => metadata != null ? { metadata, application } : { metadata: { appId, instanceId }, application });
-                },
-                ) ?? [],
+                    return this.getAppMetadata({ appId, instanceId })?.then(metadata =>
+                        metadata != null ? { metadata, application } : { metadata: { appId, instanceId }, application },
+                    );
+                }) ?? [],
         );
     }
 
@@ -674,7 +690,10 @@ export class AppDirectory {
      * @param newIntentContextLookup being added
      * @returns true if intentContextLookup was added, and false otherwise
      */
-    private addNewIntentContextLookup(instanceId: string, newIntentContextLookup: { intent: Intent; context: Context[] }): boolean {
+    private addNewIntentContextLookup(
+        instanceId: string,
+        newIntentContextLookup: { intent: Intent; context: Context[] },
+    ): boolean {
         const lookup = this.instanceLookup[instanceId];
         if (lookup == null) {
             return false;
