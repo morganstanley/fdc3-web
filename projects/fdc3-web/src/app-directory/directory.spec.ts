@@ -297,6 +297,70 @@ describe(`${AppDirectory.name} (directory)`, () => {
             await expect(result).rejects.toEqual(ResolveError.TargetInstanceUnavailable);
             expect(mockResolver.withFunction('resolveAppForContext')).wasNotCalled();
         });
+
+        it(`should reject with NoAppsFound when fully qualified app instance does not support the intent/context combination`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', [{ type: 'fdc3.contact' }]);
+
+            const identifier: FullyQualifiedAppIdentifier = {
+                appId: mockedAppIdOne,
+                instanceId: 'instanceOne',
+            };
+
+            const result = instance.resolveAppForIntent('StartChat', { type: 'fdc3.instrument' }, identifier);
+
+            await expect(result).rejects.toEqual(ResolveError.NoAppsFound);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+        });
+
+        it(`should return fully qualified app identifier when instance supports the intent/context combination`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', [{ type: 'fdc3.contact' }]);
+
+            const identifier: FullyQualifiedAppIdentifier = {
+                appId: mockedAppIdOne,
+                instanceId: 'instanceOne',
+            };
+
+            const result = await instance.resolveAppForIntent('StartChat', { type: 'fdc3.contact' }, identifier);
+
+            expect(result).toStrictEqual(identifier);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+        });
+
+        it(`should return fully qualified app identifier when instance has no contexts registered for the intent (empty context array)`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const identifier: FullyQualifiedAppIdentifier = {
+                appId: mockedAppIdOne,
+                instanceId: 'instanceOne',
+            };
+
+            const result = await instance.resolveAppForIntent('StartChat', { type: 'fdc3.contact' }, identifier);
+
+            expect(result).toStrictEqual(identifier);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+        });
+
+        it(`should return fully qualified app identifier when instance has no intent registered at all`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne);
+
+            const identifier: FullyQualifiedAppIdentifier = {
+                appId: mockedAppIdOne,
+                instanceId: 'instanceOne',
+            };
+
+            const result = await instance.resolveAppForIntent('StartChat', { type: 'fdc3.contact' }, identifier);
+
+            expect(result).toStrictEqual(identifier);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+        });
     });
 
     describe(`resolveAppForContext`, () => {
@@ -487,6 +551,23 @@ describe(`${AppDirectory.name} (directory)`, () => {
                     [{ type: contact.type }],
                 ),
             ).rejects.toEqual(ResolveError.TargetAppUnavailable);
+        });
+
+        it(`should not duplicate contexts of the same type when registering intent listener multiple times`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne);
+
+            await instance.registerIntentListener({ appId: mockedAppIdOne, instanceId: 'instanceOne' }, 'StartChat', [
+                { type: 'fdc3.contact' },
+            ]);
+            await instance.registerIntentListener({ appId: mockedAppIdOne, instanceId: 'instanceOne' }, 'StartChat', [
+                { type: 'fdc3.contact' },
+            ]);
+
+            await expect(
+                instance.getContextForAppIntent({ appId: mockedAppIdOne, instanceId: 'instanceOne' }, 'StartChat'),
+            ).resolves.toEqual([{ type: 'fdc3.contact' }]);
         });
     });
 
@@ -904,6 +985,24 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 },
             });
         });
+
+        it('should use displayName from app directory entry when available', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            const result = await instance.getAppIntent('ViewChart');
+
+            expect(result.intent).toEqual({ name: 'ViewChart', displayName: 'View Chart' });
+        });
+
+        it('should fall back to intent name as displayName when no app defines a displayName', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', [contact]);
+
+            const result = await instance.getAppIntent('StartChat');
+
+            expect(result.intent).toEqual({ name: 'StartChat', displayName: 'StartChat' });
+        });
     });
 
     describe(`loadAppDirectory`, () => {
@@ -1200,6 +1299,30 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 title: 'app-title-one',
                 type: 'web',
             });
+        });
+    });
+
+    describe('registerNewInstance', () => {
+        it('should copy intents from app directory into new instance lookup so instance resolves those intents', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            // mockedApplicationTwo has ViewChart intent with context 'fdc3.chart'
+            const { identifier } = await instance.registerNewInstance('https://mock-url-two');
+
+            const contexts = await instance.getContextForAppIntent(identifier, 'ViewChart');
+
+            expect(contexts).toEqual([{ type: 'fdc3.chart' }]);
+        });
+
+        it('should create empty intent lookup for apps without interop intents', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            // mockedApplicationOne has no interop intents defined
+            const { identifier } = await instance.registerNewInstance('https://mock-url-one');
+
+            const contexts = await instance.getContextForAppIntent(identifier, 'SomeIntent');
+
+            expect(contexts).toBeUndefined();
         });
     });
 
