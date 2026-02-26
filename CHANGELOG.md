@@ -1,3 +1,7 @@
+## 0.11.2 (2026-02-26)
+
+Fixed several minor bugs to pass conformance tests
+
 ## 0.11.1 (2026-02-17)
 
 ### Updated
