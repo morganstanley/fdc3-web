@@ -9,12 +9,16 @@
  * and limitations under the License. */
 
 import { describe, expect, it } from 'vitest';
+import { IMSHostManifest } from '../app-directory.contracts.js';
 import {
     isChannel,
     isContext,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
+    isIMSHostManifest,
     isNonEmptyArray,
+    isOpenApplicationStrategy,
+    isSelectApplicationStrategy,
 } from './type-predicate.helper.js';
 
 const defaultInvalidValues: unknown[] = ['', 'simpleString', [], {}, null, undefined];
@@ -44,6 +48,55 @@ describe(`type-predicate.helper`, () => {
         isFullyQualifiedAppId,
         ['appId@hostname', 'fully-qualified-app-id@app-directory'],
         ['appId@', '@hostname', ' @', '@ ', '@', { something: 'not-an-app-id' }],
+    );
+
+    // we use a record here to ensure that we add a test for each property that we add to IMSHostManifest
+    const msHostManifestTests: Record<keyof IMSHostManifest, { successTests: IMSHostManifest[]; failureTests: any[] }> =
+        {
+            singleton: {
+                successTests: [{ singleton: true }, { singleton: false }],
+                failureTests: [{ singleton: 'yes' }, { singleton: 1 }],
+            },
+        };
+
+    const successTests = Object.values(msHostManifestTests).flatMap(value => value.successTests) as [
+        IMSHostManifest,
+        ...IMSHostManifest[],
+    ];
+
+    testTypePredicate(
+        isIMSHostManifest,
+        successTests,
+        Object.values(msHostManifestTests).flatMap(value => value.failureTests),
+    );
+
+    testTypePredicate(
+        isOpenApplicationStrategy,
+        [
+            { canOpen: () => Promise.resolve(true), open: () => Promise.resolve('uuid') },
+            { canOpen: async () => true, open: async () => 'uuid', manifestKey: 'key' },
+        ],
+        [
+            { canOpen: () => Promise.resolve(true) },
+            { open: () => Promise.resolve('uuid') },
+            { canOpen: 'notAFunction', open: () => Promise.resolve('uuid') },
+            { canOpen: () => Promise.resolve(true), open: 'notAFunction' },
+        ],
+    );
+
+    testTypePredicate(
+        isSelectApplicationStrategy,
+        [
+            { canSelectApp: () => Promise.resolve(true), selectApp: () => Promise.resolve() },
+            { canSelectApp: async () => true, selectApp: async () => Promise.resolve(), manifestKey: 'key' },
+        ],
+        [
+            { canSelectApp: () => Promise.resolve(true) },
+            { selectApp: () => Promise.resolve('uuid') },
+            { canSelectApp: 'notAFunction', selectApp: () => Promise.resolve('uuid') },
+            { canSelectApp: () => Promise.resolve(true), selectApp: 'notAFunction' },
+            { canOpen: () => Promise.resolve(true), open: () => Promise.resolve('uuid') },
+        ],
     );
 
     function testTypePredicate<T>(

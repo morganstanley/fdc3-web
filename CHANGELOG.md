@@ -1,3 +1,106 @@
+## 0.11.1 (2026-02-17)
+
+### Updated
+
+ * updated versions of dependencies to be a version range
+
+## 0.11.0 (2026-02-12)
+
+### Changed
+
+ * Make `appDirectoryRecord` optional in `ISelectApplicationStrategy` function calls
+
+ ### Fixed
+
+ * Unqualified and cross-domain `appId` resolution now follows the FDC3 [Fully-Qualified AppId](https://fdc3.finos.org/docs/next/api/spec#fully-qualified-appids) resolution algorithm. An unqualified `appId` (e.g. `my-app`) or a fully-qualified `appId` from a different hostname (e.g. `my-app@other-host`) will now be matched against known directory entries by their unqualified portion. This affects `resolveAppForIntent`, `getAppInstances`, `getAppMetadata`, `getAppDirectoryApplication`, and `removeDisconnectedApp`.
+ * `getAppInstances` now returns instances from all matching fully-qualified app IDs when multiple directory sources define the same unqualified `appId`.
+
+## 0.10.0 (2026-01-23)
+
+### Breaking
+
+ * `IOpenApplicationStrategy.open()` and `IOpenApplicationStrategy.canOpen()` now take a single parameter argument rather than multiple parameters
+
+was:
+
+```ts
+export type OpenApplicationStrategyParams = {
+    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    agent: DesktopAgent;
+    manifest?: unknown;
+};
+
+canOpen(params: OpenApplicationStrategyParams, context?: Context): Promise<boolean>;
+
+open(params: OpenApplicationStrategyParams, appReadyPromise: Promise<FullyQualifiedAppIdentifier>, context?: Context): Promise<string>;
+```
+
+now:
+
+```ts
+export type OpenApplicationStrategyParams = {
+    appDirectoryRecord: Omit<AppDirectoryApplication, 'hostManifests'>;
+    agent: DesktopAgent;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
+    manifest?: unknown;
+    context?: Context;
+};
+
+export type OpenApplicationStrategyResolverParams = OpenApplicationStrategyParams & {
+    appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
+};
+
+canOpen(params: OpenApplicationStrategyParams): Promise<boolean>;
+
+
+open(params: OpenApplicationStrategyResolverParams): Promise<string>;
+```
+
+### Added
+
+ * `appReadyPromise` property added to `IOpenApplicationStrategy.open()` function. This promise resolves when the application that is being opened is ready and has had an `instanceId` assigned
+ * Singleton app support added. If an application is marked as a singleton it will not appear in the `New Instance` section of the app resolver if an instance already exists. This means that the user cannot open more than one instance of an app using the app resolver as a result of a `raiseIntent` or `raiseIntentForContext` call. Add an entry to `hostManifests` within your app directory record to enable this:
+
+ ```json
+{
+    "title": "My App",
+    "appId": "my-app",
+    "type": "web",
+    "details": {
+        "url": "http://localhost:4302/app-b.html"
+    },
+    "hostManifests": {
+        "MorganStanley.fdc3-web": {
+            "singleton": true
+        }
+    }
+}
+ ```
+  * `applicationStrategies` parameter in `RootDesktopAgentFactoryParams` now accepts `(IOpenApplicationStrategy | ISelectApplicationStrategy)[]` instead of just `IOpenApplicationStrategy[]`
+ * `ISelectApplicationStrategy` - new interface for selecting/focusing existing application instances. This allows strategies to restore minimised windows or bring windows to the front. Define strategies with `canSelectApp()` and `selectApp()` methods:
+
+ ```ts
+export interface ISelectApplicationStrategy {
+    manifestKey?: string;
+    canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean>;
+    selectApp(params: SelectApplicationStrategyParams): Promise<void>;
+}
+ ```
+
+ ### Changed
+
+  * IAppResolver  implementations no longer have to return an `FullyQualifiedAppIdentifier`. Instead they can just return an `AppIdentifier`. If a non-qualified identifier is returned the Desktop Agent will handle the responsibility of opening a new instance of that app.
+
+## 0.9.2 (2025-12-01)
+
+ - stop listening for heartbeat messages when a goodbye message is received from a child app.
+
+## 0.9.1 (2025-11-24)
+
+ - ensure that it is safe to add the same app to the directory multiple times without losing registered instances of that app
+
 ## 0.9.0 (2025-11-13)
 
 ### Breaking

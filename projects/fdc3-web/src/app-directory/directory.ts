@@ -18,8 +18,9 @@ import {
     OpenError,
     ResolveError,
 } from '@finos/fdc3';
-import { AppDirectoryApplication, LocalAppDirectory } from '../app-directory.contracts.js';
+import { AppDirectoryApplication, LocalAppDirectory, MS_HOST_MANIFEST_KEY } from '../app-directory.contracts.js';
 import {
+    AppHostManifestLookup,
     BackoffRetryParams,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
@@ -30,21 +31,21 @@ import {
     createLogger,
     generateUUID,
     getAppDirectoryApplications,
+    isDefined,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
+    isIMSHostManifest,
     isWebAppDetails,
     mapApplicationToMetadata,
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
     resolveAppIdentifier,
+    toUnqualifiedAppId,
     urlContainsAllElements,
 } from '../helpers/index.js';
 
 type IntentContextLookup = { intent: Intent; context: Context[] };
 type DirectoryEntry = { application?: AppDirectoryApplication; instances: string[] };
-
-//used as hostname in fullyQualifiedAppId when no app directory is loaded. Means app instances can still access some desktop agent functionality if no app directory is loaded
-const unknownAppDirectory = 'unknown-app-directory';
 
 export class AppDirectory {
     private log = createLogger(AppDirectory, 'proxy');
@@ -53,7 +54,7 @@ export class AppDirectory {
     private readonly instanceLookup: Partial<Record<string, Set<IntentContextLookup>>> = {}; //indexed by instanceId
 
     private readonly appDirectoryEntries: (string | LocalAppDirectory)[];
-    private loadDirectoryPromise: Promise<void>;
+    public readonly loadDirectoryPromise: Promise<void>;
 
     constructor(
         rootAppId: string,
@@ -69,6 +70,12 @@ export class AppDirectory {
     }
 
     private _rootAppIdentifier: FullyQualifiedAppIdentifier;
+
+    public get applications(): AppDirectoryApplication[] {
+        return Object.values(this.directory)
+            .map(entry => entry?.application)
+            .filter(isDefined);
+    }
 
     public get rootAppIdentifier(): FullyQualifiedAppIdentifier {
         return this._rootAppIdentifier;
@@ -88,15 +95,17 @@ export class AppDirectory {
     }
 
     /**
-     * Returns fully qualified appIdentifier with a populated instance ID
-     * If the passed in app is fully qualified that is returned
-     * If not the request is passed to the appResolver to determine which app to use (usually by launching a UI element)
+     * Returns an AppIdentifier for the app to handle the intent.
+     * If the passed in app is fully qualified that is returned.
+     * Otherwise the resolver determines which app to use (usually by launching a UI element).
+     * The returned AppIdentifier may or may not have an instanceId - the caller is responsible
+     * for opening a new instance if needed.
      */
-    public async resolveAppInstanceForIntent(
+    public async resolveAppForIntent(
         intent: Intent,
         context: Context,
         app?: AppIdentifier | string,
-    ): Promise<FullyQualifiedAppIdentifier | undefined> {
+    ): Promise<AppIdentifier | undefined> {
         const appIdentifier = this.getValidatedAppIdentifier(app);
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
@@ -107,22 +116,24 @@ export class AppDirectory {
             return Promise.reject(appIdentifier);
         }
 
-        //TODO should we pass context to getAppIntent? Causes a problem for some dynamic intentListeners if they don't have any registered contexts
-        const appIntent = await this.getAppIntent(intent);
+        const appIntent = await this.getAppIntent(intent, context);
 
         return (await this.appResolverPromise).resolveAppForIntent({
             intent,
             appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
             context,
             appIntent,
+            appManifests: this.buildAppHostManifestLookup(),
         });
     }
 
     /**
-     * Returns chosen intent and a fully qualified appIdentifier with a populated instance ID
-     * Request is passed to the appResolver to determine which intent and app to use (usually by launching a UI element)
+     * Returns chosen intent and an AppIdentifier for the app to handle the context.
+     * The resolver determines which intent and app to use (usually by launching a UI element).
+     * The returned AppIdentifier may or may not have an instanceId - the caller is responsible
+     * for opening a new instance if needed.
      */
-    public async resolveAppInstanceForContext(
+    public async resolveAppForContext(
         context: Context,
         app?: AppIdentifier | string,
     ): Promise<ResolveForContextResponse | undefined> {
@@ -138,6 +149,7 @@ export class AppDirectory {
             context,
             appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
             appIntents,
+            appManifests: this.buildAppHostManifestLookup(),
         });
     }
 
@@ -209,23 +221,19 @@ export class AppDirectory {
      * @returns array of AppIdentifiers with appIds that match given appId, or undefined if app is not known to desktop agent
      */
     public async getAppInstances(appId: string): Promise<FullyQualifiedAppIdentifier[] | undefined> {
-        //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
-        const fullyQualifiedAppId = this.getFullyQualifiedAppId(appId);
-        if (fullyQualifiedAppId == null) {
-            //app is not known to desktop agent and cannot be looked up as no hostname is provided in appId
+        const matchingAppIds = this.getAllMatchingFullyQualifiedAppIds(appId);
+        if (matchingAppIds.length === 0) {
             return;
         }
-        const directoryEntry = this.directory[fullyQualifiedAppId];
-        if (directoryEntry == null) {
-            //TODO: support fullyQualifiedAppId namespace syntax host resolution so directory can attempt to lookup unknown app
-            return;
-        }
-        return directoryEntry.instances.map(instanceId => ({
-            appId: fullyQualifiedAppId,
-            instanceId,
-        }));
+
+        return matchingAppIds.flatMap(matchedAppId =>
+            (this.directory[matchedAppId]?.instances ?? []).map(instanceId => ({
+                appId: matchedAppId,
+                instanceId,
+            })),
+        );
     }
 
     /**
@@ -276,47 +284,70 @@ export class AppDirectory {
     private getValidatedAppIdentifier(
         identifier?: AppIdentifier | string,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | string {
-        //TODO: handle unqualified appId if we support running with no directory.
-
         const appIdentifier = resolveAppIdentifier(identifier);
 
-        if (
-            // we have not passed an appIdentifier so returning is fine
-            appIdentifier == null ||
-            // is the appId fully qualified?
-            (isFullyQualifiedAppId(appIdentifier.appId) &&
-                // is this a known appId
-                this.directory[appIdentifier.appId] != null &&
-                // no instanceId specified so returning is fine
-                (appIdentifier.instanceId == null ||
-                    // an instanceId has been specified so we need to check that this is a known instance
-                    this.directory[appIdentifier.appId]?.instances.includes(appIdentifier.instanceId)))
-        ) {
-            return appIdentifier as AppIdentifier & { appId: FullyQualifiedAppId };
+        if (appIdentifier == null) {
+            return undefined;
         }
 
-        if (isFullyQualifiedAppId(appIdentifier.appId) && this.directory[appIdentifier.appId] != null) {
-            //instance is not known to desktop agent and cannot be looked up
+        const fullyQualifiedAppId = this.getKnownFullyQualifiedAppId(appIdentifier.appId);
+
+        if (fullyQualifiedAppId == null || this.directory[fullyQualifiedAppId] == null) {
+            return ResolveError.TargetAppUnavailable;
+        }
+
+        if (
+            appIdentifier.instanceId != null &&
+            !this.directory[fullyQualifiedAppId]?.instances.includes(appIdentifier.instanceId)
+        ) {
             return ResolveError.TargetInstanceUnavailable;
         }
 
-        //app is not known to desktop agent and cannot be looked up
-        return ResolveError.TargetAppUnavailable;
+        return { ...appIdentifier, appId: fullyQualifiedAppId };
     }
 
     /**
-     * Returns fullyQualifiedAppId if appId passed is in format 'appId@hostname' or no app directory is currently loaded, and undefined otherwise
+     * Returns all FullyQualifiedAppIds that match the given appId using FDC3 cross-matching rules.
+     * Used by findInstances where multiple matches should all be returned.
      */
-    private getFullyQualifiedAppId(appId?: string): FullyQualifiedAppId | undefined {
-        if (isFullyQualifiedAppId(appId)) {
-            //return fullyQualifiedAppId
+    private getAllMatchingFullyQualifiedAppIds(appId: string): FullyQualifiedAppId[] {
+        if (isFullyQualifiedAppId(appId) && this.directory[appId] != null) {
+            return [appId];
+        }
+
+        const unqualifiedAppId = isFullyQualifiedAppId(appId) ? toUnqualifiedAppId(appId) : appId;
+
+        return Object.keys(this.directory)
+            .filter(isFullyQualifiedAppId)
+            .filter(knownId => toUnqualifiedAppId(knownId) === unqualifiedAppId);
+    }
+
+    /**
+     * Resolves an appId (qualified or unqualified) to a known FullyQualifiedAppId that exists in the directory using the
+     * FDC3 Fully-Qualified AppId resolution algorithm:
+     *
+     * 1. Exact match: try the appId as-is against known directory keys.
+     * 2. Cross-match: if a fully-qualified appId was given, split on '@' and match the
+     *    unqualified portion against the unqualified part of known fully-qualified appIds.
+     *    If an unqualified appId was given, match it against the unqualified part of known
+     *    fully-qualified appIds.
+     *
+     * //TODO: update url when current version docs include this resolution algorithm
+     * https://fdc3.finos.org/docs/next/api/spec#fully-qualified-appids
+     *
+     * When the cross-match yields multiple results the first match is returned.
+     */
+    private getKnownFullyQualifiedAppId(appId?: string): FullyQualifiedAppId | undefined {
+        if (appId == null) {
+            return;
+        }
+
+        if (isFullyQualifiedAppId(appId) && this.directory[appId] != null) {
             return appId;
         }
-        if (this.appDirectoryEntries.length === 0 && appId != null) {
-            //if no app directory is loaded, create fullyQualifiedAppId using default hostname string
-            return `${appId}@${unknownAppDirectory}`;
-        }
-        return;
+
+        // return first match if multiple found
+        return this.getAllMatchingFullyQualifiedAppIds(appId)[0];
     }
 
     /**
@@ -327,7 +358,7 @@ export class AppDirectory {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
-        const fullyQualifiedAppId = this.getFullyQualifiedAppId(app.appId);
+        const fullyQualifiedAppId = this.getKnownFullyQualifiedAppId(app.appId);
         if (fullyQualifiedAppId == null) {
             //app is not known to desktop agent and cannot be looked up as no hostname is provided in appId
             return;
@@ -347,17 +378,6 @@ export class AppDirectory {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
-        const fullyQualifiedAppId = this.getFullyQualifiedAppId(app.appId);
-
-        if (fullyQualifiedAppId == null) {
-            //app is not known to desktop agent and cannot be looked up as no hostname is provided in appId
-            return;
-        }
-        if (this.directory[fullyQualifiedAppId] == null) {
-            //TODO: support fullyQualifiedAppId namespace syntax host resolution so directory can attempt to lookup unknown app
-            return;
-        }
-
         //if AppIdentifier is fully qualified, return contexts for specific instance intent pair
         if (app.instanceId != null) {
             return (
@@ -366,6 +386,14 @@ export class AppDirectory {
                 )?.context ?? []
             );
         }
+
+        // if we are given an unqualified appId we need to find all matching fully qualified appIds as there may be multiple matches and we want to return contexts for all matches
+        const fullyQualifiedAppId = this.getKnownFullyQualifiedAppId(app.appId);
+
+        if (fullyQualifiedAppId == null) {
+            return;
+        }
+
         //otherwise, return contexts based on app intent pair from application data
         return (
             this.directory[fullyQualifiedAppId]?.application?.interop?.intents?.listensFor?.[intent]?.contexts?.map(
@@ -543,7 +571,11 @@ export class AppDirectory {
      * @param context is context object whose type is being checked for in array
      */
     private isContextInArray(contextArray: Context[], context?: Context): boolean {
-        if (context == null || contextArray.some(currentContext => currentContext.type === context.type)) {
+        if (
+            context == null ||
+            contextArray.length === 0 ||
+            contextArray.some(currentContext => currentContext.type === context.type)
+        ) {
             return true;
         }
         return false;
@@ -596,7 +628,7 @@ export class AppDirectory {
         mapLocalAppDirectory(localDirectory).forEach(application => {
             this.directory[application.appId] = {
                 application,
-                instances: [],
+                instances: this.directory[application.appId]?.instances ?? [],
             };
         });
     }
@@ -652,7 +684,7 @@ export class AppDirectory {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
-        const fullyQualifiedAppId = this.getFullyQualifiedAppId(appId);
+        const fullyQualifiedAppId = this.getKnownFullyQualifiedAppId(appId);
         if (fullyQualifiedAppId == null) {
             //app is not known to desktop agent and cannot be looked up as no hostname is provided in appId
             return;
@@ -669,18 +701,33 @@ export class AppDirectory {
     public removeDisconnectedApp(app: FullyQualifiedAppIdentifier): void {
         delete this.instanceLookup[app.instanceId];
 
-        const fullyQualifiedId = isFullyQualifiedAppId(app.appId) ? app.appId : this.getFullyQualifiedAppId(app.appId);
+        // if an unqualified appId is passed we might end up with multiple matching apps
+        const matchingAppIds = this.getAllMatchingFullyQualifiedAppIds(app.appId);
 
-        if (fullyQualifiedId == null) {
-            //app is not known to desktop agent and cannot be looked up as no hostname is provided in appId
-            return;
-        }
+        matchingAppIds.forEach(fullyQualifiedId => {
+            const appInstances = this.directory[fullyQualifiedId];
+            const instanceIndex = appInstances?.instances?.indexOf(app.instanceId);
 
-        const appInstances = this.directory[fullyQualifiedId];
-        const instanceIndex = appInstances?.instances?.indexOf(app.instanceId);
+            if (instanceIndex != null && instanceIndex >= 0) {
+                appInstances?.instances.splice(instanceIndex, 1);
+            }
+        });
+    }
 
-        if (instanceIndex != null && instanceIndex >= 0) {
-            appInstances?.instances.splice(instanceIndex, 1);
-        }
+    private buildAppHostManifestLookup(): AppHostManifestLookup {
+        return Object.entries(this.directory)
+            .map(([appId, appRecord]) => {
+                const manifest = appRecord?.application?.hostManifests?.[MS_HOST_MANIFEST_KEY];
+
+                return {
+                    appId,
+                    appManifest: isIMSHostManifest(manifest) ? manifest : undefined,
+                };
+            })
+            .filter(({ appId, appManifest }) => appId != null && appManifest != null)
+            .reduce<AppHostManifestLookup>(
+                (lookup, { appId, appManifest }) => ({ ...lookup, [appId]: appManifest }),
+                {},
+            );
     }
 }

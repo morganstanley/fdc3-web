@@ -249,13 +249,22 @@ export class DefaultApp extends LitElement {
         return html`
             <div class="hstack gap-2">
                 <div class="flex-grow-1">
+                    <input id="context-input" class="w-100" type="text" value="fdc3.contact" />
+                </div>
+                <div class="flex-grow-1">
                     <select-component
                         id="intent-selector"
                         .items=${this.supportedRaiseIntent}
                         aria-label="Select Intent to Raise"
                     ></select-component>
                 </div>
+            </div>
+
+            <div class="hstack gap-2">
                 <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntent}">Raise Intent</button>
+                <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntentForContext}">
+                    Raise Intent for Context
+                </button>
             </div>
         `;
     }
@@ -292,11 +301,7 @@ export class DefaultApp extends LitElement {
     private renderContextSection(): TemplateResult {
         return html`
             <div class="vstack gap-2">
-                <label class="form-label">Context:</label>
                 <div class="vstack gap-1">
-                    <div class="flex-grow-1">
-                        <input id="context-input" class="w-100" type="text" value="fdc3.contact" />
-                    </div>
                     <select-component
                         id="broadcast-channel-selector"
                         .items=${['current user channel', ...Object.keys(this.currentChannels)]}
@@ -318,9 +323,6 @@ export class DefaultApp extends LitElement {
                     </div>
 
                     <div class="hstack gap-2 justify-content-end">
-                        <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntentForContext}">
-                            Raise Intent for Context
-                        </button>
                         <button
                             class="btn btn-secondary bg-primary-subtle"
                             @click="${this.getCurrentContext}"
@@ -784,11 +786,14 @@ export class DefaultApp extends LitElement {
      * @returns {Promise<void>} A promise that resolves when the intent has been raised and handled.
      */
     private async raiseIntent(): Promise<void> {
-        this.log(`Intent Raised: ${this.intentSelector.value}`);
+        const context = this.broadcastContext.value;
+        this.log(`Intent Raised: ${this.intentSelector.value} (context: '${context}')`);
         const agent = await getAgent();
 
         try {
-            const resolution = await agent.raiseIntent(this.intentSelector.value, { type: 'fdc3.instrument' });
+            const resolution = await agent.raiseIntent(this.intentSelector.value, {
+                type: context,
+            });
 
             if (resolution != null) {
                 this.log('Intent Resolution:', { intent: resolution.intent, source: resolution.source });

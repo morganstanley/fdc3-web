@@ -9,8 +9,14 @@
  * and limitations under the License. */
 
 import { BrowserTypes, Context } from '@finos/fdc3';
-import { WebAppDetails } from '../app-directory.contracts.js';
-import { FullyQualifiedAppId, FullyQualifiedAppIdentifier, IRootOutgoingMessageEnvelope } from '../contracts.js';
+import { IMSHostManifest, WebAppDetails } from '../app-directory.contracts.js';
+import {
+    FullyQualifiedAppId,
+    FullyQualifiedAppIdentifier,
+    IOpenApplicationStrategy,
+    IRootOutgoingMessageEnvelope,
+    ISelectApplicationStrategy,
+} from '../contracts.js';
 
 export function isFullyQualifiedAppIdentifier(value: any): value is FullyQualifiedAppIdentifier {
     const appIdentifier = value as FullyQualifiedAppIdentifier;
@@ -55,4 +61,36 @@ export function isRootOutgoingMessageEnvelope(value: any): value is IRootOutgoin
     const message = value as IRootOutgoingMessageEnvelope;
 
     return message != null && typeof message.payload === 'object' && Array.isArray(message.channelIds);
+}
+
+/**
+ * type predicate to determine if a Host Manifest is an MS Host Manifest
+ * Note: all properties on IMSHostManifest are optional, so we can only check for presence and type of known properties
+ */
+export function isIMSHostManifest(value: any): value is IMSHostManifest {
+    const manifest = value as IMSHostManifest;
+
+    return manifest != null && typeof manifest.singleton === 'boolean';
+}
+
+/**
+ * type predicate to determine if a strategy is an IOpenApplicationStrategy
+ */
+export function isOpenApplicationStrategy(value: any): value is IOpenApplicationStrategy {
+    const strategy = value as IOpenApplicationStrategy;
+
+    return strategy != null && typeof strategy.canOpen === 'function' && typeof strategy.open === 'function';
+}
+
+/**
+ * type predicate to determine if a strategy is an ISelectApplicationStrategy
+ */
+export function isSelectApplicationStrategy(value: any): value is ISelectApplicationStrategy {
+    const strategy = value as ISelectApplicationStrategy;
+
+    return strategy != null && typeof strategy.canSelectApp === 'function' && typeof strategy.selectApp === 'function';
+}
+
+export function isDefined<T>(value: T | null | undefined): value is T {
+    return value != null;
 }

@@ -75,3 +75,15 @@ export type LocalAppDirectory = {
      */
     updates?: AsyncIterator<AppDirectoryApplication | AppDirectoryApplication[]>;
 };
+
+/**
+ * Host Manifest record specifically for morgan stanley desktop agent
+ */
+export interface IMSHostManifest {
+    singleton?: boolean;
+}
+
+/**
+ * the key used to store the Morgan Stanley host manifest in the hostManifests property of an application directory record
+ */
+export const MS_HOST_MANIFEST_KEY = 'MorganStanley.fdc3-web';

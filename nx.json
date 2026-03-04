@@ -18,7 +18,13 @@
             "cache": true
         },
         "test": {
-            "cache": true
+            "cache": true,
+            "dependsOn": [
+                "^build"
+            ],
+            "options": {
+                "watch": false
+            }
         },
         "lint": {
             "cache": true

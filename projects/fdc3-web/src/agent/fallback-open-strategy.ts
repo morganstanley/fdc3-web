@@ -9,18 +9,18 @@
  * and limitations under the License. */
 
 import { OpenError } from '@finos/fdc3';
-import { IOpenApplicationStrategy, OpenApplicationStrategyParams } from '../contracts.js';
+import { ApplicationStrategyParams, IOpenApplicationStrategy } from '../contracts.js';
 import { isWebAppDetails, subscribeToConnectionAttemptUuids } from '../helpers/index.js';
 
 export class FallbackOpenStrategy implements IOpenApplicationStrategy {
     //window parameter is passed during testing
     constructor(private currentWindow: Window = window) {}
 
-    public async canOpen(params: OpenApplicationStrategyParams): Promise<boolean> {
+    public async canOpen(params: ApplicationStrategyParams): Promise<boolean> {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 
-    public async open(params: OpenApplicationStrategyParams): Promise<string> {
+    public async open(params: ApplicationStrategyParams): Promise<string> {
         if (!isWebAppDetails(params.appDirectoryRecord.details)) {
             //this should not occur since canOpen() will have already checked this
             return Promise.reject(OpenError.ErrorOnLaunch);

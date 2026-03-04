@@ -1,6 +1,6 @@
 # fdc3-web
 
-![Lifecycle Incubating](https://badgen.net/badge/Lifecycle/Incubating/yellow)
+![Lifecycle Incubating](https://img.shields.io/badge/Lifecycle-Incubating-yellow)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/morganstanley/fdc3-web/actions/workflows/build.yml/badge.svg)](https://github.com/morganstanley/fdc3-web/actions/workflows/build.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/morganstanley/fdc3-web/badge)](https://securityscorecards.dev/viewer/?uri=github.com/morganstanley/fdc3-web)
@@ -31,7 +31,7 @@ const agent = await getAgent({
     new DesktopAgentFactory().createRoot({
       uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
       appDirectoryEntries: ['http://localhost:4299/v2/apps'],
-      openStrategies: [{
+      applicationStrategies: [{
         canOpen: (params: OpenApplicationStrategyParams, context?: Context) => { /* define whether an app should open */ },
         open: (params: OpenApplicationStrategyParams, context?: Context) => { /* define how an app should open */ }
       }],
@@ -118,6 +118,136 @@ const agent = await getAgent({
 
 For more advanced usage, see the [test-harness](./projects/test-harness/README.md) example app.
 
+#### Local App Directories with Live Updates
+
+Local app directories can receive live updates via an async iterator. This is useful for dynamically adding or updating app definitions at runtime:
+
+```ts
+const updates: AsyncIterator<AppDirectoryApplication | AppDirectoryApplication[]>;
+
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      appDirectoryEntries: [
+        {
+          host: 'my-domain.com',
+          apps: [
+            { appId: 'static-app', title: 'Static App', type: 'web', details: { url: 'https://example.com/static' } }
+          ],
+          updates,
+        }
+      ],
+    }),
+});
+```
+
+### Singleton Apps
+
+Apps can be configured as singletons to prevent multiple instances from being opened. When the intent resolver UI is displayed, singleton apps with an active instance will not appear in the "Open New" section. Users can only select the existing instance.
+
+Configure singleton behavior via the `hostManifests` property in your app directory entry:
+
+```ts
+{
+  appId: 'my-singleton-app',
+  title: 'My Singleton App',
+  type: 'web',
+  details: { url: 'https://example.com/singleton' },
+  hostManifests: {
+    'MorganStanley.fdc3-web': { singleton: true }
+  }
+}
+```
+
+## Custom Application Strategies
+
+Application strategies control how apps are opened and selected. There are two types of strategies:
+
+### Open Application Strategy
+
+Defines how new app instances are launched. Implement `IOpenApplicationStrategy`:
+
+```js
+import { subscribeToConnectionAttemptUuids } from "@morgan-stanley/fdc3-web";
+
+const customOpenStrategy = {
+  manifestKey: 'MyCustomManifest', // Optional: key to extract from hostManifests
+  
+  canOpen: async (params) => {
+    // Return true if this strategy can open the app
+    return params.appDirectoryRecord.type === 'web';
+  },
+  
+  open: async (params) => {
+    const newWindow = window.open(params.appDirectoryRecord.details.url);
+    // return connectionAttemptUUID received from new window
+    return new Promise(resolve => {
+        const subscriber = subscribeToConnectionAttemptUuids(
+            window, // the current window
+            newWindow,
+            connectionAttemptUuid => {
+                subscriber.unsubscribe();
+
+                resolve(connectionAttemptUuid);
+            },
+        );
+    });
+  }
+};
+```
+
+### Select Application Strategy
+
+Defines how existing app instances are focused or brought to the foreground. Implement `ISelectApplicationStrategy`:
+
+```js
+const customSelectStrategy = {
+  manifestKey: 'MyCustomManifest', // Optional: key to extract from hostManifests
+  
+  canSelectApp: async (params) => {
+    // Return true if this strategy can select/focus the app
+    return true;
+  },
+  
+  selectApp: async (params) => {
+    // Focus or bring the existing app instance to the foreground
+    // params.appIdentifier contains the instanceId of the target app
+  }
+};
+```
+
+Pass strategies when creating the root agent:
+
+```js
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      applicationStrategies: [customOpenStrategy, customSelectStrategy],
+    }),
+});
+```
+
+Strategies are evaluated in order. The first strategy where `canOpen()` or `canSelectApp()` returns `true` will be used.
+
+## Backoff Retry for App Directory Loading
+
+When loading remote app directories, the agent can retry failed requests with exponential backoff:
+
+```js
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      appDirectoryEntries: ['https://my-app-directory.com/v2/apps'],
+      backoffRetry: {
+        maxAttempts: 5,    // Maximum number of retry attempts (default: 3)
+        baseDelay: 500     // Initial delay in ms, doubles with each retry (default: 250)
+      }
+    }),
+});
+```
+
+With `baseDelay: 500` and `maxAttempts: 5`, retries would occur at approximately 500ms, 1000ms, 2000ms, and 4000ms intervals.
+
 ### Controlling Logging Levels
 
 The `getAgent` function accepts a `logLevels` parameter that allows fine-grained control over logging behavior:
@@ -148,6 +278,45 @@ Available log levels from `@finos/fdc3` are:
 - `test-harness` - A Lit app for testing local messaging between different apps working in the same context. Will depend on `lib`.
 
 For most development running `npm start` will be sufficient to test implementation and cross-frame / cross origin communication. This will build and run `test-harness`.
+
+
+### Running Conformance Tests
+
+Purpose: Run the FDC3 website conformance test suite using the test harness UI.
+
+Prerequisites
+
+- Ensure any popup blockers or strict cross-origin blocking are disabled for the test hosts
+
+Start the test harness
+
+```bash
+git clone https://github.com/morganstanley/fdc3-web.git
+cd fdc3-web
+npm ci
+npm run start
+```
+
+The dev server serves the test UI (commonly at `http://localhost:4200`).
+
+Open the Conformance test app
+
+- The harness accepts query parameters to override the app directory and to force apps to open in new windows.
+- Use this example URL to run the website conformance directory and open apps in new windows:
+
+```
+http://localhost:4200/root-app.html?openInWindow=true&appDirectoryUrl=https://fdc3.finos.org/toolbox/fdc3-conformance/directories/website-conformance.v2.json
+```
+
+- `appDirectoryUrl`: JSON directory used by the conformance suite (when provided, it replaces the default directories).
+- `openInWindow=true`: defaults the harness to open apps in new browser windows (recommended for conformance runs).
+
+Run tests in the UI
+
+1. In the harness UI select the "Conformance" test app from the app dropdown.
+2. Click `Add App` to launch the conformance app instance.
+3. Use the conformance app UI to start individual tests or run the full suite.
+
 
 ### Commands
 
