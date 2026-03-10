@@ -217,14 +217,13 @@ export class AppDirectory {
         appEntry.instances.push(identifier.instanceId);
 
         //copy across intents app listens for
-        this.instanceLookup[identifier.instanceId] = Object.entries(
-            appEntry.application?.interop?.intents?.listensFor ?? {},
-        ).reduce<IntentToContextLookup>(
-            (lookup, [intent, contextResultTypePair]) => ({
-                ...lookup,
-                [intent]: contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
-            }),
-            {},
+        this.instanceLookup[identifier.instanceId] = Object.fromEntries(
+            Object.entries(appEntry.application?.interop?.intents?.listensFor ?? {}).map(
+                ([intent, contextResultTypePair]) => [
+                    intent,
+                    contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
+                ],
+            ),
         );
 
         return { identifier, application };
@@ -386,7 +385,7 @@ export class AppDirectory {
     }
 
     /**
-     * @returns array of contexts which are handled by given intent and given app
+     * @returns array of contexts which are handled by given intent and given app or undefined
      */
     public async getContextForAppIntent(app: AppIdentifier, intent: Intent): Promise<Context[] | undefined> {
         //ensures app directory has finished loading before intentListeners can be added dynamically

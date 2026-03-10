@@ -326,17 +326,20 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             //wait for intentListener of correct intent type on chosen app to be added
             return new Promise<void>((resolve, reject) => {
                 const callbackUUID = generateUUID();
-                this.intentListenerCallbacks.set(callbackUUID, (app, listenerType) => {
-                    if (appInstanceEquals(app, chosenApp) && (listenerType == null || listenerType === intent)) {
-                        this.intentListenerCallbacks.delete(callbackUUID);
-                        resolve();
-                    }
-                });
 
-                setTimeout(() => {
+                // if the intentListener is not added within a certain time we rturn an IntentDeliveryFailed error
+                const timeoutId = setTimeout(() => {
                     this.intentListenerCallbacks.delete(callbackUUID);
                     reject(ResolveError.IntentDeliveryFailed);
                 }, timeout);
+
+                this.intentListenerCallbacks.set(callbackUUID, (app, listenerType) => {
+                    if (appInstanceEquals(app, chosenApp) && (listenerType == null || listenerType === intent)) {
+                        this.intentListenerCallbacks.delete(callbackUUID);
+                        clearTimeout(timeoutId);
+                        resolve();
+                    }
+                });
             });
         }
     }
