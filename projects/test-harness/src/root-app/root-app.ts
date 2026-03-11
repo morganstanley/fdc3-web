@@ -290,22 +290,27 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
     }
 
     private async initApp(): Promise<void> {
-        await this.subscribeToSelectedApp().catch(err =>
-            this.log('Error subscribing to selected app', LogLevel.ERROR, err),
-        );
+        await this.subscribeToSelectedApp();
 
-        await this.listenForSelectableAppsRequests().catch(err =>
-            this.log('Error subscribing to selectable apps', LogLevel.ERROR, err),
-        );
+        await this.listenForSelectableAppsRequests();
     }
 
     private async subscribeToSelectedApp(): Promise<void> {
         const agent = await getAgent();
 
-        this.openedWindowChannel = await agent.getOrCreateChannel(NEW_WINDOW_PUBLIC_CHANNEL);
+        this.openedWindowChannel = await agent.getOrCreateChannel(NEW_WINDOW_PUBLIC_CHANNEL).catch(err => {
+            this.log(`Error creating channel for '${NEW_WINDOW_PUBLIC_CHANNEL}'`, LogLevel.ERROR, err);
+            return undefined;
+        });
 
-        this.selectedAppChannel = await agent.getOrCreateChannel(SELECT_APP_PUBLIC_CHANNEL);
-        this.selectedAppChannel.addContextListener(SelectAppContextType, context => this.onAppSelected(context));
+        this.selectedAppChannel = await agent.getOrCreateChannel(SELECT_APP_PUBLIC_CHANNEL).catch(err => {
+            this.log(`Error creating channel for '${SELECT_APP_PUBLIC_CHANNEL}'`, LogLevel.ERROR, err);
+            return undefined;
+        });
+
+        this.selectedAppChannel
+            ?.addContextListener(SelectAppContextType, context => this.onAppSelected(context))
+            .catch(err => this.log(`Error adding context listener for '${SelectAppContextType}'`, LogLevel.ERROR, err));
     }
 
     private onAppSelected(context: Context): void {

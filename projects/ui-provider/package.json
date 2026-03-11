@@ -3,7 +3,7 @@
     "type": "module",
     "main": "index.js",
     "types": "index.d.ts",
-    "version": "0.11.1",
+    "version": "0.11.2",
     "license": "Apache-2.0",
     "author": "Morgan Stanley",
     "repository": {
@@ -11,7 +11,7 @@
         "url": "https://github.com/morganstanley/fdc3-web"
     },
     "peerDependencies": {
-        "@morgan-stanley/fdc3-web": "^0.11.1",
+        "@morgan-stanley/fdc3-web": "^0.11.2",
         "@finos/fdc3": "^2.2.0"
     },
     "dependencies": {

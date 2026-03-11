@@ -605,6 +605,49 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         .withParametersEqualTo(expectedResponse, source),
                 ).wasCalledOnce();
             });
+
+            it(`should publish RaiseIntentResponse with IntentDeliveryFailed error when intent listener is not added within timeout`, async () => {
+                vi.useFakeTimers();
+                try {
+                    createInstance();
+
+                    const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: currentDate,
+                            source,
+                        },
+                        payload: {
+                            intent: 'StartChat',
+                            context: contact,
+                        },
+                        type: 'raiseIntentRequest',
+                    };
+
+                    const postPromise = postRequestMessage(raiseIntentRequest, source);
+                    await vi.advanceTimersByTimeAsync(20000);
+                    await postPromise;
+
+                    const expectedResponse: BrowserTypes.RaiseIntentResponse = {
+                        meta: { ...raiseIntentRequest.meta, responseUuid: mockedResponseUuid },
+                        payload: { error: ResolveError.IntentDeliveryFailed },
+                        type: 'raiseIntentResponse',
+                    };
+
+                    expect(
+                        mockRootPublisher
+                            .withFunction('publishResponseMessage')
+                            .withParametersEqualTo(expectedResponse, source),
+                    ).wasCalledOnce();
+
+                    const intentEventCalls = mockRootPublisher.functionCallLookup['publishEvent']?.filter(
+                        args => (args[0] as BrowserTypes.IntentEvent)?.type === 'intentEvent',
+                    );
+                    expect(intentEventCalls ?? []).toHaveLength(0);
+                } finally {
+                    vi.useRealTimers();
+                }
+            });
         });
 
         describe(`raiseIntentForContextRequest`, () => {
@@ -886,6 +929,48 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         .withFunction('publishResponseMessage')
                         .withParametersEqualTo(expectedResponse, source),
                 ).wasCalledOnce();
+            });
+
+            it(`should publish RaiseIntentForContextResponse with IntentDeliveryFailed error when intent listener is not added within timeout`, async () => {
+                vi.useFakeTimers();
+                try {
+                    createInstance();
+
+                    const raiseIntentForContextRequest: BrowserTypes.RaiseIntentForContextRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: currentDate,
+                            source,
+                        },
+                        payload: {
+                            context: contact,
+                        },
+                        type: 'raiseIntentForContextRequest',
+                    };
+
+                    const postPromise = postRequestMessage(raiseIntentForContextRequest, source);
+                    await vi.advanceTimersByTimeAsync(20000);
+                    await postPromise;
+
+                    const expectedResponse: BrowserTypes.RaiseIntentForContextResponse = {
+                        meta: { ...raiseIntentForContextRequest.meta, responseUuid: mockedResponseUuid },
+                        payload: { error: ResolveError.IntentDeliveryFailed },
+                        type: 'raiseIntentForContextResponse',
+                    };
+
+                    expect(
+                        mockRootPublisher
+                            .withFunction('publishResponseMessage')
+                            .withParametersEqualTo(expectedResponse, source),
+                    ).wasCalledOnce();
+
+                    const intentEventCalls = mockRootPublisher.functionCallLookup['publishEvent']?.filter(
+                        args => (args[0] as BrowserTypes.IntentEvent)?.type === 'intentEvent',
+                    );
+                    expect(intentEventCalls ?? []).toHaveLength(0);
+                } finally {
+                    vi.useRealTimers();
+                }
             });
         });
 

@@ -38,7 +38,12 @@ export function generateUUUrl<T extends Record<string, string>>(params: T, uuid?
 export function decodeUUUrl<T extends Record<string, string>>(
     encodedUrl: string,
 ): { payload: Partial<T>; uuid: string } | undefined {
-    const decoded = atob(encodedUrl);
+    let decoded: string;
+    try {
+        decoded = atob(encodedUrl);
+    } catch {
+        return undefined;
+    }
 
     if (decoded.indexOf(UUURLBase) != 0) {
         return undefined;

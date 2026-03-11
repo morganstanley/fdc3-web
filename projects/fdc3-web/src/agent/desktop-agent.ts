@@ -253,14 +253,30 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             );
 
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(fullyQualifiedAppIdentifier, requestMessage.payload.intent);
+            await this.awaitIntentListener(fullyQualifiedAppIdentifier, requestMessage.payload.intent).catch(error => {
+                resolveError = error;
+
+                this.rootMessagePublisher.publishResponseMessage(
+                    createResponseMessage<BrowserTypes.RaiseIntentResponse>(
+                        'raiseIntentResponse',
+                        { error },
+                        requestMessage.meta.requestUuid,
+                        source,
+                    ),
+                    source,
+                );
+            });
+
+            if (resolveError != null) {
+                return;
+            }
 
             //publishes IntentEvent to chosen app to let it know it has been selected to resolve given intent
             this.publishIntentEvent(requestMessage, requestMessage.payload.intent, fullyQualifiedAppIdentifier, source);
 
             //any results from chosen app resolving intent are sent in a RaiseIntentResultResponse message once intent has been resolved
             payload.intentResolution = {
-                source: appIdentifier,
+                source: fullyQualifiedAppIdentifier,
                 intent: requestMessage.payload.intent,
             };
 
@@ -297,18 +313,30 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         );
     }
 
-    private async awaitIntentListener(chosenApp: FullyQualifiedAppIdentifier, intent: string): Promise<void> {
+    private async awaitIntentListener(
+        chosenApp: FullyQualifiedAppIdentifier,
+        intent: string,
+        timeout: number = 15000,
+    ): Promise<void> {
         //check if intentListener of correct intent type on chosen app has already been added
         if (
             this.intentListeners[intent] == null ||
             !this.intentListeners[intent]?.some(pair => appInstanceEquals(pair.appIdentifier, chosenApp))
         ) {
             //wait for intentListener of correct intent type on chosen app to be added
-            return new Promise<void>(resolve => {
+            return new Promise<void>((resolve, reject) => {
                 const callbackUUID = generateUUID();
+
+                // if the intentListener is not added within a certain time we rturn an IntentDeliveryFailed error
+                const timeoutId = setTimeout(() => {
+                    this.intentListenerCallbacks.delete(callbackUUID);
+                    reject(ResolveError.IntentDeliveryFailed);
+                }, timeout);
+
                 this.intentListenerCallbacks.set(callbackUUID, (app, listenerType) => {
                     if (appInstanceEquals(app, chosenApp) && (listenerType == null || listenerType === intent)) {
                         this.intentListenerCallbacks.delete(callbackUUID);
+                        clearTimeout(timeoutId);
                         resolve();
                     }
                 });
@@ -365,8 +393,26 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
                 requestMessage.payload.context,
             );
 
+            let resolveError: any;
+
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(fullyQualifiedAppIdentifier, resolutionResponse.intent);
+            await this.awaitIntentListener(fullyQualifiedAppIdentifier, resolutionResponse.intent).catch(error => {
+                resolveError = error;
+
+                this.rootMessagePublisher.publishResponseMessage(
+                    createResponseMessage<BrowserTypes.RaiseIntentForContextResponse>(
+                        'raiseIntentForContextResponse',
+                        { error },
+                        requestMessage.meta.requestUuid,
+                        source,
+                    ),
+                    source,
+                );
+            });
+
+            if (resolveError != null) {
+                return;
+            }
 
             //publishes IntentEvent to chosen app to let it know it has been selected to resolve chosen intent
             this.publishIntentEvent(requestMessage, resolutionResponse.intent, fullyQualifiedAppIdentifier, source);
@@ -495,22 +541,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
         //fetch context info for app and intent from app directory
         const contexts = await this.directory.getContextForAppIntent(source, requestMessage.payload.intent);
 
-        if (contexts == null) {
-            this.rootMessagePublisher.publishResponseMessage(
-                createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
-                    'addIntentListenerResponse',
-                    { error: ResolveError.TargetInstanceUnavailable },
-                    requestMessage.meta.requestUuid,
-                    source,
-                ),
-                source,
-            );
-            return;
-        }
-
         try {
             //this should not occur as error should have been caught by directory.getContextForAppIntent
-            await this.directory.registerIntentListener(source, requestMessage.payload.intent, contexts);
+            await this.directory.registerIntentListener(source, requestMessage.payload.intent, contexts ?? []);
         } catch (error) {
             if (error === ResolveError.TargetInstanceUnavailable) {
                 this.rootMessagePublisher.publishResponseMessage(

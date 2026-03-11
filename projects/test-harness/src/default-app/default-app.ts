@@ -102,7 +102,7 @@ export class DefaultApp extends LitElement {
     @state()
     private appIdentifier?: FullyQualifiedAppIdentifier;
 
-    private selectedAppChannel?: Channel;
+    private selectedAppChannel: Channel | undefined;
 
     @state()
     private selectedApp?: FullyQualifiedAppIdentifier;
@@ -589,20 +589,32 @@ export class DefaultApp extends LitElement {
 
     private async subscribeToOpenAppIntent(agent: DesktopAgent): Promise<void> {
         // listens for open app intents
-        await agent.addIntentListener(OpenAppIntent, context => this.openChildApp(context as IOpenAppContext));
-
-        this.log(`'${OpenAppIntent}' intent listener added`);
+        await agent
+            .addIntentListener(OpenAppIntent, context => this.openChildApp(context as IOpenAppContext))
+            .then(() => this.log(`'${OpenAppIntent}' intent listener added`))
+            .catch(err => this.log(`Error adding intent listener for '${OpenAppIntent}'`, err, 'error'));
     }
 
     private async subscribeToSelectedApp(agent: DesktopAgent): Promise<void> {
         // subscribes to selected app updates
-        this.selectedAppChannel = await agent.getOrCreateChannel(SELECT_APP_PUBLIC_CHANNEL);
-        this.selectedAppChannel.addContextListener(SelectAppContextType, context => this.onAppSelected(context));
+        this.selectedAppChannel = await agent.getOrCreateChannel(SELECT_APP_PUBLIC_CHANNEL).catch(err => {
+            this.log(`Error creating channel for '${SELECT_APP_PUBLIC_CHANNEL}'`, err, 'error');
+            return undefined;
+        });
 
-        this.log(`'${SelectAppContextType}' context listener added to Channel: '${SELECT_APP_PUBLIC_CHANNEL}'`);
+        this.selectedAppChannel
+            ?.addContextListener(SelectAppContextType, context => this.onAppSelected(context))
+            .then(() =>
+                this.log(`'${SelectAppContextType}' context listener added to Channel: '${SELECT_APP_PUBLIC_CHANNEL}'`),
+            )
+            .catch(err =>
+                this.log(
+                    `Error adding context listener for '${SelectAppContextType}' on channel '${SELECT_APP_PUBLIC_CHANNEL}': ${err}`,
+                ),
+            );
 
         // gets currently selected app
-        const currentApp = await this.selectedAppChannel.getCurrentContext();
+        const currentApp = await this.selectedAppChannel?.getCurrentContext();
 
         if (currentApp != null) {
             this.onAppSelected(currentApp);
@@ -614,7 +626,7 @@ export class DefaultApp extends LitElement {
 
         const context: ISelectableAppsRequestContext = { type: SelectableAppsRequestContextType };
         const resolution = await agent.raiseIntent(SelectableAppsIntent, context).catch(err => {
-            this.log(`Error raising intent '${SelectableAppsIntent}': ${err}`);
+            this.log(`Error raising intent '${SelectableAppsIntent}'`, err, 'error');
             return null;
         });
 
@@ -873,7 +885,7 @@ export class DefaultApp extends LitElement {
             await agent
                 .getAppMetadata({ appId: chosenApp.appId })
                 .then(metadata => this.log(`Metadata for ${chosenApp.appId}:`, metadata))
-                .catch(err => this.log(err));
+                .catch(err => this.log(`Error getting appMetadata for '${chosenApp.appId}'`, err, 'error'));
         }
     }
 
@@ -888,7 +900,7 @@ export class DefaultApp extends LitElement {
         await agent
             .getInfo()
             .then(info => this.log(`Information about DesktopAgent:`, info))
-            .catch(err => this.log(err));
+            .catch(err => this.log(err, undefined, 'error'));
     }
 
     /**
@@ -902,7 +914,7 @@ export class DefaultApp extends LitElement {
 
         if (chosenApp != null) {
             const identifier = await agent.open({ appId: chosenApp.appId }).catch(err => {
-                this.log(`Error opening new instance:`, err);
+                this.log(`Error opening new instance:`, err, 'error');
 
                 return undefined;
             });
@@ -926,7 +938,7 @@ export class DefaultApp extends LitElement {
             await agent
                 .findInstances({ appId: chosenApp.appId })
                 .then(instances => this.log(`Instances of app ${this.appSelector.value}`, instances))
-                .catch(err => this.log(err));
+                .catch(err => this.log(err, undefined, 'error'));
         }
     }
 
@@ -951,7 +963,9 @@ export class DefaultApp extends LitElement {
 
         const agent = await getAgent();
 
-        const appChannel = await agent.getOrCreateChannel(this.appChannelId.value).catch(err => this.log(err));
+        const appChannel = await agent
+            .getOrCreateChannel(this.appChannelId.value)
+            .catch(err => this.log(err, undefined, 'error'));
         if (appChannel != null) {
             this.currentChannels[appChannel.id] = appChannel;
             this.log(`App channel has been received`);
@@ -1048,9 +1062,9 @@ export class DefaultApp extends LitElement {
      * @param {string} message - The message to log.
      * @param {any} [object] - An optional object to log alongside the message.
      */
-    private async log(message: string, object?: any): Promise<void> {
+    private async log(message: string, object?: any, level: 'log' | 'error' = 'log'): Promise<void> {
         const printMessage = object ? `${message}: ${JSON.stringify(object)}` : message;
-        console.log(`${this.appIdentifier?.appId}: ${printMessage}`);
+        console[level](`${this.appIdentifier?.appId}: ${printMessage}`);
         this.logs = [...this.logs, printMessage];
     }
 }

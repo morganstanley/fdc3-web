@@ -1,3 +1,14 @@
+## 0.11.2 (2026-02-26)
+
+### Fixed
+
+ * Return `IntentDeliveryFailed` error when no intent listener is registered by the targeted instance within the timeout period
+ * Return `NoAppsFound` when the app supplied to `raiseIntent` does not support the provided intent/context combination
+ * Return `appIdentifier` with `instanceId` from `raiseIntent`
+ * Retrieve intent display name from app directory entry if it exists
+ * Do not duplicate contexts of the same type when registering an intent listener multiple times
+ * Improved error handling in test harness default-app and root-app
+
 ## 0.11.1 (2026-02-17)
 
 ### Updated
