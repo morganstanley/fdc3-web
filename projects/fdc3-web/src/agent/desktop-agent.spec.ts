@@ -1242,6 +1242,99 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             });
         });
 
+        describe(`addIntentListenerRequest with contextTypes`, () => {
+            it(`should publish addIntentListenerResponse when contextTypes are provided`, async () => {
+                createInstance();
+
+                const addIntentListenerMessage: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                        contextTypes: ['fdc3.contact'],
+                    } as BrowserTypes.AddIntentListenerRequestPayload & { contextTypes: string[] },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await postRequestMessage(addIntentListenerMessage, source);
+
+                const expectedMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: { ...addIntentListenerMessage.meta, responseUuid: mockedResponseUuid },
+                    payload: { listenerUUID: 'mocked-generated-Uuid' },
+                    type: 'addIntentListenerResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedMessage, source),
+                ).wasCalledOnce();
+            });
+
+            it(`should pass requests for raiseIntent to registered handler with contextTypes`, async () => {
+                createInstance();
+
+                const qualifiedIdentifier: FullyQualifiedAppIdentifier = {
+                    appId: 'listenerAppId@mock-app-directory',
+                    instanceId: 'listenerAppInstanceId',
+                };
+
+                const addIntentListenerMessage: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: qualifiedIdentifier,
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                        contextTypes: ['fdc3.contact'],
+                    } as BrowserTypes.AddIntentListenerRequestPayload & { contextTypes: string[] },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await postRequestMessage(addIntentListenerMessage, qualifiedIdentifier);
+
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(qualifiedIdentifier));
+
+                const identifier = { appId: 'listenerAppId@mock-app-directory' };
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: appIdentifier,
+                    },
+                    payload: { context: contact, intent: 'StartChat', app: identifier },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, appIdentifier);
+
+                const expectedMessage: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: mockedEventUuid,
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                        context: contact,
+                        originatingApp: appIdentifier,
+                        raiseIntentRequestUuid: mockedGeneratedUurl,
+                    },
+                    type: 'intentEvent',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishEvent')
+                        .withParametersEqualTo(expectedMessage, [qualifiedIdentifier]),
+                ).wasCalledOnce();
+            });
+        });
+
         describe(`findInstancesRequest`, () => {
             it(`should publish findInstancesResponse containing available instances for given app`, async () => {
                 createInstance();
