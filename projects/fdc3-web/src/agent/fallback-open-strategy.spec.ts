@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes, DesktopAgent, OpenError } from '@finos/fdc3';
+import { BrowserTypes, OpenError } from '@finos/fdc3';
 import {
     any,
     IMocked,
@@ -20,7 +20,7 @@ import {
 } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplicationType } from '../app-directory.contracts.js';
-import { ApplicationStrategyParams } from '../contracts.js';
+import { ApplicationStrategyParams, DesktopAgentNext } from '../contracts.js';
 import * as helpersImport from '../helpers/index.js';
 import { FallbackOpenStrategy } from './fallback-open-strategy.js';
 
@@ -60,7 +60,7 @@ const mockedIncorrectOtherApplication = {
 };
 
 describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
-    let mockDesktopAgent: IMocked<DesktopAgent>;
+    let mockDesktopAgent: IMocked<DesktopAgentNext>;
     let mockWindow: IMocked<Window>;
     let mockChildWindow: IMocked<Window>;
 
@@ -68,7 +68,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
     const mockedHelpers = Mock.create<typeof helpersImport>();
 
     beforeEach(() => {
-        mockDesktopAgent = Mock.create<DesktopAgent>();
+        mockDesktopAgent = Mock.create<DesktopAgentNext>();
         mockChildWindow = Mock.create<Window>();
         mockWindow = Mock.create<Window>().setup(
             setupFunction('addEventListener'),

@@ -17,7 +17,6 @@ import {
     Context,
     ContextHandler,
     ContextType,
-    DesktopAgent,
     DesktopAgentDetails,
     EventHandler,
     FDC3EventTypes,
@@ -32,7 +31,8 @@ import {
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
+import { AddIntentListenerWithContextRequest } from '../contracts.internal.js';
+import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
@@ -68,7 +68,7 @@ type ProxyDesktopAgentParams = {
     logLevels?: GetAgentLogLevels;
 };
 
-export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
+export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext {
     private channels: Channels;
     private channelFactory: ChannelFactory;
 
@@ -294,6 +294,68 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
 
         this.addMessageCallback(listenerUUID, async message => {
             if (isIntentEvent(message) && message.payload.intent === intent) {
+                const intentResultPromise = handler(
+                    message.payload.context,
+                    message.payload.originatingApp != null ? { source: message.payload.originatingApp } : undefined,
+                );
+
+                const handlerResult = await intentResultPromise;
+
+                await this.publishIntentResultRequest(handlerResult, message);
+            }
+        });
+
+        const unsubscribe: () => Promise<void> = async () => {
+            const intentListenerUnsubscribeRequest =
+                createRequestMessage<BrowserTypes.IntentListenerUnsubscribeRequest>(
+                    'intentListenerUnsubscribeRequest',
+                    this.appIdentifier,
+                    { listenerUUID },
+                );
+
+            await this.getResponse(intentListenerUnsubscribeRequest, isIntentListenerUnsubscribeResponse);
+
+            this.removeMessageCallback(listenerUUID);
+        };
+        return { unsubscribe };
+    }
+
+    /**
+     * This function is not yet part of the official FDC3 API - it is a temporary solution to allow intent listeners to specify context types that they are interested in, and will be removed once this feature is added to the FDC3 API and the BrowserTypes.AddIntentListenerRequestPayload is updated to include contextTypes
+     * This feature is planned for FDC3 3.0 and this implementation is based on the pull request that is waiting to merged into finos once the last 2.x release is out.
+     * https://github.com/finos/FDC3/pull/1594
+     * @param intent
+     * @param contextType
+     * @param handler
+     * @returns
+     */
+    public async addIntentListenerWithContext(
+        intent: Intent,
+        contextType: string | string[],
+        handler: IntentHandler,
+    ): Promise<Listener> {
+        const contextTypes = Array.isArray(contextType) ? contextType : [contextType];
+        const requestMessage = createRequestMessage<AddIntentListenerWithContextRequest>(
+            'addIntentListenerRequest',
+            this.appIdentifier,
+            { intent, contextTypes },
+        );
+
+        const response = await this.getResponse(requestMessage, isAddIntentListenerResponse);
+
+        const listenerUUID = response.payload.listenerUUID;
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        } else if (listenerUUID == null) {
+            return Promise.reject('listenerUUID is null');
+        }
+
+        this.addMessageCallback(listenerUUID, async message => {
+            if (
+                isIntentEvent(message) &&
+                message.payload.intent === intent &&
+                contextTypes.includes(message.payload.context.type)
+            ) {
                 const intentResultPromise = handler(
                     message.payload.context,
                     message.payload.originatingApp != null ? { source: message.payload.originatingApp } : undefined,

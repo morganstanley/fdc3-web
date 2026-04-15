@@ -13,7 +13,6 @@ import {
     BrowserTypes,
     type Channel,
     type Contact,
-    DesktopAgent,
     EventHandler,
     type Listener,
     OpenError,
@@ -36,6 +35,7 @@ import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
 import {
+    DesktopAgentNext,
     DesktopAgentStrategies,
     EventMessage,
     FullyQualifiedAppIdentifier,
@@ -267,7 +267,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         currentDate = mockedDate;
     });
 
-    function createInstance(applicationStrategies?: DesktopAgentStrategies[]): DesktopAgent {
+    function createInstance(applicationStrategies?: DesktopAgentStrategies[]): DesktopAgentNext {
         return new DesktopAgentImpl({
             appIdentifier,
             rootMessagePublisher: mockRootPublisher.mock,
