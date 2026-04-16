@@ -1,3 +1,9 @@
+## 0.12.0 (2026-04-16)
+
+## Added
+
+ * added addIntentListenerWithContext implementation. This function is not yet officially supported by the Finos specification and may change in the future. Future changes to match the implemented finos feature will be made in this library in a non breaking change.
+
 ## 0.11.2 (2026-02-26)
 
 ### Fixed
