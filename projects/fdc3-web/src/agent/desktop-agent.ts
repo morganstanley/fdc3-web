@@ -539,7 +539,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             (this.intentListeners[requestMessage.payload.intent] = []);
 
         //fetch context info for app and intent from app directory
-        const contexts = await this.directory.getContextForAppIntent(source, requestMessage.payload.intent);
+        const contexts =
+            requestMessage.payload.contextTypes?.map(context => ({
+                type: context,
+            })) ?? (await this.directory.getContextForAppIntent(source, requestMessage.payload.intent));
 
         try {
             //this should not occur as error should have been caught by directory.getContextForAppIntent
