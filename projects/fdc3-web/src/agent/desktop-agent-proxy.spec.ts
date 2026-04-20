@@ -1019,6 +1019,30 @@ tests.forEach(({ proxy }) => {
                 expect(typeof listener.unsubscribe).toBe('function');
             });
 
+            it('should reject promise with same error message returned in response if one is provided', async () => {
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        error: ResolveError.NoAppsFound,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+
+                await expect(listenerPromise).rejects.toStrictEqual(ResolveError.NoAppsFound);
+            });
+
             it('should call intent handler when IntentEvent context type matches', async () => {
                 const mockedListenerUuid: string = `mocked-listener-uuid`;
 
