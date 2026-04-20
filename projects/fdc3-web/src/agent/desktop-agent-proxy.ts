@@ -276,48 +276,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     public async addIntentListener(intent: Intent, handler: IntentHandler): Promise<Listener> {
-        const requestMessage = createRequestMessage<BrowserTypes.AddIntentListenerRequest>(
-            'addIntentListenerRequest',
-            this.appIdentifier,
-            { intent },
-        );
-
-        const response = await this.getResponse(requestMessage, isAddIntentListenerResponse);
-
-        const listenerUUID = response.payload.listenerUUID;
-        if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
-        } else if (listenerUUID == null) {
-            //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
-            return Promise.reject('listenerUUID is null');
-        }
-
-        this.addMessageCallback(listenerUUID, async message => {
-            if (isIntentEvent(message) && message.payload.intent === intent) {
-                const intentResultPromise = handler(
-                    message.payload.context,
-                    message.payload.originatingApp != null ? { source: message.payload.originatingApp } : undefined,
-                );
-
-                const handlerResult = await intentResultPromise;
-
-                await this.publishIntentResultRequest(handlerResult, message);
-            }
-        });
-
-        const unsubscribe: () => Promise<void> = async () => {
-            const intentListenerUnsubscribeRequest =
-                createRequestMessage<BrowserTypes.IntentListenerUnsubscribeRequest>(
-                    'intentListenerUnsubscribeRequest',
-                    this.appIdentifier,
-                    { listenerUUID },
-                );
-
-            await this.getResponse(intentListenerUnsubscribeRequest, isIntentListenerUnsubscribeResponse);
-
-            this.removeMessageCallback(listenerUUID);
-        };
-        return { unsubscribe };
+        return this.registerIntentListener(intent, handler);
     }
 
     /**
@@ -335,10 +294,22 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         handler: IntentHandler,
     ): Promise<Listener> {
         const contextTypes = Array.isArray(contextType) ? contextType : [contextType];
+        return this.registerIntentListener(intent, handler, contextTypes);
+    }
+
+    private async registerIntentListener(
+        intent: Intent,
+        handler: IntentHandler,
+        contextTypes?: string[],
+    ): Promise<Listener> {
+        const payload: { intent: Intent; contextTypes?: string[] } = { intent };
+        if (contextTypes != null) {
+            payload.contextTypes = contextTypes;
+        }
         const requestMessage = createRequestMessage<AddIntentListenerWithContextRequest>(
             'addIntentListenerRequest',
             this.appIdentifier,
-            { intent, contextTypes },
+            payload,
         );
 
         const response = await this.getResponse(requestMessage, isAddIntentListenerResponse);
@@ -347,6 +318,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         if (response.payload.error != null) {
             return Promise.reject(response.payload.error);
         } else if (listenerUUID == null) {
+            //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
             return Promise.reject('listenerUUID is null');
         }
 
@@ -354,7 +326,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             if (
                 isIntentEvent(message) &&
                 message.payload.intent === intent &&
-                contextTypes.includes(message.payload.context.type)
+                (contextTypes == null || contextTypes.includes(message.payload.context.type))
             ) {
                 const intentResultPromise = handler(
                     message.payload.context,
