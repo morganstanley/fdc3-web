@@ -190,7 +190,7 @@ export interface IProxyMessagingProvider {
 export interface DesktopAgentNext extends FinosDesktopAgent {
     /**
      * Allows the registration of an intent handler that only triggers when a specific context type or set of context types is passed with the intent
-     * THis matches the behavior of intent handlers registered through the app directory
+     * This matches the behavior of intent handlers registered through the app directory
      * @param intent
      * @param contextType
      * @param handler
