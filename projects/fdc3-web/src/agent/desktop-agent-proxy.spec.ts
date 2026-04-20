@@ -1268,9 +1268,7 @@ tests.forEach(({ proxy }) => {
 
                 postMessage(intentEvent);
                 expect(mockHandler.withFunction('handler')).wasCalledOnce();
-                expect(
-                    mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined),
-                ).wasCalledOnce();
+                expect(mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined)).wasCalledOnce();
             });
 
             it('should not call intent handler when IntentEvent context type does not match', async () => {
