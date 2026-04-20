@@ -1183,6 +1183,96 @@ tests.forEach(({ proxy }) => {
                 expect(mockHandler.withFunction('handler')).wasCalledOnce();
             });
 
+            it('should pass originatingApp as source metadata to handler when present', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+                const originatingApp: AppIdentifier = { appId: 'originating-app', instanceId: 'originating-instance' };
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        originatingApp,
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasCalledOnce();
+                expect(
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: originatingApp }),
+                ).wasCalledOnce();
+            });
+
+            it('should pass undefined metadata to handler when originatingApp is not present', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasCalledOnce();
+                expect(
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined),
+                ).wasCalledOnce();
+            });
+
             it('should not call intent handler when IntentEvent context type does not match', async () => {
                 const mockedListenerUuid: string = `mocked-listener-uuid`;
 
