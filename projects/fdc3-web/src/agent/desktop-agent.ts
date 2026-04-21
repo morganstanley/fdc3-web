@@ -24,7 +24,12 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
-import { AddIntentListenerWithContextRequest, IRootPublisher, UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
+import {
+    AddIntentListenerWithContextRequest,
+    IRootPublisher,
+    UpdateInstanceMetadataRequest,
+    UpdateInstanceMetadataResponse,
+} from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
     DesktopAgentNext,
@@ -44,10 +49,10 @@ import {
     createResponseMessage,
     decodeUUUrl,
     generateUUID,
-    getTimestamp,
     generateUUUrl,
     getHostManifest,
     getImplementationMetadata,
+    getTimestamp,
     isContext,
     isDefined,
     isFindInstancesErrors,
@@ -141,7 +146,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         this.startHeartbeat(sourceApp);
 
         if ((requestMessage as any).type === 'updateInstanceMetadataRequest') {
-            return this.onUpdateInstanceMetadataRequest(requestMessage as unknown as UpdateInstanceMetadataRequest, sourceApp);
+            return this.onUpdateInstanceMetadataRequest(
+                requestMessage as unknown as UpdateInstanceMetadataRequest,
+                sourceApp,
+            );
         }
 
         switch (requestMessage.type) {

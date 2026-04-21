@@ -31,7 +31,11 @@ import {
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { AddIntentListenerWithContextRequest, UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
+import {
+    AddIntentListenerWithContextRequest,
+    UpdateInstanceMetadataRequest,
+    UpdateInstanceMetadataResponse,
+} from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
@@ -46,7 +50,6 @@ import {
     isContext,
     isEventListenerUnsubscribeResponse,
     isFindInstancesResponse,
-    isUpdateInstanceMetadataResponse,
     isFindIntentResponse,
     isFindIntentsByContextResponse,
     isGetAppMetadataResponse,
@@ -59,6 +62,7 @@ import {
     isRaiseIntentForContextResponse,
     isRaiseIntentResponse,
     isRaiseIntentResultResponse,
+    isUpdateInstanceMetadataResponse,
     resolveAppIdentifier,
     resolveContextType,
 } from '../helpers/index.js';
@@ -225,9 +229,9 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             },
         };
 
-        const responsePromise = new Promise<UpdateInstanceMetadataResponse>((resolve) => {
+        const responsePromise = new Promise<UpdateInstanceMetadataResponse>(resolve => {
             const callbackUuid = generateUUID();
-            this.addMessageCallback(callbackUuid, (value) => {
+            this.addMessageCallback(callbackUuid, value => {
                 if (isUpdateInstanceMetadataResponse(value) && value.meta.requestUuid === requestUuid) {
                     this.removeMessageCallback(callbackUuid);
                     resolve(value);

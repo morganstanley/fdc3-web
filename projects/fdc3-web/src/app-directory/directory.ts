@@ -267,9 +267,7 @@ export class AppDirectory {
             })),
         );
 
-        const metadataResults = await Promise.all(
-            identifiers.map(identifier => this.getAppMetadata(identifier)),
-        );
+        const metadataResults = await Promise.all(identifiers.map(identifier => this.getAppMetadata(identifier)));
 
         return metadataResults.map((metadata, index) => metadata ?? identifiers[index]);
     }
