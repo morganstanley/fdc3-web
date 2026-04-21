@@ -200,6 +200,14 @@ export interface DesktopAgentNext extends FinosDesktopAgent {
         contextType: string | string[],
         handler: IntentHandler,
     ): Promise<Listener>;
+
+    /**
+     * Updates the instance metadata for the calling app instance.
+     * Instance metadata can be used to disambiguate instances of the same app,
+     * such as displaying a window title or other identifying information in resolver UIs.
+     * @param instanceMetadata key-value pairs of metadata to set for this instance
+     */
+    updateInstanceMetadata(instanceMetadata: { [key: string]: any }): Promise<void>;
 }
 
 export type AppIdentifierListenerPair = {

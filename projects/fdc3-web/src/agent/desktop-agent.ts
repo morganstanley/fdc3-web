@@ -24,7 +24,7 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
-import { AddIntentListenerWithContextRequest, IRootPublisher } from '../contracts.internal.js';
+import { AddIntentListenerWithContextRequest, IRootPublisher, UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
     DesktopAgentNext,
@@ -44,6 +44,7 @@ import {
     createResponseMessage,
     decodeUUUrl,
     generateUUID,
+    getTimestamp,
     generateUUUrl,
     getHostManifest,
     getImplementationMetadata,
@@ -138,6 +139,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             sourceApp,
         });
         this.startHeartbeat(sourceApp);
+
+        if ((requestMessage as any).type === 'updateInstanceMetadataRequest') {
+            return this.onUpdateInstanceMetadataRequest(requestMessage as unknown as UpdateInstanceMetadataRequest, sourceApp);
+        }
 
         switch (requestMessage.type) {
             case 'addIntentListenerRequest':
@@ -696,6 +701,26 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             ),
             source,
         );
+    }
+
+    private onUpdateInstanceMetadataRequest(
+        requestMessage: UpdateInstanceMetadataRequest,
+        source: FullyQualifiedAppIdentifier,
+    ): void {
+        this.directory.updateInstanceMetadata(source.instanceId, requestMessage.payload.instanceMetadata);
+
+        const response: UpdateInstanceMetadataResponse = {
+            type: 'updateInstanceMetadataResponse',
+            payload: {},
+            meta: {
+                responseUuid: generateUUID(),
+                timestamp: getTimestamp(),
+                requestUuid: requestMessage.meta.requestUuid,
+                source,
+            },
+        };
+
+        this.rootMessagePublisher.publishResponseMessage(response as any, source);
     }
 
     //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent

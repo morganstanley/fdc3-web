@@ -40,3 +40,36 @@ export interface AddIntentListenerWithContextRequest extends BrowserTypes.AddInt
 export interface AddIntentListenerWithContextRequestPayload extends BrowserTypes.AddIntentListenerRequestPayload {
     contextTypes?: string[];
 }
+
+/**
+ * A request message to update the instance metadata for the calling app instance
+ * This is not yet part of the FDC3 standard messaging protocol
+ */
+export interface UpdateInstanceMetadataRequest {
+    type: 'updateInstanceMetadataRequest';
+    payload: UpdateInstanceMetadataRequestPayload;
+    meta: {
+        requestUuid: string;
+        timestamp: Date;
+        source: FullyQualifiedAppIdentifier;
+    };
+}
+
+export interface UpdateInstanceMetadataRequestPayload {
+    instanceMetadata: { [key: string]: any };
+}
+
+export interface UpdateInstanceMetadataResponse {
+    type: 'updateInstanceMetadataResponse';
+    payload: UpdateInstanceMetadataResponsePayload;
+    meta: {
+        responseUuid: string;
+        timestamp: Date;
+        requestUuid: string;
+        source: FullyQualifiedAppIdentifier;
+    };
+}
+
+export interface UpdateInstanceMetadataResponsePayload {
+    error?: string;
+}

@@ -31,12 +31,14 @@ import {
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { AddIntentListenerWithContextRequest } from '../contracts.internal.js';
+import { AddIntentListenerWithContextRequest, UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
     generateGoodbyeMessage,
+    generateUUID,
+    getTimestamp,
     isAddEventListenerResponse,
     isAddIntentListenerResponse,
     isAppEventMessage,
@@ -44,6 +46,7 @@ import {
     isContext,
     isEventListenerUnsubscribeResponse,
     isFindInstancesResponse,
+    isUpdateInstanceMetadataResponse,
     isFindIntentResponse,
     isFindIntentsByContextResponse,
     isGetAppMetadataResponse,
@@ -208,6 +211,37 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('appIntents is null');
         }
         return response.payload.appIntents.map(appIntent => mapMessageIntent(appIntent));
+    }
+
+    public async updateInstanceMetadata(instanceMetadata: { [key: string]: any }): Promise<void> {
+        const requestUuid = generateUUID();
+        const message: UpdateInstanceMetadataRequest = {
+            type: 'updateInstanceMetadataRequest',
+            payload: { instanceMetadata },
+            meta: {
+                requestUuid,
+                timestamp: getTimestamp(),
+                source: this.appIdentifier,
+            },
+        };
+
+        const responsePromise = new Promise<UpdateInstanceMetadataResponse>((resolve) => {
+            const callbackUuid = generateUUID();
+            this.addMessageCallback(callbackUuid, (value) => {
+                if (isUpdateInstanceMetadataResponse(value) && value.meta.requestUuid === requestUuid) {
+                    this.removeMessageCallback(callbackUuid);
+                    resolve(value);
+                }
+            });
+        });
+
+        await this.publishRequestMessage(message as any);
+
+        const response = await responsePromise;
+
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        }
     }
 
     public async findInstances(app: AppIdentifier): Promise<AppIdentifier[]> {

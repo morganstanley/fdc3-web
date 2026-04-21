@@ -12,6 +12,7 @@
 // we hope these functions will get added to @finos/fdc3 so we can remove these implementations
 
 import type { BrowserTypes, PrivateChannel, PrivateChannelEventTypes } from '@finos/fdc3';
+import type { UpdateInstanceMetadataResponse } from '../contracts.internal.js';
 
 /* istanbul ignore next */
 export function isRequestMessageType(value: any): boolean {
@@ -310,6 +311,10 @@ export function isFindIntentsByContextResponse(value: any): value is BrowserType
 
 export function isFindInstancesResponse(value: any): value is BrowserTypes.FindInstancesResponse {
     return isAppResponseMessage(value) && value.type === 'findInstancesResponse';
+}
+
+export function isUpdateInstanceMetadataResponse(value: any): value is UpdateInstanceMetadataResponse {
+    return value?.type === 'updateInstanceMetadataResponse';
 }
 
 export function isRaiseIntentResponse(value: any): value is BrowserTypes.RaiseIntentResponse {
