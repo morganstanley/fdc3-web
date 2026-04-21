@@ -57,7 +57,7 @@ export abstract class MessagingBase {
     }
 
     protected async awaitMessage<
-        T extends BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage | HandshakeMessage,
+        T extends RequestMessage | ResponseMessage | BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage | HandshakeMessage,
     >(typeCheck: (value: any) => value is T): Promise<T> {
         return new Promise<T>(resolve => {
             const callbackUUID = generateUUID();
@@ -70,7 +70,7 @@ export abstract class MessagingBase {
         });
     }
 
-    protected async awaitRequestUuid<T extends BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage>(
+    protected async awaitRequestUuid<T extends RequestMessage | ResponseMessage | BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage>(
         responseTypeCheck: (value: any) => value is T,
         requestUuid: string,
     ): Promise<T> {

@@ -15,10 +15,10 @@ import { isWCPHelloMessage } from './finos-type-predicate.helper.js';
 import { getTimestamp } from './timestamp.helper.js';
 import { generateUUID } from './uuid.helper.js';
 
-type PartialRequestMessage<T extends BrowserTypes.AppRequestMessage> = {
+type PartialRequestMessage<T extends RequestMessage> = {
     type: T['type'];
     payload: T['payload'];
-    meta: Required<BrowserTypes.AppRequestMessage['meta']>;
+    meta: Required<RequestMessage['meta']>;
 };
 
 /**

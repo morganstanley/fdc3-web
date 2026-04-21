@@ -31,18 +31,12 @@ import {
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import {
-    AddIntentListenerWithContextRequest,
-    UpdateInstanceMetadataRequest,
-    UpdateInstanceMetadataResponse,
-} from '../contracts.internal.js';
+import { AddIntentListenerWithContextRequest, UpdateInstanceMetadataRequest } from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
     generateGoodbyeMessage,
-    generateUUID,
-    getTimestamp,
     isAddEventListenerResponse,
     isAddIntentListenerResponse,
     isAppEventMessage,
@@ -218,30 +212,13 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     public async updateInstanceMetadata(instanceMetadata: { [key: string]: any }): Promise<void> {
-        const requestUuid = generateUUID();
-        const message: UpdateInstanceMetadataRequest = {
-            type: 'updateInstanceMetadataRequest',
-            payload: { instanceMetadata },
-            meta: {
-                requestUuid,
-                timestamp: getTimestamp(),
-                source: this.appIdentifier,
-            },
-        };
+        const message = createRequestMessage<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            this.appIdentifier,
+            { instanceMetadata },
+        );
 
-        const responsePromise = new Promise<UpdateInstanceMetadataResponse>(resolve => {
-            const callbackUuid = generateUUID();
-            this.addMessageCallback(callbackUuid, value => {
-                if (isUpdateInstanceMetadataResponse(value) && value.meta.requestUuid === requestUuid) {
-                    this.removeMessageCallback(callbackUuid);
-                    resolve(value);
-                }
-            });
-        });
-
-        await this.publishRequestMessage(message as any);
-
-        const response = await responsePromise;
+        const response = await this.getResponse(message, isUpdateInstanceMetadataResponse);
 
         if (response.payload.error != null) {
             return Promise.reject(response.payload.error);

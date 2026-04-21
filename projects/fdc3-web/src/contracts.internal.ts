@@ -48,11 +48,7 @@ export interface AddIntentListenerWithContextRequestPayload extends BrowserTypes
 export interface UpdateInstanceMetadataRequest {
     type: 'updateInstanceMetadataRequest';
     payload: UpdateInstanceMetadataRequestPayload;
-    meta: {
-        requestUuid: string;
-        timestamp: Date;
-        source: FullyQualifiedAppIdentifier;
-    };
+    meta: BrowserTypes.AppRequestMessageMeta;
 }
 
 export interface UpdateInstanceMetadataRequestPayload {
@@ -62,14 +58,9 @@ export interface UpdateInstanceMetadataRequestPayload {
 export interface UpdateInstanceMetadataResponse {
     type: 'updateInstanceMetadataResponse';
     payload: UpdateInstanceMetadataResponsePayload;
-    meta: {
-        responseUuid: string;
-        timestamp: Date;
-        requestUuid: string;
-        source: FullyQualifiedAppIdentifier;
-    };
+    meta: BrowserTypes.AgentResponseMessageMeta;
 }
 
 export interface UpdateInstanceMetadataResponsePayload {
-    error?: string;
+    error?: BrowserTypes.ResponsePayloadError;
 }

@@ -12,7 +12,7 @@ import { BrowserTypes } from '@finos/fdc3';
 import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { afterEach, beforeEach, describe, expect, it, Mock as viMock, vi } from 'vitest';
 import { FDC3_VERSION } from '../constants.js';
-import { FullyQualifiedAppIdentifier, RequestMessage } from '../contracts.js';
+import { FullyQualifiedAppIdentifier, RequestMessage, ResponseMessage } from '../contracts.js';
 import * as finosTypePredicateHelper from './finos-type-predicate.helper.js';
 import {
     createEvent,
@@ -41,7 +41,7 @@ vi.mock('./finos-type-predicate.helper.js', async () => {
 });
 
 type NonOptionalMessage<
-    T extends BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage | BrowserTypes.AgentEventMessage,
+    T extends RequestMessage | ResponseMessage | BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage | BrowserTypes.AgentEventMessage,
 > = T & {
     meta: Required<T['meta']>;
 };
