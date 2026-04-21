@@ -403,6 +403,7 @@ export class AppDirectory {
             return;
         }
         const metadata = mapApplicationToMetadata(app, directoryEntry.application);
+
         if (app.instanceId != null) {
             const instanceMetadata = this.instanceMetadataLookup[app.instanceId];
             if (instanceMetadata != null) {

@@ -10,7 +10,7 @@
 
 import { BrowserTypes } from '@finos/fdc3';
 import { FDC3_VERSION } from '../constants.js';
-import { FullyQualifiedAppIdentifier, RequestMessage } from '../contracts.js';
+import { FullyQualifiedAppIdentifier, RequestMessage, ResponseMessage } from '../contracts.js';
 import { isWCPHelloMessage } from './finos-type-predicate.helper.js';
 import { getTimestamp } from './timestamp.helper.js';
 import { generateUUID } from './uuid.helper.js';
@@ -40,13 +40,13 @@ export function createRequestMessage<T extends RequestMessage>(
     return requestMessage as T;
 }
 
-type PartialResponseMessage<T extends BrowserTypes.AgentResponseMessage> = {
+type PartialResponseMessage<T extends ResponseMessage> = {
     type: T['type'];
     payload: T['payload'];
     meta: Required<BrowserTypes.AgentResponseMessage['meta']>;
 };
 
-export function createResponseMessage<T extends BrowserTypes.AgentResponseMessage>(
+export function createResponseMessage<T extends ResponseMessage>(
     type: T['type'],
     payload: T['payload'],
     requestUuid: string,

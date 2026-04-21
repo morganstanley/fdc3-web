@@ -41,7 +41,12 @@ vi.mock('./finos-type-predicate.helper.js', async () => {
 });
 
 type NonOptionalMessage<
-    T extends RequestMessage | ResponseMessage | BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage | BrowserTypes.AgentEventMessage,
+    T extends
+        | RequestMessage
+        | ResponseMessage
+        | BrowserTypes.AppRequestMessage
+        | BrowserTypes.AgentResponseMessage
+        | BrowserTypes.AgentEventMessage,
 > = T & {
     meta: Required<T['meta']>;
 };
