@@ -13,6 +13,7 @@
 
 import type { BrowserTypes, PrivateChannel, PrivateChannelEventTypes } from '@finos/fdc3';
 import type { UpdateInstanceMetadataResponse } from '../contracts.internal.js';
+import { ResponseMessage } from '../contracts.js';
 
 /* istanbul ignore next */
 export function isRequestMessageType(value: any): boolean {
@@ -65,7 +66,7 @@ export function isAppRequestMessage(value: any): value is BrowserTypes.AppReques
     );
 }
 
-export function isAppResponseMessage(value: any): value is BrowserTypes.AgentResponseMessage {
+export function isAppResponseMessage(value: any): value is ResponseMessage {
     const requestMessage = value as BrowserTypes.AgentResponseMessage;
 
     return (
@@ -314,7 +315,7 @@ export function isFindInstancesResponse(value: any): value is BrowserTypes.FindI
 }
 
 export function isUpdateInstanceMetadataResponse(value: any): value is UpdateInstanceMetadataResponse {
-    return value?.type === 'updateInstanceMetadataResponse';
+    return isAppResponseMessage(value) && value?.type === 'updateInstanceMetadataResponse';
 }
 
 export function isRaiseIntentResponse(value: any): value is BrowserTypes.RaiseIntentResponse {

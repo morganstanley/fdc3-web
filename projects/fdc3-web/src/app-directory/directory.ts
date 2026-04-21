@@ -250,9 +250,9 @@ export class AppDirectory {
 
     /**
      * @param appId of app whose instances are being returned
-     * @returns array of AppIdentifiers with appIds that match given appId, or undefined if app is not known to desktop agent
+     * @returns array of AppMetadata with appIds that match given appId, or undefined if app is not known to desktop agent
      */
-    public async getAppInstances(appId: string): Promise<FullyQualifiedAppIdentifier[] | undefined> {
+    public async getAppInstances(appId: string): Promise<AppMetadata[] | undefined> {
         await this.loadDirectoryPromise;
 
         const matchingAppIds = this.getAllMatchingFullyQualifiedAppIds(appId);
@@ -260,12 +260,18 @@ export class AppDirectory {
             return;
         }
 
-        return matchingAppIds.flatMap(matchedAppId =>
+        const identifiers = matchingAppIds.flatMap(matchedAppId =>
             (this.directory[matchedAppId]?.instances ?? []).map(instanceId => ({
                 appId: matchedAppId,
                 instanceId,
             })),
         );
+
+        const metadataResults = await Promise.all(
+            identifiers.map(identifier => this.getAppMetadata(identifier)),
+        );
+
+        return metadataResults.map((metadata, index) => metadata ?? identifiers[index]);
     }
 
     /**

@@ -11,6 +11,7 @@
 import type {
     AppIdentifier,
     AppIntent,
+    AppMetadata,
     BrowserTypes,
     Context,
     DesktopAgent,
@@ -24,6 +25,7 @@ import type {
     PrivateChannelEvent,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
+import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from './contracts.internal.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -52,7 +54,8 @@ export type RequestMessage =
     | BrowserTypes.HeartbeatAcknowledgementRequest
     | BrowserTypes.IntentResultRequest
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerRequest
-    | BrowserTypes.PrivateChannelAddEventListenerRequest;
+    | BrowserTypes.PrivateChannelAddEventListenerRequest
+    | UpdateInstanceMetadataRequest;
 
 export type ResponseMessage =
     | BrowserTypes.AddContextListenerResponse
@@ -83,7 +86,8 @@ export type ResponseMessage =
     | BrowserTypes.AddEventListenerResponse
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerResponse
     | BrowserTypes.PrivateChannelAddEventListenerResponse
-    | BrowserTypes.PrivateChannelDisconnectResponse;
+    | BrowserTypes.PrivateChannelDisconnectResponse
+    | UpdateInstanceMetadataResponse;
 
 export type EventMessage =
     | BrowserTypes.PrivateChannelOnAddContextListenerEvent
@@ -208,6 +212,12 @@ export interface DesktopAgentNext extends FinosDesktopAgent {
      * @param instanceMetadata key-value pairs of metadata to set for this instance
      */
     updateInstanceMetadata(instanceMetadata: { [key: string]: any }): Promise<void>;
+
+    /**
+     * Returns AppMetadata for all available instances of the given app, including instanceMetadata when available.
+     * Overrides the base DesktopAgent.findInstances to return enriched metadata.
+     */
+    findInstances(app: AppIdentifier): Promise<AppMetadata[]>;
 }
 
 export type AppIdentifierListenerPair = {

@@ -244,7 +244,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         }
     }
 
-    public async findInstances(app: AppIdentifier): Promise<AppIdentifier[]> {
+    public async findInstances(app: AppIdentifier): Promise<AppMetadata[]> {
         const message = createRequestMessage<BrowserTypes.FindInstancesRequest>(
             'findInstancesRequest',
             this.appIdentifier,
@@ -259,7 +259,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             //this should not happen - there should be no situation where both appIdentifiers and error are undefined in response payload
             return Promise.reject('appIdentifiers is null');
         }
-        return response.payload.appIdentifiers;
+        return response.payload.appIdentifiers as AppMetadata[];
     }
 
     public raiseIntent(intent: Intent, context: Context, appIdentifier?: AppIdentifier): Promise<IntentResolution>;
