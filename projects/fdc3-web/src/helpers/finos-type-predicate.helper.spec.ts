@@ -183,6 +183,8 @@ describe('finos-type-predicate.helper', () => {
             'MalformedContext',
             'NoChannelFound',
             'AppNotFound',
+            'IntentListenerConflict',
+            'InvalidArguments',
         ];
 
         validErrors.forEach(error => {
@@ -199,7 +201,14 @@ describe('finos-type-predicate.helper', () => {
 
     // Find instances errors tests
     it('should identify valid find instances errors', () => {
-        const validErrors = ['ApiTimeout', 'MalformedContext', 'DesktopAgentNotFound', 'ResolverUnavailable'];
+        const validErrors = [
+            'ApiTimeout',
+            'MalformedContext',
+            'DesktopAgentNotFound',
+            'ResolverUnavailable',
+            'IntentListenerConflict',
+            'InvalidArguments',
+        ];
 
         validErrors.forEach(error => {
             expect(typePredicates.isFindInstancesErrors(error)).toBe(true);
@@ -215,7 +224,7 @@ describe('finos-type-predicate.helper', () => {
 
     // Open error tests
     it('should identify valid open errors', () => {
-        const validErrors = ['ApiTimeout', 'AgentDisconnected', 'AppNotFound', 'AppTimeout'];
+        const validErrors = ['ApiTimeout', 'AgentDisconnected', 'AppNotFound', 'AppTimeout', 'InvalidArguments'];
 
         validErrors.forEach(error => {
             expect(typePredicates.isOpenError(error)).toBe(true);
