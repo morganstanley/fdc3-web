@@ -54,7 +54,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
         this._id = channelDetails?.id ?? null;
     }
 
-    private _id: string | null;
+    private _id: string | null | undefined;
 
     public addContextListener(
         contextType: string | null | string | ContextHandler,
@@ -168,7 +168,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
         const message = createRequestMessage<BrowserTypes.AddContextListenerRequest>(
             'addContextListenerRequest',
             this.appIdentifier,
-            { channelId, contextType },
+            { channelId: channelId ?? null, contextType },
         );
 
         return this.getResponse(message, isAddContextListenerResponse);

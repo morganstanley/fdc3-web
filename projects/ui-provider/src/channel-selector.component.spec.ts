@@ -198,7 +198,6 @@ describe(`${ChannelSelectorComponent.name} (channel-selector.component)`, () => 
 
             const channelChangedEvent: FDC3ChannelChangedEvent = {
                 type: 'userChannelChanged',
-                string: 'userChannelChanged',
                 details: {
                     currentChannelId: channelTwo.mock.id,
                 },

@@ -131,6 +131,8 @@ export function isResponsePayloadError(value: any): value is BrowserTypes.Respon
         case 'NotConnectedToBridge':
         case 'ResponseToBridgeTimedOut':
         case 'MalformedMessage':
+        case 'IntentListenerConflict':
+        case 'InvalidArguments':
             return true;
         default:
             return neverCheck(responseError); // just to ensure that we have covered all values in our switch statement
@@ -156,6 +158,8 @@ export function isFindInstancesErrors(value: any): value is BrowserTypes.FindIns
         case 'NotConnectedToBridge':
         case 'ResponseToBridgeTimedOut':
         case 'MalformedMessage':
+        case 'IntentListenerConflict':
+        case 'InvalidArguments':
             return true;
         default:
             return neverCheck(findInstanceError); // just to ensure that we have covered all values in our switch statement
@@ -178,6 +182,7 @@ export function isOpenError(value: any): value is BrowserTypes.OpenErrorResponse
         case 'NotConnectedToBridge':
         case 'ResolverUnavailable':
         case 'ResponseToBridgeTimedOut':
+        case 'InvalidArguments':
             return true;
         default:
             return neverCheck(openError); // just to ensure that we have covered all values in our switch statement
