@@ -62,8 +62,9 @@ export class AppDirectory {
         private readonly appResolverPromise: Promise<IAppResolver>,
         appDirectoryEntries?: (string | LocalAppDirectory)[],
         backoffRetry?: BackoffRetryParams,
+        rootAppDirectoryEntry?: Omit<AppDirectoryApplication, 'appId'>,
     ) {
-        this._rootAppIdentifier = this.registerRootApp(rootAppId);
+        this._rootAppIdentifier = this.registerRootApp(rootAppId, rootAppDirectoryEntry);
 
         //assumes app directory is not modified while root desktop agent is active
         this.appDirectoryEntries = appDirectoryEntries ?? [];
@@ -82,14 +83,20 @@ export class AppDirectory {
         return this._rootAppIdentifier;
     }
 
-    private registerRootApp(rootAppId: string): FullyQualifiedAppIdentifier {
+    private registerRootApp(
+        rootAppId: string,
+        rootAppDirectoryEntry?: Omit<AppDirectoryApplication, 'appId'>,
+    ): FullyQualifiedAppIdentifier {
         const appId: FullyQualifiedAppId = isFullyQualifiedAppId(rootAppId)
             ? rootAppId
             : `${rootAppId}@${window.location.hostname}`;
 
         const rootAppIdentifier = { appId, instanceId: generateUUID() };
 
-        this.directory[appId] = { instances: [rootAppIdentifier.instanceId] };
+        const application: AppDirectoryApplication | undefined =
+            rootAppDirectoryEntry != null ? { ...rootAppDirectoryEntry, appId } : undefined;
+
+        this.directory[appId] = { application, instances: [rootAppIdentifier.instanceId] };
         this.instanceLookup[rootAppIdentifier.instanceId] = {};
 
         return rootAppIdentifier;

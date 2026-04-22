@@ -69,6 +69,7 @@ export class DesktopAgentFactory {
             appResolverPromise,
             factoryParams.appDirectoryEntries,
             factoryParams.backoffRetry,
+            factoryParams.appDirectoryEntry,
         );
         const rootMessagePublisher =
             this.rootMessagePublisherFactory != null
