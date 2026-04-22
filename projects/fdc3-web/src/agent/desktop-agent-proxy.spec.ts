@@ -102,8 +102,9 @@ tests.forEach(({ proxy }) => {
 
             mockChannels = Mock.create<Channels>();
 
+            let uuidCounter = 0;
             mockedHelpers = Mock.create<typeof helpersImport>().setup(
-                setupFunction('generateUUID', () => mockedRequestUuid),
+                setupFunction('generateUUID', () => `${mockedRequestUuid}-${uuidCounter++}`),
                 setupFunction('getTimestamp', () => mockedDate),
                 setupFunction(
                     'createRequestMessage',
@@ -2532,6 +2533,46 @@ tests.forEach(({ proxy }) => {
                 postMessage(responseMessage);
 
                 await expect(intentPromise).rejects.toStrictEqual(ResolveError.TargetAppUnavailable);
+            });
+
+            it('should resolve getResult() when raiseIntentResultResponse arrives before raiseIntentResponse (loopback race)', async () => {
+                const instance = await createInstance();
+
+                const intentPromise = instance.raiseIntent('StartChat', contact, appIdentifier);
+
+                const intentResultMessage: BrowserTypes.RaiseIntentResultResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        intentResult: {
+                            context: contact,
+                        },
+                    },
+                    type: 'raiseIntentResultResponse',
+                };
+                postMessage(intentResultMessage);
+
+                const responseMessage: BrowserTypes.RaiseIntentResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        intentResolution: {
+                            source: appIdentifier,
+                            intent: 'StartChat',
+                        },
+                    },
+                    type: 'raiseIntentResponse',
+                };
+                postMessage(responseMessage);
+
+                const intent = await intentPromise;
+                expect(await intent.getResult()).toEqual(contact);
             });
         });
 

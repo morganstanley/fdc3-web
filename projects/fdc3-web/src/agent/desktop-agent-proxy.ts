@@ -242,6 +242,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             { app: appIdentifier, context: context, intent: intent },
         );
 
+        const raiseIntentResultResponsePromise = this.awaitRequestUuid(
+            isRaiseIntentResultResponse,
+            message.meta.requestUuid,
+        );
+
         const response = await this.getResponse(message, isRaiseIntentResponse);
 
         if (response.payload.error != null) {
@@ -250,7 +255,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('intentResolution is null');
         }
 
-        return this.createIntentResolution(response.meta.requestUuid, response.payload.intentResolution);
+        return this.createIntentResolution(raiseIntentResultResponsePromise, response.payload.intentResolution);
     }
 
     public raiseIntentForContext(context: Context, app?: AppIdentifier): Promise<IntentResolution>;
@@ -263,6 +268,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             { app: appIdentifier, context: context },
         );
 
+        const raiseIntentResultResponsePromise = this.awaitRequestUuid(
+            isRaiseIntentResultResponse,
+            message.meta.requestUuid,
+        );
+
         const response = await this.getResponse(message, isRaiseIntentForContextResponse);
 
         if (response.payload.error != null) {
@@ -272,7 +282,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('intentResolution is null');
         }
 
-        return this.createIntentResolution(response.meta.requestUuid, response.payload.intentResolution);
+        return this.createIntentResolution(raiseIntentResultResponsePromise, response.payload.intentResolution);
     }
 
     public async addIntentListener(intent: Intent, handler: IntentHandler): Promise<Listener> {
@@ -473,11 +483,9 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     private createIntentResolution(
-        requestUuid: string,
+        raiseIntentResultResponsePromise: Promise<BrowserTypes.RaiseIntentResultResponse>,
         intentResolution: BrowserTypes.IntentResolution,
     ): IntentResolution {
-        const raiseIntentResultResponsePromise = this.awaitRequestUuid(isRaiseIntentResultResponse, requestUuid);
-
         return {
             ...intentResolution,
             getResult: async (): Promise<any> => {
