@@ -8,6 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
+import { BrowserTypes } from '@finos/fdc3';
 import { AppDirectoryApplication } from './app-directory.contracts.js';
 import { EventMessage, FullyQualifiedAppIdentifier, IProxyMessagingProvider, ResponseMessage } from './contracts.js';
 
@@ -26,4 +27,16 @@ export interface IRootPublisher extends IProxyMessagingProvider {
      * waits for the identity assigned to the assigned to the provided connection attempt uuid
      */
     awaitAppIdentity(connectionAttemptUuid: string, app: AppDirectoryApplication): Promise<FullyQualifiedAppIdentifier>;
+}
+
+/**
+ * A temporary interface used to extend the AddIntentListenerRequest
+ * This will be removed when this feature is added to the FDC3 API and the BrowserTypes.AddIntentListenerRequestPayload is updated to include contextTypes
+ */
+export interface AddIntentListenerWithContextRequest extends BrowserTypes.AddIntentListenerRequest {
+    payload: AddIntentListenerWithContextRequestPayload;
+}
+
+export interface AddIntentListenerWithContextRequestPayload extends BrowserTypes.AddIntentListenerRequestPayload {
+    contextTypes?: string[];
 }

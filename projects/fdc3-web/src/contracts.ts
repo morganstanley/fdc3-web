@@ -14,10 +14,13 @@ import type {
     BrowserTypes,
     Context,
     DesktopAgent,
+    DesktopAgent as FinosDesktopAgent,
     FDC3Event,
     FDC3EventTypes,
     GetAgentLogLevels,
     Intent,
+    IntentHandler,
+    Listener,
     PrivateChannelEvent,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
@@ -99,8 +102,8 @@ export type HandshakeMessage =
     | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
     | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse;
 
-export type UIProviderFactory = (agent: Promise<DesktopAgent>) => Promise<IUIProvider>;
-export type AppResolverFactory = (agent: Promise<DesktopAgent>) => Promise<IAppResolver>;
+export type UIProviderFactory = (agent: Promise<FinosDesktopAgent>) => Promise<IUIProvider>;
+export type AppResolverFactory = (agent: Promise<FinosDesktopAgent>) => Promise<IAppResolver>;
 export type MessagingProviderFactory<T extends IProxyMessagingProvider | IRootMessagingProvider> = () => Promise<T>;
 
 export type Message = RequestMessage | ResponseMessage | EventMessage | HandshakeMessage;
@@ -181,7 +184,28 @@ export interface IProxyMessagingProvider {
     addResponseHandler(callback: IncomingMessageCallback<IProxyIncomingMessageEnvelope>): void;
 }
 
-export type AppIdentifierListenerPair = { appIdentifier: FullyQualifiedAppIdentifier; listenerUUID: string };
+/**
+ * Extends the FDC3 DesktopAgent interface with features planned for the next version of FDC3.
+ */
+export interface DesktopAgentNext extends FinosDesktopAgent {
+    /**
+     * Allows the registration of an intent handler that only triggers when a specific context type or set of context types is passed with the intent
+     * This matches the behavior of intent handlers registered through the app directory
+     * @param intent
+     * @param contextType
+     * @param handler
+     */
+    addIntentListenerWithContext(
+        intent: Intent,
+        contextType: string | string[],
+        handler: IntentHandler,
+    ): Promise<Listener>;
+}
+
+export type AppIdentifierListenerPair = {
+    appIdentifier: FullyQualifiedAppIdentifier;
+    listenerUUID: string;
+};
 
 //uses 'allEvents' constant instead of null to signify app is listening to all events as null cannot be used as an index
 export type EventListenerKey = FDC3EventTypes | 'allEvents';

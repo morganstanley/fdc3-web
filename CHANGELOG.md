@@ -1,3 +1,17 @@
+## 0.12.0 (2026-04-16)
+
+### Added
+
+ * Added `addIntentListenerWithContext` implementation. This function is not yet officially supported by the Finos specification and may change in the future. Future changes to match the implemented Finos feature will be made in this library in a non-breaking change. To make use of this function agent must be typed as `DesktopAgentNext`:
+
+ ```ts
+import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
+
+ const agent = await getAgent();
+
+ (agent as DesktopAgentNext).addIntentListenerWithContext("my-intent", "my-context", () => handleIntent());
+ ```
+
 ## 0.11.2 (2026-02-26)
 
 ### Fixed

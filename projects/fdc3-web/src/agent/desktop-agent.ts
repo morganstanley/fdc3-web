@@ -12,7 +12,6 @@ import {
     type AppIdentifier,
     BrowserTypes,
     type Context,
-    DesktopAgent,
     GetAgentLogLevels,
     ImplementationMetadata,
     Intent,
@@ -25,9 +24,10 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
-import { IRootPublisher } from '../contracts.internal.js';
+import { AddIntentListenerWithContextRequest, IRootPublisher } from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
+    DesktopAgentNext,
     DesktopAgentStrategies,
     EventListenerKey,
     EventListenerLookup,
@@ -77,7 +77,7 @@ type RootDesktopAgentParams = {
  * DesktopAgentImpl extends DesktopAgentProxy so that all function calls are handled in the same way - with request and response messages
  * request messages are handled by the onMessage function
  */
-export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent {
+export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentNext {
     // Create separate loggers for connection-related and proxy-related messages
     private connectionLog: LoggerFunction;
     private proxyLog;
@@ -531,7 +531,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
      * Registers an app as an intent listener and publishes an AddIntentListenerResponse message
      */
     private async onAddIntentListenerRequest(
-        requestMessage: BrowserTypes.AddIntentListenerRequest,
+        requestMessage: AddIntentListenerWithContextRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         const listeners =
@@ -539,7 +539,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgent 
             (this.intentListeners[requestMessage.payload.intent] = []);
 
         //fetch context info for app and intent from app directory
-        const contexts = await this.directory.getContextForAppIntent(source, requestMessage.payload.intent);
+        const contexts =
+            requestMessage.payload.contextTypes?.map(context => ({
+                type: context,
+            })) ?? (await this.directory.getContextForAppIntent(source, requestMessage.payload.intent));
 
         try {
             //this should not occur as error should have been caught by directory.getContextForAppIntent

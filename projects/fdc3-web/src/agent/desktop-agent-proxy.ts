@@ -17,7 +17,6 @@ import {
     Context,
     ContextHandler,
     ContextType,
-    DesktopAgent,
     DesktopAgentDetails,
     EventHandler,
     FDC3EventTypes,
@@ -32,7 +31,8 @@ import {
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
+import { AddIntentListenerWithContextRequest } from '../contracts.internal.js';
+import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
@@ -68,7 +68,7 @@ type ProxyDesktopAgentParams = {
     logLevels?: GetAgentLogLevels;
 };
 
-export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
+export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext {
     private channels: Channels;
     private channelFactory: ChannelFactory;
 
@@ -242,6 +242,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
             { app: appIdentifier, context: context, intent: intent },
         );
 
+        const raiseIntentResultResponsePromise = this.awaitRequestUuid(
+            isRaiseIntentResultResponse,
+            message.meta.requestUuid,
+        );
+
         const response = await this.getResponse(message, isRaiseIntentResponse);
 
         if (response.payload.error != null) {
@@ -250,7 +255,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
             return Promise.reject('intentResolution is null');
         }
 
-        return this.createIntentResolution(response.meta.requestUuid, response.payload.intentResolution);
+        return this.createIntentResolution(raiseIntentResultResponsePromise, response.payload.intentResolution);
     }
 
     public raiseIntentForContext(context: Context, app?: AppIdentifier): Promise<IntentResolution>;
@@ -263,6 +268,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
             { app: appIdentifier, context: context },
         );
 
+        const raiseIntentResultResponsePromise = this.awaitRequestUuid(
+            isRaiseIntentResultResponse,
+            message.meta.requestUuid,
+        );
+
         const response = await this.getResponse(message, isRaiseIntentForContextResponse);
 
         if (response.payload.error != null) {
@@ -272,14 +282,44 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
             return Promise.reject('intentResolution is null');
         }
 
-        return this.createIntentResolution(response.meta.requestUuid, response.payload.intentResolution);
+        return this.createIntentResolution(raiseIntentResultResponsePromise, response.payload.intentResolution);
     }
 
     public async addIntentListener(intent: Intent, handler: IntentHandler): Promise<Listener> {
-        const requestMessage = createRequestMessage<BrowserTypes.AddIntentListenerRequest>(
+        return this.registerIntentListener(intent, handler);
+    }
+
+    /**
+     * This function is not yet part of the official FDC3 API - it is a temporary solution to allow intent listeners to specify context types that they are interested in, and will be removed once this feature is added to the FDC3 API and the BrowserTypes.AddIntentListenerRequestPayload is updated to include contextTypes
+     * This feature is planned for FDC3 3.0 and this implementation is based on the pull request that is waiting to merged into finos once the last 2.x release is out.
+     * https://github.com/finos/FDC3/pull/1594
+     * @param intent
+     * @param contextType
+     * @param handler
+     * @returns
+     */
+    public async addIntentListenerWithContext(
+        intent: Intent,
+        contextType: string | string[],
+        handler: IntentHandler,
+    ): Promise<Listener> {
+        const contextTypes = Array.isArray(contextType) ? contextType : [contextType];
+        return this.registerIntentListener(intent, handler, contextTypes);
+    }
+
+    private async registerIntentListener(
+        intent: Intent,
+        handler: IntentHandler,
+        contextTypes?: string[],
+    ): Promise<Listener> {
+        const payload: { intent: Intent; contextTypes?: string[] } = { intent };
+        if (contextTypes != null) {
+            payload.contextTypes = contextTypes;
+        }
+        const requestMessage = createRequestMessage<AddIntentListenerWithContextRequest>(
             'addIntentListenerRequest',
             this.appIdentifier,
-            { intent },
+            payload,
         );
 
         const response = await this.getResponse(requestMessage, isAddIntentListenerResponse);
@@ -293,7 +333,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
         }
 
         this.addMessageCallback(listenerUUID, async message => {
-            if (isIntentEvent(message) && message.payload.intent === intent) {
+            if (
+                isIntentEvent(message) &&
+                message.payload.intent === intent &&
+                (contextTypes == null || contextTypes.includes(message.payload.context.type))
+            ) {
                 const intentResultPromise = handler(
                     message.payload.context,
                     message.payload.originatingApp != null ? { source: message.payload.originatingApp } : undefined,
@@ -439,11 +483,9 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgent {
     }
 
     private createIntentResolution(
-        requestUuid: string,
+        raiseIntentResultResponsePromise: Promise<BrowserTypes.RaiseIntentResultResponse>,
         intentResolution: BrowserTypes.IntentResolution,
     ): IntentResolution {
-        const raiseIntentResultResponsePromise = this.awaitRequestUuid(isRaiseIntentResultResponse, requestUuid);
-
         return {
             ...intentResolution,
             getResult: async (): Promise<any> => {

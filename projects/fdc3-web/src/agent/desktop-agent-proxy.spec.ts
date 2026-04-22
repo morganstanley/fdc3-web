@@ -102,8 +102,9 @@ tests.forEach(({ proxy }) => {
 
             mockChannels = Mock.create<Channels>();
 
+            let uuidCounter = 0;
             mockedHelpers = Mock.create<typeof helpersImport>().setup(
-                setupFunction('generateUUID', () => mockedRequestUuid),
+                setupFunction('generateUUID', () => `${mockedRequestUuid}-${uuidCounter++}`),
                 setupFunction('getTimestamp', () => mockedDate),
                 setupFunction(
                     'createRequestMessage',
@@ -928,6 +929,470 @@ tests.forEach(({ proxy }) => {
                 postMessage(responseMessage);
 
                 await expect(listenerPromise).rejects.toStrictEqual(ResolveError.NoAppsFound);
+            });
+        });
+
+        describe('addIntentListenerWithContext', () => {
+            let mockHandler: IMocked<{ handler: IntentHandler }>;
+            let handlerResult: void | IntentResult;
+
+            beforeEach(() => {
+                handlerResult = undefined;
+                mockHandler = Mock.create<{ handler: IntentHandler }>().setup(
+                    setupFunction('handler', () => Promise.resolve(handlerResult)),
+                );
+            });
+
+            it('should request addition of listener with contextTypes in payload when a single context type string is passed', async () => {
+                const instance = await createInstance();
+
+                instance.addIntentListenerWithContext('StartChat', 'fdc3.contact', mockHandler.mock.handler);
+
+                const expectedMessage: BrowserTypes.AddIntentListenerRequest = {
+                    meta: createExpectedRequestMeta(),
+                    payload: {
+                        intent: 'StartChat',
+                        contextTypes: ['fdc3.contact'],
+                    } as BrowserTypes.AddIntentListenerRequestPayload & { contextTypes: string[] },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await wait();
+
+                expect(
+                    mockMessagingProvider
+                        .withFunction('sendMessage')
+                        .withParametersEqualTo({ payload: expectedMessage }),
+                ).wasCalledOnce();
+            });
+
+            it('should request addition of listener with contextTypes in payload when an array of context types is passed', async () => {
+                const instance = await createInstance();
+
+                instance.addIntentListenerWithContext(
+                    'StartChat',
+                    ['fdc3.contact', 'fdc3.contactList'],
+                    mockHandler.mock.handler,
+                );
+
+                const expectedMessage: BrowserTypes.AddIntentListenerRequest = {
+                    meta: createExpectedRequestMeta(),
+                    payload: {
+                        intent: 'StartChat',
+                        contextTypes: ['fdc3.contact', 'fdc3.contactList'],
+                    } as BrowserTypes.AddIntentListenerRequestPayload & { contextTypes: string[] },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await wait();
+
+                expect(
+                    mockMessagingProvider
+                        .withFunction('sendMessage')
+                        .withParametersEqualTo({ payload: expectedMessage }),
+                ).wasCalledOnce();
+            });
+
+            it('should return promise that resolves to added intent listener', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                const listener = await listenerPromise;
+
+                expect(typeof listener.unsubscribe).toBe('function');
+            });
+
+            it('should reject promise with same error message returned in response if one is provided', async () => {
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        error: ResolveError.NoAppsFound,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+
+                await expect(listenerPromise).rejects.toStrictEqual(ResolveError.NoAppsFound);
+            });
+
+            it('should send intentListenerUnsubscribeRequest when unsubscribe is called', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                const listener = await listenerPromise;
+
+                listener.unsubscribe();
+
+                const expectedMessage: BrowserTypes.IntentListenerUnsubscribeRequest = {
+                    meta: createExpectedRequestMeta(),
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'intentListenerUnsubscribeRequest',
+                };
+
+                await wait();
+
+                expect(
+                    mockMessagingProvider
+                        .withFunction('sendMessage')
+                        .withParametersEqualTo({ payload: expectedMessage }),
+                ).wasCalledOnce();
+            });
+
+            it('should not call intent handler after unsubscribe is called', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                const listener = await listenerPromise;
+
+                listener.unsubscribe();
+                const intentListenerUnsubscribeResponse: BrowserTypes.IntentListenerUnsubscribeResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {},
+                    type: 'intentListenerUnsubscribeResponse',
+                };
+
+                postMessage(intentListenerUnsubscribeResponse);
+
+                await wait();
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasNotCalled();
+            });
+
+            it('should call intent handler when IntentEvent context type matches', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasCalledOnce();
+            });
+
+            it('should pass originatingApp as source metadata to handler when present', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+                const originatingApp: AppIdentifier = { appId: 'originating-app', instanceId: 'originating-instance' };
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        originatingApp,
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasCalledOnce();
+                expect(
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: originatingApp }),
+                ).wasCalledOnce();
+            });
+
+            it('should pass undefined metadata to handler when originatingApp is not present', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.contact',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasCalledOnce();
+                expect(mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined)).wasCalledOnce();
+            });
+
+            it('should not call intent handler when IntentEvent context type does not match', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    'fdc3.instrument',
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasNotCalled();
+            });
+
+            it('should call intent handler when IntentEvent context type matches one of multiple context types', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    ['fdc3.instrument', 'fdc3.contact'],
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasCalledOnce();
+            });
+
+            it('should not call intent handler when IntentEvent context type matches none of multiple context types', async () => {
+                const mockedListenerUuid: string = `mocked-listener-uuid`;
+
+                const instance = await createInstance();
+
+                const listenerPromise = instance.addIntentListenerWithContext(
+                    'StartChat',
+                    ['fdc3.instrument', 'fdc3.instrumentList'],
+                    mockHandler.mock.handler,
+                );
+                const responseMessage: BrowserTypes.AddIntentListenerResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        listenerUUID: mockedListenerUuid,
+                    },
+                    type: 'addIntentListenerResponse',
+                };
+                postMessage(responseMessage);
+                await listenerPromise;
+
+                const intentEvent: BrowserTypes.IntentEvent = {
+                    meta: {
+                        eventUuid: 'event-uuid',
+                        timestamp: currentDate,
+                    },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                    },
+                    type: 'intentEvent',
+                };
+
+                postMessage(intentEvent);
+                expect(mockHandler.withFunction('handler')).wasNotCalled();
             });
         });
 
@@ -2068,6 +2533,46 @@ tests.forEach(({ proxy }) => {
                 postMessage(responseMessage);
 
                 await expect(intentPromise).rejects.toStrictEqual(ResolveError.TargetAppUnavailable);
+            });
+
+            it('should resolve getResult() when raiseIntentResultResponse arrives before raiseIntentResponse (loopback race)', async () => {
+                const instance = await createInstance();
+
+                const intentPromise = instance.raiseIntent('StartChat', contact, appIdentifier);
+
+                const intentResultMessage: BrowserTypes.RaiseIntentResultResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        intentResult: {
+                            context: contact,
+                        },
+                    },
+                    type: 'raiseIntentResultResponse',
+                };
+                postMessage(intentResultMessage);
+
+                const responseMessage: BrowserTypes.RaiseIntentResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        intentResolution: {
+                            source: appIdentifier,
+                            intent: 'StartChat',
+                        },
+                    },
+                    type: 'raiseIntentResponse',
+                };
+                postMessage(responseMessage);
+
+                const intent = await intentPromise;
+                expect(await intent.getResult()).toEqual(contact);
             });
         });
 
