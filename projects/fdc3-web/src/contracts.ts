@@ -302,6 +302,11 @@ export type RootDesktopAgentFactoryParams = {
      */
     backoffRetry?: BackoffRetryParams;
     logLevels?: GetAgentLogLevels;
+    /**
+     * Optional app directory entry for the root application. When provided this will be used when the root app is added to the application directory, allowing consumers to specify intents the root agent listens for via the interop property.
+     * The appId field is omitted as it is derived from rootAppId.
+     */
+    appDirectoryEntry?: Omit<AppDirectoryApplication, 'appId'>;
 };
 
 export type ProxyDesktopAgentFactoryParams = {

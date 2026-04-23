@@ -136,8 +136,15 @@ describe(`${AppDirectory.name} (directory)`, () => {
         appDirectoryUrls?: (string | LocalAppDirectory)[],
         backoffRetry?: BackoffRetryParams,
         appId = 'mock-root-app-id',
+        rootAppDirectoryEntry?: Omit<AppDirectoryApplication, 'appId'>,
     ): AppDirectory {
-        return new AppDirectory(appId, Promise.resolve(mockResolver.mock), appDirectoryUrls, backoffRetry);
+        return new AppDirectory(
+            appId,
+            Promise.resolve(mockResolver.mock),
+            appDirectoryUrls,
+            backoffRetry,
+            rootAppDirectoryEntry,
+        );
     }
 
     it(`should create`, () => {
@@ -153,6 +160,48 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         expect(instance.rootAppIdentifier.appId).toEqual('fully-qualified-app-id@some-domain');
         expect(typeof instance.rootAppIdentifier.instanceId).toBe('string');
+    });
+
+    it(`should not include root app in applications when no rootAppDirectoryEntry is provided`, () => {
+        const instance = createInstance();
+
+        expect(instance.applications).toEqual([]);
+    });
+
+    it(`should include root app in applications when rootAppDirectoryEntry is provided`, () => {
+        const rootEntry: Omit<AppDirectoryApplication, 'appId'> = {
+            title: 'Root App',
+            type: 'web' as AppDirectoryApplicationType,
+            details: { url: 'https://root-app-url' },
+            interop: {
+                intents: {
+                    listensFor: {
+                        StartChat: { contexts: ['fdc3.contact'] },
+                    },
+                },
+            },
+        };
+        const instance = createInstance(undefined, undefined, 'mock-root-app-id', rootEntry);
+
+        expect(instance.applications).toHaveLength(1);
+        expect(instance.applications[0].appId).toEqual('mock-root-app-id@localhost');
+        expect(instance.applications[0].title).toEqual('Root App');
+        expect(instance.applications[0].interop?.intents?.listensFor?.StartChat).toEqual({
+            contexts: ['fdc3.contact'],
+        });
+    });
+
+    it(`should merge rootAppDirectoryEntry appId with derived fully qualified appId`, () => {
+        const rootEntry: Omit<AppDirectoryApplication, 'appId'> = {
+            title: 'Root App',
+            type: 'web' as AppDirectoryApplicationType,
+            details: { url: 'https://root-app-url' },
+        };
+        const instance = createInstance(undefined, undefined, 'fully-qualified-app-id@some-domain', rootEntry);
+
+        expect(instance.applications).toHaveLength(1);
+        expect(instance.applications[0].appId).toEqual('fully-qualified-app-id@some-domain');
+        expect(instance.applications[0].title).toEqual('Root App');
     });
 
     describe(`resolveAppForIntent`, () => {
