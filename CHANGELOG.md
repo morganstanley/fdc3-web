@@ -12,6 +12,30 @@ import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
  (agent as DesktopAgentNext).addIntentListenerWithContext("my-intent", "my-context", () => handleIntent());
  ```
 
+ * Added optional `appDirectoryEntry` to `RootDesktopAgentFactoryParams`. When provided, the root application is registered in the app directory with the given entry, allowing consumers to specify intents the root agent listens for via the `interop` property:
+
+ ```ts
+ const agent = await factory.createRoot({
+     rootAppId: 'my-root-app',
+     appDirectoryEntry: {
+         title: 'My Root App',
+         type: 'web',
+         details: { url: 'https://my-root-app' },
+         interop: {
+             intents: {
+                 listensFor: {
+                     StartChat: { contexts: ['fdc3.contact'] },
+                 },
+             },
+         },
+     },
+ });
+ ```
+
+### Fixed
+
+ * Fixed `raiseIntent().getResult()` and `raiseIntentForContext().getResult()` hanging forever in loopback scenarios where the same agent both raises and handles an intent. The `raiseIntentResultResponse` listener is now registered before the request message is sent to prevent a race condition where the result arrives before the listener is set up.
+
 ## 0.11.2 (2026-02-26)
 
 ### Fixed
