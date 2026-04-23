@@ -146,7 +146,7 @@ export type IProxyOutgoingMessageEnvelope = {
  * A Request message sent from a proxy agent. No target information is required as all request messages go to the root
  */
 export type IProxyIncomingMessageEnvelope = {
-    payload: ResponseMessage | EventMessage;
+    payload: ResponseMessage | EventMessage | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse;
 };
 
 /**
