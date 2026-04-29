@@ -204,6 +204,31 @@ describe(`${AppDirectory.name} (directory)`, () => {
         expect(instance.applications[0].title).toEqual('Root App');
     });
 
+    it(`should populate root app instance lookup with intents and contexts from rootAppDirectoryEntry so the root app instance is returned by getAppIntent`, async () => {
+        const rootEntry: Omit<AppDirectoryApplication, 'appId'> = {
+            title: 'Root App',
+            type: 'web' as AppDirectoryApplicationType,
+            details: { url: 'https://root-app-url' },
+            interop: {
+                intents: {
+                    listensFor: {
+                        StartChat: { contexts: ['fdc3.contact'] },
+                    },
+                },
+            },
+        };
+        const instance = createInstance(undefined, undefined, 'mock-root-app-id', rootEntry);
+
+        const result = await instance.getAppIntent('StartChat', contact);
+
+        expect(result.apps).toContainEqual(
+            expect.objectContaining({
+                appId: 'mock-root-app-id@localhost',
+                instanceId: 'instanceZero',
+            }),
+        );
+    });
+
     describe(`resolveAppForIntent`, () => {
         it(`should return passed app identifier if instance id is populated`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);

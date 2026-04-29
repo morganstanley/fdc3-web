@@ -542,6 +542,83 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 ).wasCalledOnce();
             });
 
+            it(`should defer publishing IntentEvent until after the AddIntentListenerResponse has been processed by the listening proxy`, async () => {
+                vi.useFakeTimers();
+                try {
+                    createInstance();
+
+                    const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: currentDate,
+                            source,
+                        },
+                        payload: {
+                            intent: 'StartChat',
+                            context: contact,
+                        },
+                        type: 'raiseIntentRequest',
+                    };
+
+                    const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: currentDate,
+                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                        },
+                        payload: {
+                            intent: 'StartChat',
+                        },
+                        type: 'addIntentListenerRequest',
+                    };
+
+                    const handler = mockRootPublisher.setterCallLookup.requestMessageHandler?.[0][0];
+                    if (handler == null) {
+                        throw new Error(`unable to post messages as requestMessageHandler is null`);
+                    }
+
+                    // post the raiseIntent so the agent is waiting for an intent listener
+                    handler(raiseIntentRequest, source);
+                    // flush any pending microtasks/timers triggered by raiseIntent processing
+                    await vi.advanceTimersByTimeAsync(50);
+
+                    // post the addIntentListener request - this is what publishes the response
+                    // and (in the buggy implementation) would synchronously fire the awaiting
+                    // intent event before the proxy can register its message callback
+                    handler(addIntentListenerRequest, {
+                        appId: mockedTargetAppId,
+                        instanceId: mockedTargetInstanceId,
+                    });
+
+                    // drain microtasks without advancing macrotasks. With the fix the for-loop
+                    // that fires the awaitIntentListener callbacks runs in the next macrotask,
+                    // so publishEvent must NOT have been called yet.
+                    for (let i = 0; i < 10; i++) {
+                        await Promise.resolve();
+                    }
+
+                    const addIntentListenerResponseCalls = mockRootPublisher.functionCallLookup[
+                        'publishResponseMessage'
+                    ]?.filter(args => (args[0] as ResponseMessage)?.type === 'addIntentListenerResponse');
+                    expect(addIntentListenerResponseCalls ?? []).toHaveLength(1);
+
+                    const intentEventCallsBeforeMacrotask = mockRootPublisher.functionCallLookup[
+                        'publishEvent'
+                    ]?.filter(args => (args[0] as EventMessage)?.type === 'intentEvent');
+                    expect(intentEventCallsBeforeMacrotask ?? []).toHaveLength(0);
+
+                    // advance timers to allow the deferred for-loop (setTimeout(..., 0)) to fire
+                    await vi.advanceTimersByTimeAsync(0);
+
+                    const intentEventCallsAfterMacrotask = mockRootPublisher.functionCallLookup['publishEvent']?.filter(
+                        args => (args[0] as EventMessage)?.type === 'intentEvent',
+                    );
+                    expect(intentEventCallsAfterMacrotask ?? []).toHaveLength(1);
+                } finally {
+                    vi.useRealTimers();
+                }
+            });
+
             it(`should return error from directory if one is returned`, async () => {
                 mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.reject('UserCancelledResolution'));
 

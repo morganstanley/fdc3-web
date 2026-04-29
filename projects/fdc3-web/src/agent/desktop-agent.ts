@@ -576,9 +576,18 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             source,
         );
 
-        for (const callback of this.intentListenerCallbacks.values()) {
-            callback(source, requestMessage.payload.intent);
-        }
+        // Defer firing any pending awaitIntentListener callbacks until the next macrotask. In a
+        // loopback scenario (where the agent and the proxy that just registered this listener
+        // share a JS context) the proxy only registers its `addMessageCallback` for incoming
+        // `intentEvent` messages after `await getResponse(addIntentListenerResponse)` has resolved,
+        // which takes several microtask ticks. Without this deferral `publishIntentEvent` races
+        // ahead of that registration, causing the listener to silently miss the very intent
+        // delivery it was registered for.
+        setTimeout(() => {
+            for (const callback of this.intentListenerCallbacks.values()) {
+                callback(source, requestMessage.payload.intent);
+            }
+        }, 0);
     }
 
     //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent

@@ -97,9 +97,22 @@ export class AppDirectory {
             rootAppDirectoryEntry != null ? { ...rootAppDirectoryEntry, appId } : undefined;
 
         this.directory[appId] = { application, instances: [rootAppIdentifier.instanceId] };
-        this.instanceLookup[rootAppIdentifier.instanceId] = {};
+        this.populateInstanceLookup(rootAppIdentifier.instanceId, application);
 
         return rootAppIdentifier;
+    }
+
+    /**
+     * Populates the instanceLookup for the given instanceId with the intents (and the contexts they listen for)
+     * declared on the supplied application's `interop.intents.listensFor`.
+     */
+    private populateInstanceLookup(instanceId: string, application: AppDirectoryApplication | undefined): void {
+        this.instanceLookup[instanceId] = Object.fromEntries(
+            Object.entries(application?.interop?.intents?.listensFor ?? {}).map(([intent, contextResultTypePair]) => [
+                intent,
+                contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
+            ]),
+        );
     }
 
     /**
@@ -224,14 +237,7 @@ export class AppDirectory {
         appEntry.instances.push(identifier.instanceId);
 
         //copy across intents app listens for
-        this.instanceLookup[identifier.instanceId] = Object.fromEntries(
-            Object.entries(appEntry.application?.interop?.intents?.listensFor ?? {}).map(
-                ([intent, contextResultTypePair]) => [
-                    intent,
-                    contextResultTypePair.contexts.map(contextType => ({ type: contextType })),
-                ],
-            ),
-        );
+        this.populateInstanceLookup(identifier.instanceId, appEntry.application);
 
         return { identifier, application };
     }

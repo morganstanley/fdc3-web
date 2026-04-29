@@ -1,3 +1,10 @@
+## 0.12.1 (2026-04-29)
+
+### Fixed
+
+ * Fixed `getAppIntent` (and related app directory lookups) not returning the root agent instance for intents declared on the root app's `appDirectoryEntry.interop.intents.listensFor`. The root agent's instance lookup is now populated from its application's declared intents, matching the behaviour used when registering other app instances.
+ * Fixed a race condition where an `intentEvent` could be published before the intent listener's proxy had finished registering its incoming message callback. In loopback scenarios (where the agent and the proxy that just registered the listener share a JS context) the proxy only registers its message callback for incoming `intentEvent` messages after `await getResponse(addIntentListenerResponse)` resolves, which takes several microtask ticks. The agent now defers firing pending `awaitIntentListener` callbacks (and therefore the subsequent `publishIntentEvent`) to the next macrotask so the proxy is always ready to receive the intent before it is dispatched.
+
 ## 0.12.0 (2026-04-16)
 
 ### Added
