@@ -500,6 +500,120 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         });
     });
 
+    describe('automation ids', () => {
+        function shadowRoot(): ShadowRoot | null | undefined {
+            return mockDocument.querySelector('body')?.querySelector('ms-app-resolver')?.shadowRoot;
+        }
+
+        it('should add the default automation-id attribute to each section in the intent popup', async () => {
+            const instance = createInstance();
+
+            // app 1 has an active instance (create(1, 1)) and inactive app (create(1)), giving both sections
+            const payload = createIntentPayload(true, [create(1), create(1, 1)]);
+            instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            expect(shadowRoot()?.querySelector('[automation-id="active-instances"]')).not.toBeNull();
+            expect(shadowRoot()?.querySelector('[automation-id="open-new-instances"]')).not.toBeNull();
+        });
+
+        it('should add automation-id, data-app-id and data-intent to each clickable option in the intent popup', async () => {
+            const instance = createInstance();
+
+            const payload = createIntentPayload(true, [create(1), create(2)]);
+            instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            const options = shadowRoot()?.querySelectorAll('[automation-id="app-selector"]');
+
+            expect(options?.length).toBe(2);
+            options?.forEach(option => {
+                expect(option.getAttribute('data-app-id')).not.toBeNull();
+                expect(option.getAttribute('data-intent')).toBe('StartEmail');
+            });
+        });
+
+        it('should add data-app-instance-id only to active instances', async () => {
+            const instance = createInstance();
+
+            const payload = createIntentPayload(true, [create(1), create(1, 1)]);
+            instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            const activeOption = shadowRoot()?.querySelector(
+                '[automation-id="active-instances"] [automation-id="app-selector"]',
+            );
+            const inactiveOption = shadowRoot()?.querySelector(
+                '[automation-id="open-new-instances"] [automation-id="app-selector"]',
+            );
+
+            expect(activeOption?.getAttribute('data-app-id')).toBe('1');
+            expect(activeOption?.getAttribute('data-app-instance-id')).toBe('1');
+            expect(inactiveOption?.getAttribute('data-app-id')).toBe('1');
+            expect(inactiveOption?.getAttribute('data-app-instance-id')).toBeNull();
+        });
+
+        it('should add data-intent to options in the context popup', async () => {
+            const instance = createInstance();
+
+            const payload = createContextPayloadForAutomation([{ intent: 'StartCall', apps: [create(1), create(2)] }]);
+            instance.resolveAppForContext(payload);
+
+            await wait();
+
+            const options = shadowRoot()?.querySelectorAll('[automation-id="app-selector"]');
+
+            expect(options?.length).toBe(2);
+            options?.forEach(option => expect(option.getAttribute('data-intent')).toBe('StartCall'));
+        });
+
+        it('should add an automation id and data-intent to the div grouping all items for a given intent', async () => {
+            const instance = createInstance();
+
+            const payload = createContextPayloadForAutomation([
+                { intent: 'StartCall', apps: [create(1), create(2)] },
+                { intent: 'StartChat', apps: [create(3), create(4)] },
+            ]);
+            instance.resolveAppForContext(payload);
+
+            await wait();
+
+            const groups = Array.from(shadowRoot()?.querySelectorAll('[automation-id="intent-group"]') ?? []);
+
+            expect(groups?.length).toBe(2);
+            expect(groups.map(group => group.getAttribute('data-intent'))).toEqual(['StartCall', 'StartChat']);
+        });
+
+        it('should use a configurable automation id attribute name', async () => {
+            const instance = new AppResolverComponent(Promise.resolve(mockAgent.mock), mockDocument, 'data-testid');
+
+            const payload = createIntentPayload(true, [create(1), create(2)]);
+            instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            expect(shadowRoot()?.querySelectorAll('[data-testid="app-selector"]').length).toBe(2);
+            expect(shadowRoot()?.querySelector('[data-testid="open-new-instances"]')).not.toBeNull();
+            expect(shadowRoot()?.querySelector('[automation-id="app-selector"]')).toBeNull();
+        });
+
+        function createContextPayloadForAutomation(
+            intents: { intent: string; apps: AppIdentifier[] }[],
+        ): ResolveForContextPayload {
+            const appIntents: AppIntent[] = intents.map(intentAndApps => ({
+                apps: intentAndApps.apps,
+                intent: { name: intentAndApps.intent, displayName: intentAndApps.intent },
+            }));
+
+            mockAgent.setupFunction('findIntentsByContext', () => Promise.resolve(appIntents));
+
+            return { context: { type: 'contact' }, appIntents, appManifests: {} };
+        }
+    });
+
     function createIntentPayload(
         appsInPayload: boolean,
         apps: AppIdentifier[],
