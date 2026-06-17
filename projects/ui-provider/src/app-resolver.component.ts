@@ -20,8 +20,12 @@ import {
 } from '@morgan-stanley/fdc3-web';
 import { css, html, LitElement, TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { when } from 'lit/directives/when.js';
+import { html as staticHtml, unsafeStatic } from 'lit/static-html.js';
 import { ContextPopupState, IntentPopupState } from './contracts.js';
+
+const DEFAULT_AUTOMATION_ID_ATTRIBUTE = 'automation-id';
 
 @customElement('ms-app-resolver')
 export class AppResolverComponent extends LitElement implements IAppResolver {
@@ -167,6 +171,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
     constructor(
         private readonly desktopAgentPromise: Promise<DesktopAgent>,
         private readonly document: Document,
+        public readonly automationIdAttribute: string = DEFAULT_AUTOMATION_ID_ATTRIBUTE,
     ) {
         super();
         this._forIntentPopupState = null;
@@ -396,10 +401,11 @@ function renderForIntentPopup(
     inactiveApps: AppMetadata[],
     intent: Intent,
 ): TemplateResult {
-    return html`${when(
+    const idAttr = unsafeStatic(component.automationIdAttribute);
+    return staticHtml`${when(
         activeInstances != null && activeInstances.length > 0,
         () =>
-            html`<div class="ms-app-resolver-popup-apps-container">
+            staticHtml`<div class="ms-app-resolver-popup-apps-container" ${idAttr}="fdc3-app-resolver_active-instances">
                 <h3 class="ms-app-resolver-popup-apps-container-title">Active Instances</h3>
                 <div class="ms-app-resolver-popup-active-instances">
                     ${activeInstances.map(app => renderApp(app, intent, component))}
@@ -409,7 +415,7 @@ function renderForIntentPopup(
     ${when(
         inactiveApps != null && inactiveApps.length > 0,
         () =>
-            html`<div class="ms-app-resolver-popup-apps-container">
+            staticHtml`<div class="ms-app-resolver-popup-apps-container" ${idAttr}="fdc3-app-resolver_open-new-instances">
                 <h3 class="ms-app-resolver-popup-apps-container-title">Open New Instances</h3>
                 <div class="ms-app-resolver-popup-open-new-instances">
                     ${inactiveApps.map(app => renderApp(app, intent, component))}
@@ -420,9 +426,14 @@ function renderForIntentPopup(
 
 function renderForContextPopup(component: AppResolverComponent): TemplateResult {
     if (component.forContextPopupState != null) {
-        return html`${Object.entries(component.forContextPopupState).map(
+        const idAttr = unsafeStatic(component.automationIdAttribute);
+        return staticHtml`${Object.entries(component.forContextPopupState).map(
             intent =>
-                html`<div class="ms-app-resolver-popup-intent-container">
+                staticHtml`<div
+                    class="ms-app-resolver-popup-intent-container"
+                    ${idAttr}="fdc3-app-resolver_intent-group"
+                    data-intent="${intent[0]}"
+                >
                     <button
                         class="ms-app-resolver-popup-intent-title-btn"
                         type="button"
@@ -446,8 +457,17 @@ function renderForContextPopup(component: AppResolverComponent): TemplateResult 
 }
 
 function renderApp(app: AppMetadata, intent: Intent, component: AppResolverComponent): TemplateResult {
-    return html`<div class="ms-app-display-container">
-        <button class="ms-app-resolver-app-display-btn" type="button" @click=${() => component.selectApp(app, intent)}>
+    const idAttr = unsafeStatic(component.automationIdAttribute);
+    return staticHtml`<div class="ms-app-display-container">
+        <button
+            class="ms-app-resolver-app-display-btn"
+            type="button"
+            ${idAttr}="fdc3-app-resolver_app-selector"
+            data-app-id="${app.appId}"
+            data-app-instance-id="${ifDefined(app.instanceId)}"
+            data-intent="${ifDefined(intent !== '' ? intent : undefined)}"
+            @click=${() => component.selectApp(app, intent)}
+        >
             <span class="ms-app-resolver-app-icon-container"
                 >${renderAppIcon(app.icons?.find(icon => icon != null))}</span
             >

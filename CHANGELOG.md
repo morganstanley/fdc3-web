@@ -1,3 +1,9 @@
+## 0.13.0 (2026-06-11)
+
+### 🚀 Features
+
+- **ui-provider:** add configurable automation ids to app resolver
+
 ## 0.12.1 (2026-04-29)
 
 ### Fixed
