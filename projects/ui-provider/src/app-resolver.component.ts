@@ -168,21 +168,14 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
     @state()
     private selectedAppCallback: ((app: AppMetadata, intent: Intent) => void) | undefined;
 
-    /**
-     * Name of the attribute used to tag elements for automation/testing.
-     * Defaults to `automation-id` but can be configured via the constructor.
-     */
-    public readonly automationIdAttribute: string;
-
     constructor(
         private readonly desktopAgentPromise: Promise<DesktopAgent>,
         private readonly document: Document,
-        automationIdAttribute: string = DEFAULT_AUTOMATION_ID_ATTRIBUTE,
+        public readonly automationIdAttribute: string = DEFAULT_AUTOMATION_ID_ATTRIBUTE,
     ) {
         super();
         this._forIntentPopupState = null;
         this._forContextPopupState = null;
-        this.automationIdAttribute = automationIdAttribute;
     }
 
     public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier> {
@@ -412,7 +405,7 @@ function renderForIntentPopup(
     return staticHtml`${when(
         activeInstances != null && activeInstances.length > 0,
         () =>
-            staticHtml`<div class="ms-app-resolver-popup-apps-container" ${idAttr}="active-instances">
+            staticHtml`<div class="ms-app-resolver-popup-apps-container" ${idAttr}="fdc3-app-resolver_active-instances">
                 <h3 class="ms-app-resolver-popup-apps-container-title">Active Instances</h3>
                 <div class="ms-app-resolver-popup-active-instances">
                     ${activeInstances.map(app => renderApp(app, intent, component))}
@@ -422,7 +415,7 @@ function renderForIntentPopup(
     ${when(
         inactiveApps != null && inactiveApps.length > 0,
         () =>
-            staticHtml`<div class="ms-app-resolver-popup-apps-container" ${idAttr}="open-new-instances">
+            staticHtml`<div class="ms-app-resolver-popup-apps-container" ${idAttr}="fdc3-app-resolver_open-new-instances">
                 <h3 class="ms-app-resolver-popup-apps-container-title">Open New Instances</h3>
                 <div class="ms-app-resolver-popup-open-new-instances">
                     ${inactiveApps.map(app => renderApp(app, intent, component))}
@@ -438,7 +431,7 @@ function renderForContextPopup(component: AppResolverComponent): TemplateResult 
             intent =>
                 staticHtml`<div
                     class="ms-app-resolver-popup-intent-container"
-                    ${idAttr}="intent-group"
+                    ${idAttr}="fdc3-app-resolver_intent-group"
                     data-intent="${intent[0]}"
                 >
                     <button
@@ -469,7 +462,7 @@ function renderApp(app: AppMetadata, intent: Intent, component: AppResolverCompo
         <button
             class="ms-app-resolver-app-display-btn"
             type="button"
-            ${idAttr}="app-selector"
+            ${idAttr}="fdc3-app-resolver_app-selector"
             data-app-id="${app.appId}"
             data-app-instance-id="${ifDefined(app.instanceId)}"
             data-intent="${ifDefined(intent !== '' ? intent : undefined)}"

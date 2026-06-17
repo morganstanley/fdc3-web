@@ -514,8 +514,10 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await wait();
 
-            expect(shadowRoot()?.querySelector('[automation-id="active-instances"]')).not.toBeNull();
-            expect(shadowRoot()?.querySelector('[automation-id="open-new-instances"]')).not.toBeNull();
+            expect(shadowRoot()?.querySelector('[automation-id="fdc3-app-resolver_active-instances"]')).not.toBeNull();
+            expect(
+                shadowRoot()?.querySelector('[automation-id="fdc3-app-resolver_open-new-instances"]'),
+            ).not.toBeNull();
         });
 
         it('should add automation-id, data-app-id and data-intent to each clickable option in the intent popup', async () => {
@@ -526,7 +528,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await wait();
 
-            const options = shadowRoot()?.querySelectorAll('[automation-id="app-selector"]');
+            const options = shadowRoot()?.querySelectorAll('[automation-id="fdc3-app-resolver_app-selector"]');
 
             expect(options?.length).toBe(2);
             options?.forEach(option => {
@@ -544,10 +546,10 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             await wait();
 
             const activeOption = shadowRoot()?.querySelector(
-                '[automation-id="active-instances"] [automation-id="app-selector"]',
+                '[automation-id="fdc3-app-resolver_active-instances"] [automation-id="fdc3-app-resolver_app-selector"]',
             );
             const inactiveOption = shadowRoot()?.querySelector(
-                '[automation-id="open-new-instances"] [automation-id="app-selector"]',
+                '[automation-id="fdc3-app-resolver_open-new-instances"] [automation-id="fdc3-app-resolver_app-selector"]',
             );
 
             expect(activeOption?.getAttribute('data-app-id')).toBe('1');
@@ -564,7 +566,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await wait();
 
-            const options = shadowRoot()?.querySelectorAll('[automation-id="app-selector"]');
+            const options = shadowRoot()?.querySelectorAll('[automation-id="fdc3-app-resolver_app-selector"]');
 
             expect(options?.length).toBe(2);
             options?.forEach(option => expect(option.getAttribute('data-intent')).toBe('StartCall'));
@@ -581,7 +583,9 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await wait();
 
-            const groups = Array.from(shadowRoot()?.querySelectorAll('[automation-id="intent-group"]') ?? []);
+            const groups = Array.from(
+                shadowRoot()?.querySelectorAll('[automation-id="fdc3-app-resolver_intent-group"]') ?? [],
+            );
 
             expect(groups?.length).toBe(2);
             expect(groups.map(group => group.getAttribute('data-intent'))).toEqual(['StartCall', 'StartChat']);
@@ -595,9 +599,9 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
             await wait();
 
-            expect(shadowRoot()?.querySelectorAll('[data-testid="app-selector"]').length).toBe(2);
-            expect(shadowRoot()?.querySelector('[data-testid="open-new-instances"]')).not.toBeNull();
-            expect(shadowRoot()?.querySelector('[automation-id="app-selector"]')).toBeNull();
+            expect(shadowRoot()?.querySelectorAll('[data-testid="fdc3-app-resolver_app-selector"]').length).toBe(2);
+            expect(shadowRoot()?.querySelector('[data-testid="fdc3-app-resolver_open-new-instances"]')).not.toBeNull();
+            expect(shadowRoot()?.querySelector('[automation-id="fdc3-app-resolver_app-selector"]')).toBeNull();
         });
 
         function createContextPayloadForAutomation(
