@@ -4,6 +4,15 @@
 
  * Support `FORCE_NEW_INSTANCE` as a special `instanceId` when resolving an app for intent, allowing the desktop agent to create a new app instance even when an existing instance is not matched.
 
+ ```ts
+import { FORCE_NEW_INSTANCE } from "@morgan-stanley/fdc3-web";
+
+agent.raiseIntent('StartChat', context, { appId, instanceId: FORCE_NEW_INSTANCE });
+```
+
+This feature will be removed in the future when the issue has been resolved in the fdc3 spec:
+https://github.com/finos/FDC3/issues/1940
+
 ## 0.13.0 (2026-06-11)
 
 ### 🚀 Features
