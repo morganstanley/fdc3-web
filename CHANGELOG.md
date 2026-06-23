@@ -1,3 +1,9 @@
+## 0.14.0 (2026-06-23)
+
+### Added
+
+ * Support `FORCE_NEW_INSTANCE` as a special `instanceId` when resolving an app for intent, allowing the desktop agent to create a new app instance even when an existing instance is not matched.
+
 ## 0.13.0 (2026-06-11)
 
 ### 🚀 Features
