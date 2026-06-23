@@ -24,7 +24,12 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
-import { AddIntentListenerWithContextRequest, IRootPublisher } from '../contracts.internal.js';
+import {
+    AddIntentListenerWithContextRequest,
+    IRootPublisher,
+    UpdateInstanceMetadataRequest,
+    UpdateInstanceMetadataResponse,
+} from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
     DesktopAgentNext,
@@ -139,7 +144,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         });
         this.startHeartbeat(sourceApp);
 
-        switch (requestMessage.type) {
+        const messageType = requestMessage.type;
+
+        switch (messageType) {
             case 'addIntentListenerRequest':
                 return this.onAddIntentListenerRequest(requestMessage, sourceApp);
             case 'raiseIntentRequest':
@@ -205,7 +212,17 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 return this.channelMessageHandler.onPrivateChannelDisconnectRequest(requestMessage, sourceApp);
             case 'heartbeatAcknowledgementRequest':
                 return this.onHeartbeatAcknowledgementRequest(requestMessage, sourceApp);
+
+            case 'updateInstanceMetadataRequest':
+                return this.onUpdateInstanceMetadataRequest(requestMessage, sourceApp);
+
+            default:
+                this.handleNever(messageType);
         }
+    }
+
+    private handleNever(messageType: never): void {
+        this.proxyLog(`Received unknown message type: '${messageType}' from proxy`, LogLevel.WARN);
     }
 
     //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
@@ -691,6 +708,23 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             createResponseMessage<BrowserTypes.GetAppMetadataResponse>(
                 'getAppMetadataResponse',
                 { appMetadata },
+                requestMessage.meta.requestUuid,
+                source,
+            ),
+            source,
+        );
+    }
+
+    private onUpdateInstanceMetadataRequest(
+        requestMessage: UpdateInstanceMetadataRequest,
+        source: FullyQualifiedAppIdentifier,
+    ): void {
+        this.directory.updateInstanceMetadata(source.instanceId, requestMessage.payload.instanceMetadata);
+
+        this.rootMessagePublisher.publishResponseMessage(
+            createResponseMessage<UpdateInstanceMetadataResponse>(
+                'updateInstanceMetadataResponse',
+                {},
                 requestMessage.meta.requestUuid,
                 source,
             ),

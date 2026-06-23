@@ -130,6 +130,7 @@ export function mapApplicationToMetadata(
         description: appMetadata?.description,
         icons: appMetadata?.icons,
         screenshots: appMetadata?.screenshots,
+        instanceMetadata: appMetadata?.instanceMetadata,
     };
 }
 

@@ -31,7 +31,7 @@ import {
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { AddIntentListenerWithContextRequest } from '../contracts.internal.js';
+import { AddIntentListenerWithContextRequest, UpdateInstanceMetadataRequest } from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
@@ -56,6 +56,7 @@ import {
     isRaiseIntentForContextResponse,
     isRaiseIntentResponse,
     isRaiseIntentResultResponse,
+    isUpdateInstanceMetadataResponse,
     resolveAppIdentifier,
     resolveContextType,
 } from '../helpers/index.js';
@@ -210,7 +211,21 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return response.payload.appIntents.map(appIntent => mapMessageIntent(appIntent));
     }
 
-    public async findInstances(app: AppIdentifier): Promise<AppIdentifier[]> {
+    public async updateInstanceMetadata(instanceMetadata: { [key: string]: any }): Promise<void> {
+        const message = createRequestMessage<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            this.appIdentifier,
+            { instanceMetadata },
+        );
+
+        const response = await this.getResponse(message, isUpdateInstanceMetadataResponse);
+
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        }
+    }
+
+    public async findInstances(app: AppIdentifier): Promise<AppMetadata[]> {
         const message = createRequestMessage<BrowserTypes.FindInstancesRequest>(
             'findInstancesRequest',
             this.appIdentifier,
@@ -225,7 +240,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             //this should not happen - there should be no situation where both appIdentifiers and error are undefined in response payload
             return Promise.reject('appIdentifiers is null');
         }
-        return response.payload.appIdentifiers;
+        return response.payload.appIdentifiers as AppMetadata[];
     }
 
     public raiseIntent(intent: Intent, context: Context, appIdentifier?: AppIdentifier): Promise<IntentResolution>;
