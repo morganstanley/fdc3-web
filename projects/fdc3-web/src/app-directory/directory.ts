@@ -22,6 +22,7 @@ import { AppDirectoryApplication, LocalAppDirectory, MS_HOST_MANIFEST_KEY } from
 import {
     AppHostManifestLookup,
     BackoffRetryParams,
+    FORCE_NEW_INSTANCE,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
     IAppResolver,
@@ -135,6 +136,10 @@ export class AppDirectory {
         }
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
+            if (appIdentifier.instanceId === FORCE_NEW_INSTANCE) {
+                return { appId: appIdentifier.appId };
+            }
+
             const contextLookup = this.instanceLookup[appIdentifier.instanceId]?.[intent];
 
             if (
@@ -324,6 +329,7 @@ export class AppDirectory {
 
         if (
             appIdentifier.instanceId != null &&
+            appIdentifier.instanceId !== FORCE_NEW_INSTANCE &&
             !this.directory[fullyQualifiedAppId]?.instances.includes(appIdentifier.instanceId)
         ) {
             return ResolveError.TargetInstanceUnavailable;

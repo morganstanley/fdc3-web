@@ -393,3 +393,16 @@ export interface ISelectApplicationStrategy {
      */
     selectApp(params: SelectApplicationStrategyParams): Promise<void>;
 }
+
+/**
+ * used as an instance id when calling `raiseIntent` or `raiseIntentForContext` to force the desktop agent to create a new instance of the app
+ * There is currently no way of telling the agent to create a new instance of a given app using the current spec.
+ * If just an appId is sent as the appIndentifier: {appId: "my-app-id"} then the agent will typically show a resolver UI showing multiple existing instances and a create new instance option
+ * This is a remporary solution until the issue in the FDC3 spec is resolved.
+ *
+ * Issue raised: https://github.com/finos/FDC3/issues/1940
+ *
+ * raiseIntent("my-intent", {id: "my-context"}, {appId: "my-app", instanceId: FORCE_NEW_INSTANCE});
+ *
+ */
+export const FORCE_NEW_INSTANCE = 'ms.fdc3-web.desktop-agent.force-new-app-instance';
