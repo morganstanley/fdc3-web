@@ -10,7 +10,7 @@ import { FORCE_NEW_INSTANCE } from "@morgan-stanley/fdc3-web";
 agent.raiseIntent('StartChat', context, { appId, instanceId: FORCE_NEW_INSTANCE });
 ```
 
-This feature will be removed in the future when the issue has been resolved in the fdc3 spec:
+This feature will be removed in the future when the issue has been resolved in the FDC3 spec:
 https://github.com/finos/FDC3/issues/1940
 
 ## 0.13.0 (2026-06-11)
