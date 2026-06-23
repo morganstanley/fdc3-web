@@ -19,6 +19,7 @@ import {
 } from '../app-directory.contracts.js';
 import {
     BackoffRetryParams,
+    FORCE_NEW_INSTANCE,
     FullyQualifiedAppIdentifier,
     IAppResolver,
     ResolveForContextPayload,
@@ -243,6 +244,22 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
             expect(result).toStrictEqual(identifier);
+            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+        });
+
+        it(`should return only appId and bypass instance validation when instanceId is FORCE_NEW_INSTANCE`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const identifier: FullyQualifiedAppIdentifier = {
+                appId: mockedAppIdOne,
+                instanceId: FORCE_NEW_INSTANCE,
+            };
+
+            const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
+
+            expect(result).toStrictEqual({ appId: mockedAppIdOne });
             expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
         });
 
