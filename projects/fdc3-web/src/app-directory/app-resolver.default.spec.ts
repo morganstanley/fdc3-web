@@ -303,4 +303,70 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
             }
         });
     });
+
+    describe('qualified and unqualified app ids', () => {
+        const fullyQualifiedAppId = 'my-app@jubako.ms.com';
+        const unqualifiedAppId = 'my-app';
+
+        it('should resolve the correct app when given a fully qualified app id', async () => {
+            const instance = createInstance();
+
+            const appIntent: AppIntent = {
+                apps: [{ appId: fullyQualifiedAppId }, { appId: 'other-app@jubako.ms.com' }],
+                intent: { name: 'StartEmail', displayName: 'StartEmail' },
+            };
+
+            const payload: ResolveForIntentPayload = {
+                context: { type: 'contact' },
+                appIdentifier: { appId: fullyQualifiedAppId },
+                intent: 'StartEmail',
+                appManifests: {},
+                appIntent,
+            };
+
+            await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({ appId: fullyQualifiedAppId });
+        });
+
+        it('should resolve the correct app when given an unqualified app id', async () => {
+            const instance = createInstance();
+
+            const appIntent: AppIntent = {
+                apps: [{ appId: fullyQualifiedAppId }, { appId: 'other-app@jubako.ms.com' }],
+                intent: { name: 'StartEmail', displayName: 'StartEmail' },
+            };
+
+            const payload: ResolveForIntentPayload = {
+                context: { type: 'contact' },
+                appIdentifier: { appId: unqualifiedAppId },
+                intent: 'StartEmail',
+                appManifests: {},
+                appIntent,
+            };
+
+            await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({ appId: fullyQualifiedAppId });
+        });
+
+        it('should resolve the correct app for context when given an unqualified app id', async () => {
+            const instance = createInstance();
+
+            const appIntents: AppIntent[] = [
+                {
+                    apps: [{ appId: fullyQualifiedAppId }, { appId: 'other-app@jubako.ms.com' }],
+                    intent: { name: 'StartEmail', displayName: 'StartEmail' },
+                },
+            ];
+
+            const payload: ResolveForContextPayload = {
+                context: { type: 'contact' },
+                appIdentifier: { appId: unqualifiedAppId },
+                appManifests: {},
+                appIntents,
+            };
+
+            await expect(instance.resolveAppForContext(payload)).resolves.toEqual({
+                intent: 'StartEmail',
+                app: { appId: fullyQualifiedAppId, instanceId: undefined },
+            });
+        });
+    });
 });

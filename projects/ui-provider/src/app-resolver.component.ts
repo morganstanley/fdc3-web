@@ -11,6 +11,7 @@
 import type { AppIdentifier, AppMetadata, Context, DesktopAgent, Icon, Intent } from '@finos/fdc3';
 import { ResolveError } from '@finos/fdc3';
 import {
+    appIdsMatch,
     filterActiveApps,
     filterInactiveApps,
     IAppResolver,
@@ -169,7 +170,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
     private selectedAppCallback: ((app: AppMetadata, intent: Intent) => void) | undefined;
 
     constructor(
-        private readonly desktopAgentPromise: Promise<DesktopAgent>,
+        private readonly desktopAgent: DesktopAgent | Promise<DesktopAgent>,
         private readonly document: Document,
         public readonly automationIdAttribute: string = DEFAULT_AUTOMATION_ID_ATTRIBUTE,
     ) {
@@ -179,12 +180,13 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
     }
 
     public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier> {
-        const agent = await this.desktopAgentPromise;
+        const agent = await this.desktopAgent;
 
         const appIntent = payload.appIntent ?? (await agent.findIntent(payload.intent, payload.context));
         let apps: AppMetadata[] = appIntent.apps;
-        if (payload.appIdentifier != null) {
-            apps = apps.filter(app => app.appId === payload.appIdentifier?.appId);
+        const requestedAppId = payload.appIdentifier?.appId;
+        if (requestedAppId != null) {
+            apps = apps.filter(app => appIdsMatch(app.appId, requestedAppId));
         }
 
         const activeInstances = apps.filter(app => app.instanceId != null);
@@ -208,7 +210,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
     }
 
     public async resolveAppForContext(payload: ResolveForContextPayload): Promise<ResolveForContextResponse> {
-        const agent = await this.desktopAgentPromise;
+        const agent = await this.desktopAgent;
 
         const appIntents = payload.appIntents ?? (await agent.findIntentsByContext(payload.context));
 
@@ -220,9 +222,10 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
             appIntents
                 //filters out intents which cannot be handled by given AppIdentifier if one is provided
                 .map(appIntent => {
+                    const requestedAppId = payload.appIdentifier?.appId;
                     const apps =
-                        payload.appIdentifier != null
-                            ? appIntent.apps.filter(app => app.appId === payload.appIdentifier?.appId)
+                        requestedAppId != null
+                            ? appIntent.apps.filter(app => appIdsMatch(app.appId, requestedAppId))
                             : appIntent.apps;
 
                     return { ...appIntent, apps };

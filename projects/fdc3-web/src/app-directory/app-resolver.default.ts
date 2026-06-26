@@ -16,7 +16,7 @@ import {
     ResolveForContextResponse,
     ResolveForIntentPayload,
 } from '../contracts.js';
-import { filterActiveApps, filterInactiveApps } from '../helpers/index.js';
+import { appIdsMatch, filterActiveApps, filterInactiveApps } from '../helpers/index.js';
 
 /**
  * If no IUIProvider is present then this class is used to resolve apps.
@@ -55,9 +55,10 @@ export class DefaultResolver implements IAppResolver {
             appIntents
                 //filters out intents which cannot be handled by given AppIdentifier if one is provided
                 .map(appIntent => {
+                    const requestedAppId = payload.appIdentifier?.appId;
                     const apps =
-                        payload.appIdentifier != null
-                            ? appIntent.apps.filter(app => app.appId === payload.appIdentifier?.appId)
+                        requestedAppId != null
+                            ? appIntent.apps.filter(app => appIdsMatch(app.appId, requestedAppId))
                             : appIntent.apps;
 
                     return { ...appIntent, apps };
@@ -95,7 +96,9 @@ export class DefaultResolver implements IAppResolver {
         identifier: AppIdentifier | undefined,
         apps: AppIdentifier[],
     ): Promise<AppIdentifier> {
-        const matchingApps = apps.filter(knownApp => identifier?.appId == null || knownApp.appId === identifier.appId);
+        const matchingApps = apps.filter(
+            knownApp => identifier?.appId == null || appIdsMatch(knownApp.appId, identifier.appId),
+        );
 
         if (matchingApps.length === 1 && matchingApps[0] != null) {
             return matchingApps[0];

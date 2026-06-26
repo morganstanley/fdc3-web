@@ -221,6 +221,11 @@ export type AppHostManifestLookup = Partial<Record<string, IMSHostManifest>>;
 
 export type ResolveForIntentPayload = {
     context: Context;
+    /**
+     * Optional app identifier used to filter the resolved apps. The appId may be either fully
+     * qualified (appId@hostname) or unqualified (appId only); the resolver normalizes both forms
+     * before matching against the app directory entries.
+     */
     appIdentifier?: UnqualifiedAppIdentifier;
     intent: Intent;
     // used to indicate if an app is a singleton app
@@ -233,6 +238,11 @@ export type ResolveForIntentPayload = {
 
 export type ResolveForContextPayload = {
     context: Context;
+    /**
+     * Optional app identifier used to filter the resolved apps. The appId may be either fully
+     * qualified (appId@hostname) or unqualified (appId only); the resolver normalizes both forms
+     * before matching against the app directory entries.
+     */
     appIdentifier?: UnqualifiedAppIdentifier;
     // used to indicate if an app is a singleton app
     appManifests: AppHostManifestLookup;
