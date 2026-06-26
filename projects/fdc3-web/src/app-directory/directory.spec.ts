@@ -312,7 +312,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             screenshots: undefined,
                         },
                     ],
-                    intent: { name: 'StartChat', displayName: 'StartChat' },
+                    intent: { name: 'StartChat', displayName: undefined },
                 },
             };
 
@@ -505,7 +505,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                                 screenshots: undefined,
                             },
                         ],
-                        intent: { name: 'StartChat', displayName: 'StartChat' },
+                        intent: { name: 'StartChat', displayName: undefined },
                     },
                     {
                         apps: [
@@ -520,7 +520,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                                 screenshots: undefined,
                             },
                         ],
-                        intent: { name: 'StartEmail', displayName: 'StartEmail' },
+                        intent: { name: 'StartEmail', displayName: undefined },
                     },
                 ],
             };
@@ -611,7 +611,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         version: undefined,
                     },
                 ],
-                intent: { name: 'notAKnownIntent', displayName: 'notAKnownIntent' },
+                intent: { name: 'notAKnownIntent', displayName: undefined },
             });
         });
 
@@ -883,7 +883,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             version: undefined,
                         },
                     ],
-                    intent: { name: 'StartChat', displayName: 'StartChat' },
+                    intent: { name: 'StartChat', displayName: undefined },
                 },
                 {
                     apps: [
@@ -898,7 +898,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             version: undefined,
                         },
                     ],
-                    intent: { name: 'StartEmail', displayName: 'StartEmail' },
+                    intent: { name: 'StartEmail', displayName: undefined },
                 },
             ];
 
@@ -964,7 +964,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         version: undefined,
                     },
                 ],
-                intent: { displayName: 'StartChat', name: 'StartChat' },
+                intent: { displayName: undefined, name: 'StartChat' },
             });
         });
 
@@ -1002,7 +1002,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         version: undefined,
                     },
                 ],
-                intent: { displayName: 'StartChat', name: 'StartChat' },
+                intent: { displayName: undefined, name: 'StartChat' },
             });
         });
 
@@ -1062,7 +1062,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                     },
                 ],
                 intent: {
-                    displayName: 'StartChat',
+                    displayName: undefined,
                     name: 'StartChat',
                 },
             });
@@ -1076,14 +1076,14 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(result.intent).toEqual({ name: 'ViewChart', displayName: 'View Chart' });
         });
 
-        it('should fall back to intent name as displayName when no app defines a displayName', async () => {
+        it('should leave displayName undefined when no app defines a displayName', async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
             await registerApp(instance, mockedApplicationOne, 'StartChat', [contact]);
 
             const result = await instance.getAppIntent('StartChat');
 
-            expect(result.intent).toEqual({ name: 'StartChat', displayName: 'StartChat' });
+            expect(result.intent).toEqual({ name: 'StartChat', displayName: undefined });
         });
     });
 

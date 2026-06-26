@@ -17,7 +17,7 @@ import {
 } from '@morgan-stanley/fdc3-web';
 import { IMocked, Mock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AppResolverComponent } from './app-resolver.component.js';
+import { AppResolverComponent, resolveDisplayName } from './app-resolver.component.js';
 
 const mockedTargetAppId = `mocked-target-app-id`;
 const mockedTargetInstanceId = `mocked-target-instance-id`;
@@ -175,7 +175,11 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
                             await wait();
 
-                            expect(instance.forIntentPopupState).toEqual({ name: 'StartEmail', ...expectedApps });
+                            expect(instance.forIntentPopupState).toEqual({
+                                name: 'StartEmail',
+                                displayName: 'StartEmail',
+                                ...expectedApps,
+                            });
                             expect(mockDocument.querySelector('body')?.querySelector('ms-app-resolver')).toBeDefined();
                         } else {
                             // expecting a single app to be returned immediately
@@ -380,8 +384,13 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
 
                             await wait();
 
-                            const intentLookup = expectedApps.reduce<Record<string, ExpectedApps>>(
-                                (lookup, { intent, apps }) => ({ ...lookup, [intent]: apps }),
+                            const intentLookup = expectedApps.reduce<
+                                Record<string, ExpectedApps & { displayName?: string }>
+                            >(
+                                (lookup, { intent, apps }) => ({
+                                    ...lookup,
+                                    [intent]: { displayName: intent, ...apps },
+                                }),
                                 {},
                             );
 
@@ -673,6 +682,89 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         }
     });
 
+    describe('intent displayName', () => {
+        function shadowRoot(): ShadowRoot | null | undefined {
+            return mockDocument.querySelector('body')?.querySelector('ms-app-resolver')?.shadowRoot;
+        }
+
+        function intentPayload(name: string, displayName: string | undefined): ResolveForIntentPayload {
+            return {
+                context: { type: 'contact' },
+                intent: name,
+                appManifests: {},
+                appIntent: { intent: { name, displayName }, apps: [create(1), create(2)] },
+            };
+        }
+
+        function contextPayload(name: string, displayName: string | undefined): ResolveForContextPayload {
+            return {
+                context: { type: 'contact' },
+                appManifests: {},
+                appIntents: [{ intent: { name, displayName }, apps: [create(1), create(2)] }],
+            };
+        }
+
+        it('should show the directory displayName as the intent popup title when one is provided', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForIntent(intentPayload('ViewChart', 'Display A Chart'));
+
+            await wait();
+
+            expect(shadowRoot()?.querySelector('.ms-app-resolver-popup-title')?.textContent?.trim()).toBe(
+                'Display A Chart',
+            );
+        });
+
+        it('should show the humanized intent name as the intent popup title when no displayName is provided', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForIntent(intentPayload('ViewChart', undefined));
+
+            await wait();
+
+            expect(shadowRoot()?.querySelector('.ms-app-resolver-popup-title')?.textContent?.trim()).toBe('View Chart');
+        });
+
+        it('should show the directory displayName as the context popup intent title when one is provided', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForContext(contextPayload('ViewChart', 'Display A Chart'));
+
+            await wait();
+
+            expect(shadowRoot()?.querySelector('.ms-app-resolver-popup-intent-title')?.textContent?.trim()).toBe(
+                'Display A Chart',
+            );
+        });
+
+        it('should show the humanized intent name as the context popup intent title when no displayName is provided', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForContext(contextPayload('ViewChart', undefined));
+
+            await wait();
+
+            expect(shadowRoot()?.querySelector('.ms-app-resolver-popup-intent-title')?.textContent?.trim()).toBe(
+                'View Chart',
+            );
+        });
+
+        it('should keep the raw intent name as the data-intent attribute regardless of displayName', async () => {
+            const instance = createInstance();
+
+            instance.resolveAppForContext(contextPayload('ViewChart', 'Display A Chart'));
+
+            await wait();
+
+            expect(
+                shadowRoot()
+                    ?.querySelector('[automation-id="fdc3-app-resolver_intent-group"]')
+                    ?.getAttribute('data-intent'),
+            ).toBe('ViewChart');
+        });
+    });
+
     function createIntentPayload(
         appsInPayload: boolean,
         apps: AppIdentifier[],
@@ -708,4 +800,27 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
             setTimeout(() => resolve(), delay);
         });
     }
+});
+
+describe('resolveDisplayName', () => {
+    it('should return the displayName when one is provided', () => {
+        expect(resolveDisplayName({ name: 'ViewChart', displayName: 'Display A Chart' })).toBe('Display A Chart');
+    });
+
+    const humanizedCases: { name: string; expected: string }[] = [
+        { name: 'ViewChart', expected: 'View Chart' },
+        { name: 'StartChat', expected: 'Start Chat' },
+        { name: 'view-contact', expected: 'View Contact' },
+        { name: 'view_contact', expected: 'View Contact' },
+        { name: 'ViewFXChart', expected: 'View FX Chart' },
+        { name: 'startChat2', expected: 'Start Chat 2' },
+        { name: 'SendEmail', expected: 'Send Email' },
+        { name: 'lowercase', expected: 'Lowercase' },
+    ];
+
+    humanizedCases.forEach(({ name, expected }) => {
+        it(`should humanize "${name}" to "${expected}" when no displayName is provided`, () => {
+            expect(resolveDisplayName({ name, displayName: undefined })).toBe(expected);
+        });
+    });
 });

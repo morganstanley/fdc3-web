@@ -524,13 +524,15 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
 }
 
 /**
- * Converts displayName property from string | undefined to string
+ * Maps an AppIntent returned in a response message (defined in BrowserTypes) to the AppIntent type defined in the
+ * FDC3 spec. The intent displayName is left untouched - it is undefined when the app directory does not supply one,
+ * allowing consumers to distinguish a directory-provided displayName from its absence.
  * @param appIntent is AppIntent returned in response message, defined in BrowserTypes
  * @returns AppIntent object of type defined in FDC3 spec
  */
 function mapMessageIntent(appIntent: BrowserTypes.AppIntent): AppIntent {
     return {
         ...appIntent,
-        intent: { ...appIntent.intent, displayName: appIntent.intent.displayName ?? appIntent.intent.name },
+        intent: { ...appIntent.intent },
     };
 }

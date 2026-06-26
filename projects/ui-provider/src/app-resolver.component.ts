@@ -203,7 +203,12 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
             return Promise.reject(ResolveError.NoAppsFound);
         }
 
-        this._forIntentPopupState = { name: appIntent.intent.name, activeInstances, inactiveApps };
+        this._forIntentPopupState = {
+            name: appIntent.intent.name,
+            displayName: appIntent.intent.displayName,
+            activeInstances,
+            inactiveApps,
+        };
 
         this.togglePopup();
         return (await this.getSelectedApp()).app;
@@ -231,19 +236,23 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                     return { ...appIntent, apps };
                 })
                 .filter(appIntent => appIntent.apps.length > 0)
-                .reduce<Record<string, { activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] }>>(
-                    (lookup, appIntent) => {
-                        //active app instances that can handle given intent
-                        const activeInstances = appIntent.apps.filter(filterActiveApps);
-                        //apps that can handle given intent (excluding singletons which already have an active instance)
-                        const inactiveApps = appIntent.apps.filter(app =>
-                            filterInactiveApps(app, globalActiveInstances, payload.appManifests),
-                        );
+                .reduce<ContextPopupState>((lookup, appIntent) => {
+                    //active app instances that can handle given intent
+                    const activeInstances = appIntent.apps.filter(filterActiveApps);
+                    //apps that can handle given intent (excluding singletons which already have an active instance)
+                    const inactiveApps = appIntent.apps.filter(app =>
+                        filterInactiveApps(app, globalActiveInstances, payload.appManifests),
+                    );
 
-                        return { ...lookup, [appIntent.intent.name]: { activeInstances, inactiveApps } };
-                    },
-                    {},
-                );
+                    return {
+                        ...lookup,
+                        [appIntent.intent.name]: {
+                            displayName: appIntent.intent.displayName,
+                            activeInstances,
+                            inactiveApps,
+                        },
+                    };
+                }, {});
 
         const appCandidates = Object.entries(intentLookup).flatMap(([intent, apps]) =>
             [...apps.activeInstances, ...apps.inactiveApps].map(app => ({ intent, app })),
@@ -358,7 +367,7 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                 <h1 class="ms-app-resolver-popup-title">
                     ${when(this.forIntentPopupState != null || this.forContextPopupState != null, () => {
                         if (this.forIntentPopupState != null) {
-                            return this.forIntentPopupState?.name;
+                            return resolveDisplayName(this.forIntentPopupState);
                         }
                         return this.passedContext?.name ?? 'Resolve For Context';
                     })}
@@ -442,7 +451,9 @@ function renderForContextPopup(component: AppResolverComponent): TemplateResult 
                         type="button"
                         @click=${() => component.toggleIntentContainer(intent[0])}
                     >
-                        <h2 class="ms-app-resolver-popup-intent-title">${intent[0]}</h2>
+                        <h2 class="ms-app-resolver-popup-intent-title">
+                            ${resolveDisplayName({ name: intent[0], displayName: intent[1].displayName })}
+                        </h2>
                         <div class="ms-app-resolver-popup-intent-title-chevron" id="${intent[0]}-chevron">
                             <svg height="15" width="15">
                                 <path d="M0 8.5 L7.5 0.75 L15 8.5" style="fill:none;stroke:black;stroke-width:1.5" />
@@ -494,4 +505,25 @@ function renderAppIcon(icon?: Icon): TemplateResult {
         <circle cx="10" cy="10" r="5" stroke="black" stroke-width="0.1" fill="black" />
         o
     </svg>`;
+}
+
+/**
+ * Resolves the title to display for an intent. Uses the displayName supplied by the app directory when present,
+ * otherwise falls back to a best-effort human readable version of the intent name: splits camelCase / PascalCase
+ * boundaries (keeping acronym runs together), treats '-' and '_' as word separators, separates trailing digits and
+ * capitalises the first letter of each word.
+ * e.g. "ViewChart" -> "View Chart", "view-contact" -> "View Contact", "ViewFXChart" -> "View FX Chart".
+ */
+export function resolveDisplayName({ name, displayName }: { name: string; displayName?: string }): string {
+    return (
+        displayName ??
+        name
+            .replace(/[-_]+/g, ' ')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+            .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+            .replace(/([A-Za-z])(\d)/g, '$1 $2')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/\b\w/g, char => char.toUpperCase())
+    );
 }
