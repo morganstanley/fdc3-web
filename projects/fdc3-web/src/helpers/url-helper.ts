@@ -60,6 +60,31 @@ export function decodeUUUrl<T extends Record<string, string>>(
 }
 
 /**
+ * Validates, per WCP step 2.1, that the identityUrl and actualUrl provided by an app share the same
+ * origin (scheme, host and port) and, when a hello message origin is known, that it matches too.
+ * Returns false if any URL is malformed or the origins differ.
+ * @param identityUrl the URL the app uses to assert its identity
+ * @param actualUrl the app's actual current URL
+ * @param messageOrigin the origin of the WCP1Hello MessageEvent, if known
+ */
+export function appIdentityOriginsMatch(identityUrl: string, actualUrl: string, messageOrigin?: string): boolean {
+    try {
+        const identityOrigin = new URL(identityUrl).origin;
+        const actualOrigin = new URL(actualUrl).origin;
+
+        if (identityOrigin !== actualOrigin) {
+            return false;
+        }
+
+        // Only compare against the message origin when one was captured (some messaging providers,
+        // e.g. the root agent's own loopback, cannot determine it).
+        return messageOrigin == null || messageOrigin === identityOrigin;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Compares two urls and returns true if all elements (query parameters, hash, path segments) from the source url are in the comparisonUrl
  * host, port and protocol must all match as well
  * @param _sourceUrl

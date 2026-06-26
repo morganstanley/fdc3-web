@@ -260,6 +260,102 @@ describe('RootMessagePublisher', () => {
                 mockRequestHandler.withFunction('handler').withParametersEqualTo(requestMessage, sourceApp),
             ).wasCalledOnce();
         });
+
+        it('should respond with a failed response when the identityUrl and actualUrl origins do not match', async () => {
+            createInstance();
+            mockDirectory.setupFunction('resolveAppId', () => Promise.resolve(sourceAppId));
+            mockDirectory.setupFunction('registerNewInstance', () =>
+                Promise.reject('registerNewInstance should not be called'),
+            );
+
+            const validationMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity = {
+                meta: { timestamp: mockedDate, connectionAttemptUuid: 'attempt-1' },
+                payload: { identityUrl: 'https://my-app.com', actualUrl: 'https://evil.com' },
+                type: 'WCP4ValidateAppIdentity',
+            };
+
+            const published = waitForMessage(
+                message => message.payload.type === 'WCP5ValidateAppIdentityFailedResponse',
+            );
+
+            mockRootMessagingProvider.functionCallLookup.subscribe?.[0][0]({
+                payload: validationMessage,
+                channelId: 'channelOne',
+                origin: 'https://my-app.com',
+            });
+
+            await published;
+
+            // The app should never be registered when its identity is rejected.
+            expect(mockDirectory.withFunction('registerNewInstance')).wasNotCalled();
+        });
+
+        it('should respond with a failed response when the identityUrl is not known to the agent', async () => {
+            createInstance();
+            mockDirectory.setupFunction('resolveAppId', () => Promise.resolve(undefined));
+            mockDirectory.setupFunction('registerNewInstance', () =>
+                Promise.reject('registerNewInstance should not be called'),
+            );
+
+            const validationMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity = {
+                meta: { timestamp: mockedDate, connectionAttemptUuid: 'attempt-1' },
+                payload: { identityUrl: 'https://unknown-app.com', actualUrl: 'https://unknown-app.com' },
+                type: 'WCP4ValidateAppIdentity',
+            };
+
+            const published = waitForMessage(
+                message => message.payload.type === 'WCP5ValidateAppIdentityFailedResponse',
+            );
+
+            mockRootMessagingProvider.functionCallLookup.subscribe?.[0][0]({
+                payload: validationMessage,
+                channelId: 'channelOne',
+                origin: 'https://unknown-app.com',
+            });
+
+            await published;
+
+            expect(mockDirectory.withFunction('registerNewInstance')).wasNotCalled();
+        });
+
+        it('should reissue the same instanceId when a known instanceUuid is presented (reconnection)', async () => {
+            const instance = createInstance();
+            instance.requestMessageHandler = mockRequestHandler.mock.handler;
+
+            const sourceApp: FullyQualifiedAppIdentifier = { appId: sourceAppId, instanceId: 'instanceOne' };
+
+            // First connection issues instanceId 'instanceOne' and an instanceUuid (also 'instanceOne' here).
+            await registerNewProxy(sourceApp, 'channelOne');
+
+            // Reconnect on a new channel, presenting the previously issued instanceId / instanceUuid.
+            const reconnectMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity = {
+                meta: { timestamp: mockedDate, connectionAttemptUuid: 'attempt-2' },
+                payload: {
+                    identityUrl: 'https://my-app.com',
+                    actualUrl: 'https://my-app.com',
+                    instanceId: sourceApp.instanceId,
+                    instanceUuid: sourceApp.instanceId,
+                },
+                type: 'WCP4ValidateAppIdentity',
+            };
+
+            const published = waitForMessage(message => message.payload.type === 'WCP5ValidateAppIdentityResponse');
+
+            mockRootMessagingProvider.functionCallLookup.subscribe?.[0][0]({
+                payload: reconnectMessage,
+                channelId: 'channelTwo',
+                origin: 'https://my-app.com',
+            });
+
+            await published;
+
+            // registerNewInstance must be asked to reuse the prior instanceId for the reconnection.
+            expect(
+                mockDirectory
+                    .withFunction('registerNewInstance')
+                    .withParametersEqualTo('https://my-app.com', sourceApp.instanceId),
+            ).wasCalledOnce();
+        });
     });
 
     describe('publishEvent', () => {
@@ -368,6 +464,7 @@ describe('RootMessagePublisher', () => {
 
     async function registerNewProxy(sourceApp: FullyQualifiedAppIdentifier, channelId: string): Promise<void> {
         generateUuidResult = sourceApp.instanceId;
+        mockDirectory.setupFunction('resolveAppId', () => Promise.resolve(sourceApp.appId));
         mockDirectory.setupFunction('registerNewInstance', () => {
             return Promise.resolve({
                 application: Mock.create<AppDirectoryApplication>().setup(setupProperty('appId', sourceApp.appId)).mock,
@@ -440,8 +537,8 @@ describe('RootMessagePublisher', () => {
                 connectionAttemptUuid: 'mock-connection-attempt-uuid',
             },
             payload: {
-                actualUrl: '',
-                identityUrl: '',
+                actualUrl: 'https://my-app.com',
+                identityUrl: 'https://my-app.com',
             },
             type: 'WCP4ValidateAppIdentity',
         };

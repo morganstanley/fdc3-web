@@ -129,6 +129,7 @@ describe('DefaultRootMessagingProvider', () => {
                 type: 'getInfoRequest',
             },
             channelId: mockedGeneratedUuid,
+            origin: undefined,
         };
 
         (

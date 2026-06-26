@@ -98,9 +98,11 @@ export type EventMessage =
 
 export type HandshakeMessage =
     | BrowserTypes.WebConnectionProtocol1Hello
+    | BrowserTypes.WebConnectionProtocol2LoadURL
     | BrowserTypes.WebConnectionProtocol3Handshake
     | BrowserTypes.WebConnectionProtocol4ValidateAppIdentity
-    | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse;
+    | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse
+    | BrowserTypes.WebConnectionProtocol5ValidateAppIdentityFailedResponse;
 
 export type UIProviderFactory = (agent: Promise<FinosDesktopAgent>) => Promise<IUIProvider>;
 export type AppResolverFactory = (agent: Promise<FinosDesktopAgent>) => Promise<IAppResolver>;
@@ -113,7 +115,11 @@ export type Message = RequestMessage | ResponseMessage | EventMessage | Handshak
  */
 export type IRootOutgoingMessageEnvelope = {
     channelIds: [string, ...string[]];
-    payload: ResponseMessage | EventMessage | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse;
+    payload:
+        | ResponseMessage
+        | EventMessage
+        | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse
+        | BrowserTypes.WebConnectionProtocol5ValidateAppIdentityFailedResponse;
 };
 
 /**
@@ -130,6 +136,12 @@ export interface IRootIncomingMessageEnvelope<
      * Indicates which channel (which maps to a given proxy agent) the message was received from
      */
     channelId: string;
+    /**
+     * The origin of the window/frame that initiated this connection (captured from the WCP1Hello
+     * MessageEvent). Used to validate app identity. May be undefined for messaging providers that
+     * cannot determine the origin (e.g. loopback from the root agent itself).
+     */
+    origin?: string;
 }
 
 /**
@@ -146,7 +158,11 @@ export type IProxyOutgoingMessageEnvelope = {
  * A Request message sent from a proxy agent. No target information is required as all request messages go to the root
  */
 export type IProxyIncomingMessageEnvelope = {
-    payload: ResponseMessage | EventMessage | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse;
+    payload:
+        | ResponseMessage
+        | EventMessage
+        | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse
+        | BrowserTypes.WebConnectionProtocol5ValidateAppIdentityFailedResponse;
 };
 
 /**

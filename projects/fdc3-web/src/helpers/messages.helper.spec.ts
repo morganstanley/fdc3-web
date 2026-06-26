@@ -250,6 +250,8 @@ describe(`messages.helper`, () => {
                     actualUrl: 'https://test.com',
                     fdc3Version: FDC3_VERSION,
                     identityUrl: 'https://test.com',
+                    channelSelector: true,
+                    intentResolver: true,
                 },
                 type: 'WCP1Hello',
             });
@@ -265,9 +267,18 @@ describe(`messages.helper`, () => {
                     actualUrl: 'https://test.com',
                     fdc3Version: FDC3_VERSION,
                     identityUrl: identityUrl,
+                    channelSelector: true,
+                    intentResolver: true,
                 },
                 type: 'WCP1Hello',
             });
+        });
+
+        it('should pass through the channelSelector and intentResolver opt-out flags', () => {
+            const helloMessage = generateHelloMessage(undefined, { channelSelector: false, intentResolver: false });
+
+            expect(helloMessage.payload.channelSelector).toBe(false);
+            expect(helloMessage.payload.intentResolver).toBe(false);
         });
     });
 

@@ -431,6 +431,19 @@ export function isWCPSuccessResponse(
     );
 }
 
+export function isWCPFailedResponse(
+    value: any,
+): value is BrowserTypes.WebConnectionProtocol5ValidateAppIdentityFailedResponse {
+    return (
+        (value as BrowserTypes.WebConnectionProtocol5ValidateAppIdentityFailedResponse).type ===
+        'WCP5ValidateAppIdentityFailedResponse'
+    );
+}
+
+export function isWCPLoadUrl(value: any): value is BrowserTypes.WebConnectionProtocol2LoadURL {
+    return (value as BrowserTypes.WebConnectionProtocol2LoadURL).type === 'WCP2LoadUrl';
+}
+
 function neverCheck(_value: never): false {
     return false;
 }

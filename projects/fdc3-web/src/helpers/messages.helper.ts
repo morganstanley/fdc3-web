@@ -88,13 +88,19 @@ export function createEvent<T extends BrowserTypes.AgentEventMessage>(
     return event as T;
 }
 
-export function generateHelloMessage(identityUrl?: string): BrowserTypes.WebConnectionProtocol1Hello {
+export function generateHelloMessage(
+    identityUrl?: string,
+    options?: { channelSelector?: boolean; intentResolver?: boolean; connectionAttemptUuid?: string },
+): BrowserTypes.WebConnectionProtocol1Hello {
     const helloMessage: BrowserTypes.WebConnectionProtocol1Hello = {
-        meta: { timestamp: getTimestamp(), connectionAttemptUuid: generateUUID() },
+        meta: { timestamp: getTimestamp(), connectionAttemptUuid: options?.connectionAttemptUuid ?? generateUUID() },
         payload: {
             actualUrl: window.location.href,
             fdc3Version: FDC3_VERSION,
             identityUrl: identityUrl ?? window.location.href,
+            // Defaults to `true` per the WCP spec - an app only opts out of the UIs by passing `false`.
+            channelSelector: options?.channelSelector ?? true,
+            intentResolver: options?.intentResolver ?? true,
         },
         type: 'WCP1Hello',
     };
@@ -112,6 +118,10 @@ export function generateHandshakeResponseMessage(
             timestamp: getTimestamp(),
         },
         payload: {
+            // This Desktop Agent handles channel selection / intent resolution itself and does not ask
+            // the app to inject the reference UIs, so both URLs are returned as `false`. The app's
+            // requested flags (message.payload.channelSelector / intentResolver) are still respected by
+            // the getAgent() implementation, which only injects a UI iframe when a URL is supplied here.
             channelSelectorUrl: false,
             fdc3Version: FDC3_VERSION,
             intentResolverUrl: false,
