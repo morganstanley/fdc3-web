@@ -519,7 +519,7 @@ export function resolveDisplayName({ name, displayName }: { name: string; displa
         displayName ??
         name
             .replace(/[-_]+/g, ' ')
-            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+            .replace(/([A-Z])(?=[A-Z][a-z])/g, '$1 ')
             .replace(/([a-z\d])([A-Z])/g, '$1 $2')
             .replace(/([A-Za-z])(\d)/g, '$1 $2')
             .replace(/\s+/g, ' ')
