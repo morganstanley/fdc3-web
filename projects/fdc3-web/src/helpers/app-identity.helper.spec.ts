@@ -10,7 +10,7 @@
 
 import type { AppIdentifier } from '@finos/fdc3';
 import { describe, expect, it } from 'vitest';
-import { appInstanceEquals, resolveAppIdentifier } from './app-identity.helper.js';
+import { appIdsMatch, appInstanceEquals, resolveAppIdentifier, toUnqualifiedAppId } from './app-identity.helper.js';
 
 describe(`app-identity.helper`, () => {
     describe(`${appInstanceEquals.name} (app-identity.helper)`, () => {
@@ -77,6 +77,46 @@ describe(`app-identity.helper`, () => {
             const appIdentifier = resolveAppIdentifier();
 
             expect(appIdentifier).toBeUndefined();
+        });
+    });
+
+    describe(`${toUnqualifiedAppId.name} (app-identity.helper)`, () => {
+        it('should strip the host from a fully qualified app id', () => {
+            expect(toUnqualifiedAppId('my-app@jubako.ms.com')).toBe('my-app');
+        });
+
+        it('should return an unqualified app id unchanged', () => {
+            expect(toUnqualifiedAppId('my-app')).toBe('my-app');
+        });
+    });
+
+    describe(`${appIdsMatch.name} (app-identity.helper)`, () => {
+        it('should match two identical fully qualified app ids', () => {
+            expect(appIdsMatch('my-app@jubako.ms.com', 'my-app@jubako.ms.com')).toBe(true);
+        });
+
+        it('should match two identical unqualified app ids', () => {
+            expect(appIdsMatch('my-app', 'my-app')).toBe(true);
+        });
+
+        it('should match an unqualified app id against a fully qualified app id', () => {
+            expect(appIdsMatch('my-app@jubako.ms.com', 'my-app')).toBe(true);
+        });
+
+        it('should match a fully qualified app id against an unqualified app id', () => {
+            expect(appIdsMatch('my-app', 'my-app@jubako.ms.com')).toBe(true);
+        });
+
+        it('should not match different unqualified app ids', () => {
+            expect(appIdsMatch('my-app', 'other-app')).toBe(false);
+        });
+
+        it('should not match the same unqualified name on different hosts', () => {
+            expect(appIdsMatch('my-app@host-one.ms.com', 'my-app@host-two.ms.com')).toBe(false);
+        });
+
+        it('should not match an unqualified app id against a different fully qualified app id', () => {
+            expect(appIdsMatch('other-app@jubako.ms.com', 'my-app')).toBe(false);
         });
     });
 });

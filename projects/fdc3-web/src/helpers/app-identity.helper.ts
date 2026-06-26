@@ -54,3 +54,25 @@ export function resolveAppIdentifier(
 export function toUnqualifiedAppId(appId: string): string {
     return isFullyQualifiedAppId(appId) ? appId.split('@')[0] : appId;
 }
+
+/**
+ * Determines whether two app ids refer to the same application, tolerating a mix of fully
+ * qualified (appId@hostname) and unqualified (appId) forms.
+ *
+ * - If the two ids are equal they match.
+ * - If both ids are fully qualified they must match exactly, so the same unqualified name hosted
+ *   on different hosts is not treated as a match.
+ * - Otherwise (at least one id is unqualified) the unqualified portions are compared, allowing an
+ *   unqualified id to match a fully qualified one and vice versa.
+ */
+export function appIdsMatch(appIdOne: string, appIdTwo: string): boolean {
+    if (appIdOne === appIdTwo) {
+        return true;
+    }
+
+    if (isFullyQualifiedAppId(appIdOne) && isFullyQualifiedAppId(appIdTwo)) {
+        return false;
+    }
+
+    return toUnqualifiedAppId(appIdOne) === toUnqualifiedAppId(appIdTwo);
+}

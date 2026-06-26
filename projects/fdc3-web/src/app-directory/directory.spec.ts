@@ -357,7 +357,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(mockResolver.withFunction('resolveAppForIntent')).wasCalledOnce();
         });
 
-        it(`should resolve fully-qualified appId from different hostname by matching unqualified part`, async () => {
+        it(`should reject Promise with TargetAppUnavailable for fully-qualified appId from a different hostname`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
             await registerApp(instance, mockedApplicationOne, 'StartChat', []);
@@ -367,9 +367,9 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 instanceId: 'instanceOne',
             };
 
-            const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
+            const result = instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
-            expect(result).toStrictEqual({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            await expect(result).rejects.toEqual(ResolveError.TargetAppUnavailable);
             expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
         });
 
@@ -714,14 +714,14 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(result).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
         });
 
-        it(`should resolve fully-qualified appId from a different hostname to matching unqualified part`, async () => {
+        it(`should return undefined for fully-qualified appId from a different hostname`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
             await registerApp(instance, mockedApplicationOne, 'StartChat', []);
 
             const result = await instance.getAppInstances('app-id-one@different-hostname');
 
-            expect(result).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+            expect(result).toBeUndefined();
         });
 
         it('should return multiple app instances from different hostnames that match the unqualified appId if multiple fully qualified appIds exist in the directory', async () => {
@@ -794,7 +794,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
             });
         });
 
-        it(`should resolve fully-qualified appId from different hostname by matching unqualified part`, async () => {
+        it(`should return undefined for fully-qualified appId from a different hostname`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
 
             await registerApp(instance, mockedApplicationOne, 'StartChat', []);
@@ -804,16 +804,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 instanceId: 'instanceOne',
             });
 
-            expect(result).toEqual({
-                appId: 'app-id-one@different-hostname',
-                instanceId: 'instanceOne',
-                description: undefined,
-                icons: undefined,
-                screenshots: undefined,
-                title: 'app-title-one',
-                tooltip: undefined,
-                version: undefined,
-            });
+            expect(result).toBeUndefined();
         });
     });
 

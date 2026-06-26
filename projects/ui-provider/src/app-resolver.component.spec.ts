@@ -462,6 +462,61 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         });
     });
 
+    describe('qualified and unqualified app ids', () => {
+        const fullyQualifiedAppId = 'my-app@jubako.ms.com';
+        const unqualifiedAppId = 'my-app';
+
+        it('should resolve the correct app when given a fully qualified app id', async () => {
+            const instance = createInstance();
+
+            const apps: AppIdentifier[] = [{ appId: fullyQualifiedAppId }, { appId: 'other-app@jubako.ms.com' }];
+            const payload = createIntentPayload(true, apps, { appId: fullyQualifiedAppId });
+
+            await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({ appId: fullyQualifiedAppId });
+        });
+
+        it('should resolve the correct app when given an unqualified app id', async () => {
+            const instance = createInstance();
+
+            const apps: AppIdentifier[] = [{ appId: fullyQualifiedAppId }, { appId: 'other-app@jubako.ms.com' }];
+            const payload = createIntentPayload(true, apps, { appId: unqualifiedAppId });
+
+            await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({ appId: fullyQualifiedAppId });
+        });
+
+        it('should resolve the correct app for context when given an unqualified app id', async () => {
+            const instance = createInstance();
+
+            const appIntents: AppIntent[] = [
+                {
+                    apps: [{ appId: fullyQualifiedAppId }, { appId: 'other-app@jubako.ms.com' }],
+                    intent: { name: 'StartEmail', displayName: 'StartEmail' },
+                },
+            ];
+            const payload: ResolveForContextPayload = {
+                context: { type: 'contact' },
+                appIdentifier: { appId: unqualifiedAppId },
+                appManifests: {},
+                appIntents,
+            };
+
+            await expect(instance.resolveAppForContext(payload)).resolves.toEqual({
+                intent: 'StartEmail',
+                app: { appId: fullyQualifiedAppId },
+            });
+        });
+    });
+
+    describe('constructor', () => {
+        it('should accept a desktop agent that is not wrapped in a promise', async () => {
+            const instance = new AppResolverComponent(mockAgent.mock, mockDocument);
+
+            const payload = createIntentPayload(true, [create(1)]);
+
+            await expect(instance.resolveAppForIntent(payload)).resolves.toEqual({ appId: '1' });
+        });
+    });
+
     describe('selectApp', () => {
         it('should pass given app and intent to selectedAppCallback', async () => {
             const instance = createInstance();

@@ -29,6 +29,7 @@ import {
     ResolveForContextResponse,
 } from '../contracts.js';
 import {
+    appIdsMatch,
     createLogger,
     generateUUID,
     getAppDirectoryApplications,
@@ -41,7 +42,6 @@ import {
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
     resolveAppIdentifier,
-    toUnqualifiedAppId,
     urlContainsAllElements,
 } from '../helpers/index.js';
 
@@ -339,19 +339,16 @@ export class AppDirectory {
     }
 
     /**
-     * Returns all FullyQualifiedAppIds that match the given appId using FDC3 cross-matching rules.
+     * Returns all FullyQualifiedAppIds in the directory that match the given appId.
+     * Matching tolerates a mix of fully qualified (appId@hostname) and unqualified (appId) forms via
+     * appIdsMatch: an unqualified id matches any host, but two fully qualified ids must match exactly so the
+     * same unqualified name hosted on different hosts is not treated as a match.
      * Used by findInstances where multiple matches should all be returned.
      */
     private getAllMatchingFullyQualifiedAppIds(appId: string): FullyQualifiedAppId[] {
-        if (isFullyQualifiedAppId(appId) && this.directory[appId] != null) {
-            return [appId];
-        }
-
-        const unqualifiedAppId = isFullyQualifiedAppId(appId) ? toUnqualifiedAppId(appId) : appId;
-
         return Object.keys(this.directory)
             .filter(isFullyQualifiedAppId)
-            .filter(knownId => toUnqualifiedAppId(knownId) === unqualifiedAppId);
+            .filter(knownId => appIdsMatch(knownId, appId));
     }
 
     /**
