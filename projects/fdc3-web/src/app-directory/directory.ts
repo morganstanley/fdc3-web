@@ -507,7 +507,12 @@ export class AppDirectory {
         };
     }
 
-    private getIntentDisplayName(intent: Intent, apps: AppDirectoryApplication[]): string {
+    /**
+     * Returns the displayName supplied for the given intent in the app directory, or undefined if none is provided.
+     * We deliberately do not fall back to the raw intent name here so that consumers (e.g. the app resolver) can
+     * distinguish between a directory-provided displayName and the absence of one.
+     */
+    private getIntentDisplayName(intent: Intent, apps: AppDirectoryApplication[]): string | undefined {
         for (const app of apps) {
             const displayName = app.interop?.intents?.listensFor?.[intent]?.displayName;
             if (displayName != null) {
@@ -515,7 +520,7 @@ export class AppDirectory {
             }
         }
 
-        return intent;
+        return undefined;
     }
 
     /**

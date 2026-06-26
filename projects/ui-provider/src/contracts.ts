@@ -10,5 +10,19 @@
 
 import { AppMetadata } from '@finos/fdc3';
 
-export type IntentPopupState = { name: string; activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] };
-export type ContextPopupState = Record<string, { activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] }>;
+export type IntentPopupState = {
+    name: string;
+    /** Unaltered displayName supplied by the app directory for this intent, or undefined if none was provided. */
+    displayName?: string;
+    activeInstances: AppMetadata[];
+    inactiveApps: AppMetadata[];
+};
+export type ContextPopupState = Record<
+    string,
+    {
+        /** Unaltered displayName supplied by the app directory for this intent, or undefined if none was provided. */
+        displayName?: string;
+        activeInstances: AppMetadata[];
+        inactiveApps: AppMetadata[];
+    }
+>;
