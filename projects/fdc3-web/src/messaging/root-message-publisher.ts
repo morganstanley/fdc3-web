@@ -24,6 +24,7 @@ import {
     ResponseMessage,
 } from '../contracts.js';
 import {
+    appIdentityOriginsMatch,
     createLogger,
     generateUUID,
     getImplementationMetadata,
@@ -47,6 +48,12 @@ type RequestMessageHandler = (
 export class RootMessagePublisher implements IRootPublisher {
     private instanceIdToChannelId: Partial<Record<string, string>> = {};
     private channelIdToAppIdentifier: Partial<Record<string, FullyQualifiedAppIdentifier>> = {};
+    /**
+     * Maps the (secret) instanceUuid issued to an app instance to its identity, so that a reconnecting
+     * app (after a navigation or refresh) that presents a matching instanceUuid can be reissued the
+     * same instanceId. The instanceUuid is never shared via the FDC3 API so acts as a shared secret.
+     */
+    private instanceUuidToIdentity: Partial<Record<string, FullyQualifiedAppIdentifier>> = {};
     private log = createLogger(RootMessagePublisher, 'connection');
 
     /**
@@ -179,7 +186,7 @@ export class RootMessagePublisher implements IRootPublisher {
         >,
     ): void {
         if (isWCPValidateAppIdentity(message.payload)) {
-            this.registerNewInstance(message.payload, message.channelId);
+            this.registerNewInstance(message.payload, message.channelId, message.origin);
             return;
         }
 
@@ -189,6 +196,12 @@ export class RootMessagePublisher implements IRootPublisher {
             if (source != null) {
                 this.log(`Goodbye message received from ${source.appId} (${source.instanceId})`, LogLevel.INFO);
             }
+            // Forward the goodbye so the agent can clean up, then forget the channel mappings.
+            if (source != null) {
+                this.handleRequestMessage(message.payload, source);
+                this.forgetInstance(source, message.channelId);
+            }
+            return;
         }
 
         if (source == null) {
@@ -221,24 +234,56 @@ export class RootMessagePublisher implements IRootPublisher {
     }
 
     /**
-     * generates a new instance id and new app identifier for a new proxy agent that is performing a handshake
+     * Validates the identity of a proxy agent performing a handshake (WCP step 2) and, on success,
+     * issues (or reissues, for a reconnecting app) an instanceId and instanceUuid. On failure a
+     * WCP5ValidateAppIdentityFailedResponse is returned and no instance is registered.
      */
     private async registerNewInstance(
         validateMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity,
         channelId: string,
+        origin?: string,
     ): Promise<FullyQualifiedAppIdentifier | undefined> {
-        this.log('Registering new instance', LogLevel.DEBUG, { validateMessage, channelId });
+        this.log('Registering new instance', LogLevel.DEBUG, { validateMessage, channelId, origin });
 
-        const { identifier, application } = await this.directory.registerNewInstance(
-            validateMessage.payload.identityUrl,
-        );
+        const { identityUrl, actualUrl } = validateMessage.payload;
 
-        if (identifier == null) {
+        // WCP step 2.1: the identityUrl, actualUrl and the WCP1Hello message origin MUST share an origin.
+        if (!appIdentityOriginsMatch(identityUrl, actualUrl, origin)) {
+            this.log('App identity rejected: origin mismatch', LogLevel.WARN, { identityUrl, actualUrl, origin });
+            this.publishFailedResponse(
+                validateMessage,
+                channelId,
+                'Origin of identityUrl, actualUrl and connection did not match',
+            );
             return undefined;
         }
 
+        // WCP step 2.1: match the identityUrl to a known AppD record to determine the appId.
+        const appId = await this.directory.resolveAppId(identityUrl).catch(() => undefined);
+
+        if (appId == null) {
+            this.log('App identity rejected: unknown identityUrl', LogLevel.WARN, identityUrl);
+            this.publishFailedResponse(validateMessage, channelId, 'App identity could not be determined');
+            return undefined;
+        }
+
+        // WCP step 2.2: if the app presents a known instanceUuid for the same appId it is reconnecting,
+        // so reissue the same instanceId. Otherwise assign fresh identity.
+        const { instanceId: priorInstanceId, instanceUuid: priorInstanceUuid } = validateMessage.payload;
+        const priorIdentity = priorInstanceUuid != null ? this.instanceUuidToIdentity[priorInstanceUuid] : undefined;
+        const reconnecting =
+            priorIdentity != null && priorIdentity.appId === appId && priorIdentity.instanceId === priorInstanceId;
+
+        const { identifier, application } = await this.directory.registerNewInstance(
+            identityUrl,
+            reconnecting ? priorInstanceId : undefined,
+        );
+
+        const instanceUuid = reconnecting && priorInstanceUuid != null ? priorInstanceUuid : generateUUID();
+
         this.channelIdToAppIdentifier[channelId] = identifier;
         this.instanceIdToChannelId[identifier.instanceId] = channelId;
+        this.instanceUuidToIdentity[instanceUuid] = identifier;
 
         const response: BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse = {
             type: 'WCP5ValidateAppIdentityResponse',
@@ -248,7 +293,7 @@ export class RootMessagePublisher implements IRootPublisher {
             },
             payload: {
                 ...identifier,
-                instanceUuid: generateUUID(),
+                instanceUuid,
                 implementationMetadata: await getImplementationMetadata(identifier, application),
             },
         };
@@ -258,6 +303,36 @@ export class RootMessagePublisher implements IRootPublisher {
         this.rootMessagingProvider.publish({ payload: response, channelIds: [channelId] });
 
         return identifier;
+    }
+
+    /**
+     * Publishes a WCP5ValidateAppIdentityFailedResponse to the connecting app, causing its getAgent()
+     * call to reject with AgentError.AccessDenied.
+     */
+    private publishFailedResponse(
+        validateMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity,
+        channelId: string,
+        message: string,
+    ): void {
+        const response: BrowserTypes.WebConnectionProtocol5ValidateAppIdentityFailedResponse = {
+            type: 'WCP5ValidateAppIdentityFailedResponse',
+            meta: {
+                connectionAttemptUuid: validateMessage.meta.connectionAttemptUuid,
+                timestamp: getTimestamp(),
+            },
+            payload: { message },
+        };
+
+        this.rootMessagingProvider.publish({ payload: response, channelIds: [channelId] });
+    }
+
+    /**
+     * Removes channel and identity mappings for a disconnected instance (e.g. after a WCP6Goodbye).
+     * The instanceUuid mapping is retained so the app can reconnect and reclaim its instanceId.
+     */
+    private forgetInstance(source: FullyQualifiedAppIdentifier, channelId: string): void {
+        delete this.channelIdToAppIdentifier[channelId];
+        delete this.instanceIdToChannelId[source.instanceId];
     }
 
     private connectionAttemptUuidCallbacks: Partial<Record<string, (identity: FullyQualifiedAppIdentifier) => void>> =

@@ -228,7 +228,7 @@ describe('getAgent', () => {
         expect(fdc3ReadyListenersAdded.length).toBe(fdc3ReadyListenersRemoved.length);
     });
 
-    it('should handle failover function returning a Window object', async () => {
+    it('should restart the WCP handshake against a Window returned by the failover function', async () => {
         // Setup - ensure no agent is available
         (window as any).fdc3 = undefined;
         resetCachedPromise();
@@ -239,6 +239,8 @@ describe('getAgent', () => {
             public static [Symbol.hasInstance]() {
                 return true;
             }
+
+            public postMessage = vi.fn();
         }
         // Create a mock Window object and a failover function that returns it
         const mockWindow = new Window();
@@ -252,8 +254,14 @@ describe('getAgent', () => {
             timeoutMs: 10, // Use a short timeout for testing
         });
 
-        // Act & Assert - verify getAgent rejects with the expected error message
-        await expect(agentPromise).rejects.toEqual('Failover Window result not currently supported');
+        // Act & Assert - the window never completes a handshake, so getAgent rejects with ErrorOnConnect.
+        await expect(agentPromise).rejects.toEqual(AgentError.ErrorOnConnect);
+
+        // Verify a WCP1Hello was posted to the window returned by the failover function.
+        expect(mockWindow.postMessage).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'WCP1Hello' }),
+            expect.objectContaining({ targetOrigin: '*' }),
+        );
 
         // Restore the original Window object
         (global as any).Window = originalWindow;
@@ -317,6 +325,55 @@ describe('getAgent', () => {
 
         // Act & Assert - verify getAgent rejects with AgentNotFound
         await expect(getAgent({ timeoutMs: 10 })).rejects.toBe(AgentError.AgentNotFound);
+    });
+
+    it('should reject with AccessDenied when the Desktop Agent rejects the app identity', async () => {
+        // Setup - ensure no preload agent is available
+        (window as any).fdc3 = undefined;
+        resetCachedPromise();
+
+        // A real MessageChannel is used to model the port handed over in the WCP3Handshake.
+        const channel = new MessageChannel();
+        channel.port2.start();
+
+        // The Desktop Agent end responds to the WCP4ValidateAppIdentity with a failed response.
+        channel.port2.addEventListener('message', (event: MessageEvent) => {
+            if (event.data?.type === 'WCP4ValidateAppIdentity') {
+                channel.port2.postMessage({
+                    type: 'WCP5ValidateAppIdentityFailedResponse',
+                    meta: {
+                        connectionAttemptUuid: event.data.meta.connectionAttemptUuid,
+                        timestamp: new Date(),
+                    },
+                    payload: { message: 'identity rejected' },
+                });
+            }
+        });
+
+        // A parent window that completes the handshake, transferring port1 to the app.
+        const mockParent = {
+            postMessage: (message: any) => {
+                if (message.type === 'WCP1Hello') {
+                    window.dispatchEvent(
+                        new MessageEvent('message', {
+                            data: {
+                                type: 'WCP3Handshake',
+                                meta: {
+                                    connectionAttemptUuid: message.meta.connectionAttemptUuid,
+                                    timestamp: new Date(),
+                                },
+                                payload: { fdc3Version: '2.2.0', channelSelectorUrl: false, intentResolverUrl: false },
+                            },
+                            ports: [channel.port1],
+                        }),
+                    );
+                }
+            },
+        };
+        vi.spyOn(window, 'parent', 'get').mockReturnValue(mockParent as any);
+
+        // Act & Assert - identity validation fails, so getAgent rejects with AccessDenied.
+        await expect(getAgent({ timeoutMs: 1000 })).rejects.toBe(AgentError.AccessDenied);
     });
 
     it('should clear timeout when agent discovery fails', async () => {

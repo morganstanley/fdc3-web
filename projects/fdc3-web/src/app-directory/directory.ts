@@ -222,6 +222,12 @@ export class AppDirectory {
      */
     public async registerNewInstance(
         identityUrl: string,
+        /**
+         * When an app reconnects (e.g. after a navigation or refresh event) the Desktop Agent may
+         * reissue its previous instanceId. When supplied, this id is used instead of generating a new
+         * one, ensuring a consistent instanceId across the reconnection.
+         */
+        requestedInstanceId?: string,
     ): Promise<{ identifier: FullyQualifiedAppIdentifier; application: AppDirectoryApplication }> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
@@ -229,7 +235,10 @@ export class AppDirectory {
         this.log('Registering new instance', LogLevel.DEBUG, identityUrl);
         const application = await this.resolveAppIdentity(identityUrl);
 
-        const identifier = application != null ? { appId: application.appId, instanceId: generateUUID() } : undefined;
+        const identifier =
+            application != null
+                ? { appId: application.appId, instanceId: requestedInstanceId ?? generateUUID() }
+                : undefined;
         const appId = identifier?.appId;
 
         if (identifier == null || !isFullyQualifiedAppId(appId) || application == null) {
@@ -239,12 +248,28 @@ export class AppDirectory {
 
         const appEntry = this.directory[appId] ?? (this.directory[appId] = { instances: [] });
 
-        appEntry.instances.push(identifier.instanceId);
+        // Guard against registering the same instanceId twice when reconnecting with a reissued id.
+        if (!appEntry.instances.includes(identifier.instanceId)) {
+            appEntry.instances.push(identifier.instanceId);
+        }
 
         //copy across intents app listens for
         this.populateInstanceLookup(identifier.instanceId, appEntry.application);
 
         return { identifier, application };
+    }
+
+    /**
+     * Resolves the fully qualified appId that an identityUrl maps to, or undefined if the app is not
+     * known to the Desktop Agent. Unlike registerNewInstance this does not create a new instance, so
+     * it can be used to validate identity (and check reconnection details) before issuing an instance.
+     */
+    public async resolveAppId(identityUrl: string): Promise<string | undefined> {
+        await this.loadDirectoryPromise;
+
+        const application = await this.resolveAppIdentity(identityUrl);
+
+        return isFullyQualifiedAppId(application?.appId) ? application?.appId : undefined;
     }
 
     /**

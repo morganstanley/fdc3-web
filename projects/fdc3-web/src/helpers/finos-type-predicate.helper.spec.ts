@@ -307,6 +307,18 @@ describe('finos-type-predicate.helper', () => {
         expect(typePredicates.isWCPHandshake(validMessage)).toBe(true);
     });
 
+    it('should identify valid WCP Load Url messages', () => {
+        const validMessage = { type: 'WCP2LoadUrl' };
+        expect(typePredicates.isWCPLoadUrl(validMessage)).toBe(true);
+        expect(typePredicates.isWCPLoadUrl({ type: 'WCP3Handshake' })).toBe(false);
+    });
+
+    it('should identify valid WCP Failed Response messages', () => {
+        const validMessage = { type: 'WCP5ValidateAppIdentityFailedResponse' };
+        expect(typePredicates.isWCPFailedResponse(validMessage)).toBe(true);
+        expect(typePredicates.isWCPFailedResponse({ type: 'WCP5ValidateAppIdentityResponse' })).toBe(false);
+    });
+
     it('should identify valid WCP Goodbye messages', () => {
         const validMessage = { type: 'WCP6Goodbye' };
         expect(typePredicates.isWCPGoodbye(validMessage)).toBe(true);

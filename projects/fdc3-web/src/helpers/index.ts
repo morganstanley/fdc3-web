@@ -21,4 +21,5 @@ export * from './get-host-manifest.helper.js';
 export * from './event-type.helper.js';
 export * from './messages.helper.js';
 export * from './discover-proxy-candidates.helper.js';
+export * from './session-storage.helper.js';
 export * from './log.helper.js';

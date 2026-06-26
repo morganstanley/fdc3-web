@@ -25,6 +25,8 @@ import { generateHandshakeResponseMessage, generateUUID, isWCPHelloMessage } fro
 export class DefaultRootMessagingProvider implements IRootMessagingProvider {
     private callbacks: IncomingMessageCallback<IRootIncomingMessageEnvelope>[] = [];
     private messageChannels: Record<string, MessagePort> = {};
+    /** Origin of the WCP1Hello message for each channel, used downstream to validate app identity. */
+    private channelOrigins: Record<string, string> = {};
 
     constructor(
         windowRef: Window,
@@ -67,13 +69,14 @@ export class DefaultRootMessagingProvider implements IRootMessagingProvider {
             const messageChannel =
                 this.messageChannelFactory != null ? this.messageChannelFactory() : new MessageChannel();
             this.messageChannels[channelId] = messageChannel.port1;
+            this.channelOrigins[channelId] = message.origin;
 
             messageChannel.port1.start();
 
             // listen to incoming messages on the new channel
             messageChannel.port1.addEventListener('message', message => {
                 for (const callback of this.callbacks) {
-                    callback({ payload: message.data, channelId });
+                    callback({ payload: message.data, channelId, origin: this.channelOrigins[channelId] });
                 }
             });
 
