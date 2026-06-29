@@ -1565,6 +1565,94 @@ describe(`${AppDirectory.name} (directory)`, () => {
         });
     });
 
+    describe('updateInstanceMetadata', () => {
+        it('should update metadata for a registered instance', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata = { customField: 'customValue', version: '1.0' };
+            instance.updateInstanceMetadata('instanceOne', metadata);
+
+            const appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            expect(appMetadata?.instanceMetadata).toEqual(metadata);
+        });
+
+        it('should update metadata with different data types', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata = {
+                stringField: 'test',
+                numberField: 42,
+                booleanField: true,
+                arrayField: [1, 2, 3],
+                objectField: { nested: 'value' },
+            };
+            instance.updateInstanceMetadata('instanceOne', metadata);
+
+            const appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            expect(appMetadata?.instanceMetadata).toEqual(metadata);
+        });
+
+        it('should update metadata for multiple instances independently', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata1 = { instance: 'first' };
+            const metadata2 = { instance: 'second' };
+
+            instance.updateInstanceMetadata('instanceOne', metadata1);
+            instance.updateInstanceMetadata('instanceTwo', metadata2);
+
+            const appMetadata1 = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            const appMetadata2 = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceTwo' });
+
+            expect(appMetadata1?.instanceMetadata).toEqual(metadata1);
+            expect(appMetadata2?.instanceMetadata).toEqual(metadata2);
+        });
+
+        it('should replace previous metadata when updating', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata1 = { status: 'initial' };
+            const metadata2 = { status: 'updated' };
+
+            instance.updateInstanceMetadata('instanceOne', metadata1);
+            let appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            expect(appMetadata?.instanceMetadata).toEqual(metadata1);
+
+            instance.updateInstanceMetadata('instanceOne', metadata2);
+            appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            expect(appMetadata?.instanceMetadata).toEqual(metadata2);
+        });
+
+        it('should not update metadata for unknown instance', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata = { test: 'value' };
+            instance.updateInstanceMetadata('unknown-instance-id', metadata);
+
+            // Should not throw and should not store metadata for unknown instance
+            expect(() => instance.updateInstanceMetadata('unknown-instance-id', metadata)).not.toThrow();
+        });
+
+        it('should support empty metadata object', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            instance.updateInstanceMetadata('instanceOne', {});
+
+            const appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            expect(appMetadata?.instanceMetadata).toEqual({});
+        });
+    });
+
     describe('buildAppHostManifestLookup', () => {
         const msHostManifestKey = 'MorganStanley.fdc3-web';
 

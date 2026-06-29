@@ -34,6 +34,7 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
+import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
 import {
     DesktopAgentNext,
     DesktopAgentStrategies,
@@ -206,6 +207,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 return mockedApplication;
             }),
             setupFunction('removeDisconnectedApp'),
+            setupFunction('updateInstanceMetadata'),
         );
         mockChannelHandler = Mock.create<ChannelMessageHandler>().setup(
             setupFunction('onGetUserChannelsRequest'),
@@ -2682,6 +2684,121 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 await postRequestMessage(privateChannelDisconnectRequest, source);
 
                 expect(mockChannelHandler.withFunction('onPrivateChannelDisconnectRequest')).wasCalledOnce();
+            });
+        });
+
+        describe('updateInstanceMetadataRequest', () => {
+            it('should call directory.updateInstanceMetadata and publish response', async () => {
+                createInstance();
+
+                const metadata = { customField: 'customValue', version: '1.0' };
+                const updateInstanceMetadataMessage: UpdateInstanceMetadataRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        instanceMetadata: metadata,
+                    },
+                    type: 'updateInstanceMetadataRequest',
+                };
+
+                await postRequestMessage(updateInstanceMetadataMessage, source);
+
+                const expectedResponse: UpdateInstanceMetadataResponse = {
+                    meta: {
+                        responseUuid: mockedResponseUuid,
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {},
+                    type: 'updateInstanceMetadataResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+            });
+
+            it('should update metadata with complex data types', async () => {
+                createInstance();
+
+                const metadata = {
+                    stringField: 'test',
+                    numberField: 42,
+                    booleanField: true,
+                    arrayField: [1, 2, 3],
+                    objectField: { nested: 'value' },
+                };
+                const updateInstanceMetadataMessage: UpdateInstanceMetadataRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        instanceMetadata: metadata,
+                    },
+                    type: 'updateInstanceMetadataRequest',
+                };
+
+                await postRequestMessage(updateInstanceMetadataMessage, source);
+
+                const expectedResponse: UpdateInstanceMetadataResponse = {
+                    meta: {
+                        responseUuid: mockedResponseUuid,
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {},
+                    type: 'updateInstanceMetadataResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+            });
+
+            it('should handle empty metadata object', async () => {
+                createInstance();
+
+                const updateInstanceMetadataMessage: UpdateInstanceMetadataRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        instanceMetadata: {},
+                    },
+                    type: 'updateInstanceMetadataRequest',
+                };
+
+                await postRequestMessage(updateInstanceMetadataMessage, source);
+
+                const expectedResponse: UpdateInstanceMetadataResponse = {
+                    meta: {
+                        responseUuid: mockedResponseUuid,
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {},
+                    type: 'updateInstanceMetadataResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
             });
         });
 
