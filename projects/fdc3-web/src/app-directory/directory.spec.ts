@@ -300,6 +300,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             description: undefined,
                             icons: undefined,
                             screenshots: undefined,
+                            instanceMetadata: undefined,
                         },
                         {
                             appId: mockedAppIdTwo,
@@ -310,6 +311,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             description: undefined,
                             icons: undefined,
                             screenshots: undefined,
+                            instanceMetadata: undefined,
                         },
                     ],
                     intent: { name: 'StartChat', displayName: undefined },
@@ -493,6 +495,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                                 description: undefined,
                                 icons: undefined,
                                 screenshots: undefined,
+                                instanceMetadata: undefined,
                             },
                             {
                                 appId: mockedAppIdTwo,
@@ -503,6 +506,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                                 description: undefined,
                                 icons: undefined,
                                 screenshots: undefined,
+                                instanceMetadata: undefined,
                             },
                         ],
                         intent: { name: 'StartChat', displayName: undefined },
@@ -518,6 +522,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                                 description: undefined,
                                 icons: undefined,
                                 screenshots: undefined,
+                                instanceMetadata: undefined,
                             },
                         ],
                         intent: { name: 'StartEmail', displayName: undefined },
@@ -609,6 +614,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-one',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                 ],
                 intent: { name: 'notAKnownIntent', displayName: undefined },
@@ -675,8 +681,28 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const result = await instance.getAppInstances(mockedAppIdOne);
 
             expect(result).toEqual([
-                { appId: mockedAppIdOne, instanceId: 'instanceOne' },
-                { appId: mockedAppIdOne, instanceId: 'instanceFive' },
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceOne',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceFive',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
             ]);
         });
 
@@ -711,7 +737,19 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             const result = await instance.getAppInstances('app-id-one');
 
-            expect(result).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+            expect(result).toEqual([
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceOne',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
+            ]);
         });
 
         it(`should return undefined for fully-qualified appId from a different hostname`, async () => {
@@ -738,8 +776,28 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const result = await instance.getAppInstances('app-id-one');
 
             expect(result).toEqual([
-                { appId: mockedAppIdOne, instanceId: 'instanceOne' },
-                { appId: 'app-id-one@mock-alternate-directory', instanceId: 'instanceTwo' },
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceOne',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
+                {
+                    appId: 'app-id-one@mock-alternate-directory',
+                    instanceId: 'instanceTwo',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
             ]);
         });
     });
@@ -761,6 +819,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 title: 'app-title-one',
                 tooltip: undefined,
                 version: undefined,
+                instanceMetadata: undefined,
             });
         });
 
@@ -791,6 +850,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 title: 'app-title-one',
                 tooltip: undefined,
                 version: undefined,
+                instanceMetadata: undefined,
             });
         });
 
@@ -871,6 +931,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             title: 'app-title-one',
                             tooltip: undefined,
                             version: undefined,
+                            instanceMetadata: undefined,
                         },
                         {
                             appId: mockedAppIdTwo,
@@ -881,6 +942,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             title: 'app-title-two',
                             tooltip: undefined,
                             version: undefined,
+                            instanceMetadata: undefined,
                         },
                     ],
                     intent: { name: 'StartChat', displayName: undefined },
@@ -896,6 +958,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             title: 'app-title-two',
                             tooltip: undefined,
                             version: undefined,
+                            instanceMetadata: undefined,
                         },
                     ],
                     intent: { name: 'StartEmail', displayName: undefined },
@@ -922,6 +985,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                             title: 'app-title-two',
                             tooltip: undefined,
                             version: undefined,
+                            instanceMetadata: undefined,
                         },
                     ],
                     intent: { displayName: 'View Chart', name: 'ViewChart' },
@@ -952,6 +1016,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-one',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                     {
                         appId: mockedAppIdTwo,
@@ -962,6 +1027,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-two',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                 ],
                 intent: { displayName: undefined, name: 'StartChat' },
@@ -990,6 +1056,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-one',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                     {
                         appId: mockedAppIdTwo,
@@ -1000,6 +1067,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-two',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                 ],
                 intent: { displayName: undefined, name: 'StartChat' },
@@ -1022,6 +1090,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-two',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                 ],
                 intent: { displayName: 'View Chart', name: 'ViewChart' },
@@ -1049,6 +1118,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-one',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                     {
                         appId: mockedAppIdTwo,
@@ -1059,6 +1129,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
                         title: 'app-title-two',
                         tooltip: undefined,
                         version: undefined,
+                        instanceMetadata: undefined,
                     },
                 ],
                 intent: {
@@ -1267,6 +1338,13 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 {
                     appId: 'localAppIdOne@my-app.com',
                     instanceId: 'instanceOne',
+                    title: 'My First App',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
                 },
             ]);
 
@@ -1286,6 +1364,13 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 {
                     appId: 'localAppIdOne@my-app.com',
                     instanceId: 'instanceOne',
+                    title: 'My MODIFIED First App',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
                 },
             ]);
 
@@ -1418,7 +1503,19 @@ describe(`${AppDirectory.name} (directory)`, () => {
             instance.removeDisconnectedApp({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
 
             const appInstances = await instance.getAppInstances(mockedAppIdOne);
-            expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceTwo' }]);
+            expect(appInstances).toEqual([
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceTwo',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
+            ]);
         });
 
         it('should do nothing if app is not known to the directory', async () => {
@@ -1429,7 +1526,19 @@ describe(`${AppDirectory.name} (directory)`, () => {
             instance.removeDisconnectedApp({ appId: 'unknown-app-id', instanceId: 'instanceX' });
 
             const appInstances = await instance.getAppInstances(mockedAppIdOne);
-            expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+            expect(appInstances).toEqual([
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceOne',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
+            ]);
         });
 
         it('should do nothing if instanceId is not known for the app', async () => {
@@ -1440,7 +1549,107 @@ describe(`${AppDirectory.name} (directory)`, () => {
             instance.removeDisconnectedApp({ appId: mockedAppIdOne, instanceId: 'unknown-instance-id' });
 
             const appInstances = await instance.getAppInstances(mockedAppIdOne);
-            expect(appInstances).toEqual([{ appId: mockedAppIdOne, instanceId: 'instanceOne' }]);
+            expect(appInstances).toEqual([
+                {
+                    appId: mockedAppIdOne,
+                    instanceId: 'instanceOne',
+                    title: 'app-title-one',
+                    version: undefined,
+                    tooltip: undefined,
+                    description: undefined,
+                    icons: undefined,
+                    screenshots: undefined,
+                    instanceMetadata: undefined,
+                },
+            ]);
+        });
+    });
+
+    describe('updateInstanceMetadata', () => {
+        it('should update metadata for a registered instance', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata = { customField: 'customValue', version: '1.0' };
+            instance.updateInstanceMetadata('instanceOne', metadata);
+
+            const appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            expect(appMetadata?.instanceMetadata).toEqual(metadata);
+        });
+
+        it('should update metadata with different data types', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata = {
+                stringField: 'test',
+                numberField: 42,
+                booleanField: true,
+                arrayField: [1, 2, 3],
+                objectField: { nested: 'value' },
+            };
+            instance.updateInstanceMetadata('instanceOne', metadata);
+
+            const appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            expect(appMetadata?.instanceMetadata).toEqual(metadata);
+        });
+
+        it('should update metadata for multiple instances independently', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata1 = { instance: 'first' };
+            const metadata2 = { instance: 'second' };
+
+            instance.updateInstanceMetadata('instanceOne', metadata1);
+            instance.updateInstanceMetadata('instanceTwo', metadata2);
+
+            const appMetadata1 = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            const appMetadata2 = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceTwo' });
+
+            expect(appMetadata1?.instanceMetadata).toEqual(metadata1);
+            expect(appMetadata2?.instanceMetadata).toEqual(metadata2);
+        });
+
+        it('should replace previous metadata when updating', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata1 = { status: 'initial' };
+            const metadata2 = { status: 'updated' };
+
+            instance.updateInstanceMetadata('instanceOne', metadata1);
+            let appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            expect(appMetadata?.instanceMetadata).toEqual(metadata1);
+
+            instance.updateInstanceMetadata('instanceOne', metadata2);
+            appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            expect(appMetadata?.instanceMetadata).toEqual(metadata2);
+        });
+
+        it('should not update metadata for unknown instance', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            const metadata = { test: 'value' };
+            instance.updateInstanceMetadata('unknown-instance-id', metadata);
+
+            // Should not throw and should not store metadata for unknown instance
+            expect(() => instance.updateInstanceMetadata('unknown-instance-id', metadata)).not.toThrow();
+        });
+
+        it('should support empty metadata object', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
+
+            instance.updateInstanceMetadata('instanceOne', {});
+
+            const appMetadata = await instance.getAppMetadata({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+
+            expect(appMetadata?.instanceMetadata).toEqual({});
         });
     });
 

@@ -54,6 +54,7 @@ export class AppDirectory {
 
     private readonly directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = {}; //indexed by appId
     private readonly instanceLookup: Partial<Record<string, IntentToContextLookup>> = {}; //indexed by instanceId
+    private readonly instanceMetadataLookup: Partial<Record<string, { [key: string]: any }>> = {}; //indexed by instanceId
 
     private readonly appDirectoryEntries: (string | LocalAppDirectory)[];
     public readonly loadDirectoryPromise: Promise<void>;
@@ -249,9 +250,9 @@ export class AppDirectory {
 
     /**
      * @param appId of app whose instances are being returned
-     * @returns array of AppIdentifiers with appIds that match given appId, or undefined if app is not known to desktop agent
+     * @returns array of AppMetadata with appIds that match given appId, or undefined if app is not known to desktop agent
      */
-    public async getAppInstances(appId: string): Promise<FullyQualifiedAppIdentifier[] | undefined> {
+    public async getAppInstances(appId: string): Promise<AppMetadata[] | undefined> {
         await this.loadDirectoryPromise;
 
         const matchingAppIds = this.getAllMatchingFullyQualifiedAppIds(appId);
@@ -259,12 +260,16 @@ export class AppDirectory {
             return;
         }
 
-        return matchingAppIds.flatMap(matchedAppId =>
+        const identifiers = matchingAppIds.flatMap(matchedAppId =>
             (this.directory[matchedAppId]?.instances ?? []).map(instanceId => ({
                 appId: matchedAppId,
                 instanceId,
             })),
         );
+
+        const metadataResults = await Promise.all(identifiers.map(identifier => this.getAppMetadata(identifier)));
+
+        return metadataResults.map((metadata, index) => metadata ?? identifiers[index]);
     }
 
     /**
@@ -397,7 +402,15 @@ export class AppDirectory {
             //TODO: support fullyQualifiedAppId namespace syntax host resolution so directory can attempt to lookup unknown app
             return;
         }
-        return mapApplicationToMetadata(app, directoryEntry.application);
+        const metadata = mapApplicationToMetadata(app, directoryEntry.application);
+
+        if (app.instanceId != null) {
+            const instanceMetadata = this.instanceMetadataLookup[app.instanceId];
+            if (instanceMetadata != null) {
+                return { ...metadata, instanceMetadata };
+            }
+        }
+        return metadata;
     }
 
     /**
@@ -752,8 +765,15 @@ export class AppDirectory {
         return directoryEntry.application;
     }
 
+    public updateInstanceMetadata(instanceId: string, instanceMetadata: { [key: string]: any }): void {
+        if (this.instanceLookup[instanceId] != null) {
+            this.instanceMetadataLookup[instanceId] = instanceMetadata;
+        }
+    }
+
     public removeDisconnectedApp(app: FullyQualifiedAppIdentifier): void {
         delete this.instanceLookup[app.instanceId];
+        delete this.instanceMetadataLookup[app.instanceId];
 
         // if an unqualified appId is passed we might end up with multiple matching apps
         const matchingAppIds = this.getAllMatchingFullyQualifiedAppIds(app.appId);

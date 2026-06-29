@@ -364,6 +364,7 @@ describe('finos-type-predicate.helper', () => {
         { func: typePredicates.isBroadcastResponse, type: 'broadcastResponse' },
         { func: typePredicates.isJoinUserChannelResponse, type: 'joinUserChannelResponse' },
         { func: typePredicates.isOpenResponse, type: 'openResponse' },
+        { func: typePredicates.isUpdateInstanceMetadataResponse, type: 'updateInstanceMetadataResponse' },
     ];
 
     responseMessageTypes.forEach(({ func, type }) => {

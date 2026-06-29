@@ -12,7 +12,8 @@ import { BrowserTypes } from '@finos/fdc3';
 import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { afterEach, beforeEach, describe, expect, it, Mock as viMock, vi } from 'vitest';
 import { FDC3_VERSION } from '../constants.js';
-import { FullyQualifiedAppIdentifier, RequestMessage } from '../contracts.js';
+import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
+import { FullyQualifiedAppIdentifier, RequestMessage, ResponseMessage } from '../contracts.js';
 import * as finosTypePredicateHelper from './finos-type-predicate.helper.js';
 import {
     createEvent,
@@ -41,7 +42,12 @@ vi.mock('./finos-type-predicate.helper.js', async () => {
 });
 
 type NonOptionalMessage<
-    T extends BrowserTypes.AppRequestMessage | BrowserTypes.AgentResponseMessage | BrowserTypes.AgentEventMessage,
+    T extends
+        | RequestMessage
+        | ResponseMessage
+        | BrowserTypes.AppRequestMessage
+        | BrowserTypes.AgentResponseMessage
+        | BrowserTypes.AgentEventMessage,
 > = T & {
     meta: Required<T['meta']>;
 };
@@ -129,10 +135,64 @@ describe(`messages.helper`, () => {
                 },
             },
         );
+
+        testRequestMessageCreation<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            {
+                instanceMetadata: { customField: 'customValue', version: '1.0' },
+            },
+            {
+                type: 'updateInstanceMetadataRequest',
+                meta: { source, requestUuid: mockedGeneratedUuid, timestamp: mockedDate },
+                payload: {
+                    instanceMetadata: { customField: 'customValue', version: '1.0' },
+                },
+            },
+        );
+
+        testRequestMessageCreation<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            {
+                instanceMetadata: {},
+            },
+            {
+                type: 'updateInstanceMetadataRequest',
+                meta: { source, requestUuid: mockedGeneratedUuid, timestamp: mockedDate },
+                payload: {
+                    instanceMetadata: {},
+                },
+            },
+        );
+
+        testRequestMessageCreation<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            {
+                instanceMetadata: {
+                    stringField: 'test',
+                    numberField: 42,
+                    booleanField: true,
+                    arrayField: [1, 2, 3],
+                    objectField: { nested: 'value' },
+                },
+            },
+            {
+                type: 'updateInstanceMetadataRequest',
+                meta: { source, requestUuid: mockedGeneratedUuid, timestamp: mockedDate },
+                payload: {
+                    instanceMetadata: {
+                        stringField: 'test',
+                        numberField: 42,
+                        booleanField: true,
+                        arrayField: [1, 2, 3],
+                        objectField: { nested: 'value' },
+                    },
+                },
+            },
+        );
     });
 
     describe(`createResponseMessage`, () => {
-        function testResponseMessageCreation<T extends BrowserTypes.AgentResponseMessage>(
+        function testResponseMessageCreation<T extends ResponseMessage>(
             type: T['type'],
             payload: T['payload'],
             expected: NonOptionalMessage<T>,
@@ -186,6 +246,36 @@ describe(`messages.helper`, () => {
                     responseUuid: mockedGeneratedUuid,
                 },
                 payload: { appIntent: { apps: [], intent: { name: 'someIntent' } } },
+            },
+        );
+
+        testResponseMessageCreation<UpdateInstanceMetadataResponse>(
+            'updateInstanceMetadataResponse',
+            {},
+            {
+                type: 'updateInstanceMetadataResponse',
+                meta: {
+                    source,
+                    requestUuid: requestUuid,
+                    timestamp: mockedDate,
+                    responseUuid: mockedGeneratedUuid,
+                },
+                payload: {},
+            },
+        );
+
+        testResponseMessageCreation<UpdateInstanceMetadataResponse>(
+            'updateInstanceMetadataResponse',
+            { error: 'AccessDenied' },
+            {
+                type: 'updateInstanceMetadataResponse',
+                meta: {
+                    source,
+                    requestUuid: requestUuid,
+                    timestamp: mockedDate,
+                    responseUuid: mockedGeneratedUuid,
+                },
+                payload: { error: 'AccessDenied' },
             },
         );
     });

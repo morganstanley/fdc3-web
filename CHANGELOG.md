@@ -1,3 +1,22 @@
+## 0.15.0 (2026-06-29)
+
+### 🚀 Features
+
+- **fdc3-web:** Add `updateInstanceMetadata` method to update application instance metadata at runtime. This allows applications to update their instance metadata dynamically without recreating the instance.
+
+```ts
+const agent = await getAgent();
+await agent.updateInstanceMetadata({
+  title: 'Updated Title',
+  customData: { theme: 'dark' }
+});
+```
+
+### 🩹 Fixes
+
+- respect intent displayName in app resolver ([#355](https://github.com/Roaders/fdc3-web/pull/355), [#333](https://github.com/Roaders/fdc3-web/issues/333))
+- Handle qualified and unqualified app IDs in resolvers ([#353](https://github.com/Roaders/fdc3-web/pull/353)) - Fixed app resolver to correctly match both fully qualified IDs (name@host) and unqualified IDs by normalizing before comparison
+
 ## 0.14.0 (2026-06-23)
 
 ### Added

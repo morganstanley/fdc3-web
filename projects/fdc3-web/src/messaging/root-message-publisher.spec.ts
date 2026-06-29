@@ -411,6 +411,7 @@ describe('RootMessagePublisher', () => {
                         description: undefined,
                         icons: undefined,
                         screenshots: undefined,
+                        instanceMetadata: undefined,
                     },
                 },
             },
