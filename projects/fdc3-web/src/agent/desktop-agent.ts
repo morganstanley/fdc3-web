@@ -1021,6 +1021,21 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 resolveAppIdentity = resolve;
             });
 
+            // Capture the app identifier once the child window has connected, then use it in the
+            // window-closed callback below so that we can remove the correct instance.
+            let openedAppIdentifier: FullyQualifiedAppIdentifier | undefined;
+
+            const onWindowClosed = (): void => {
+                if (openedAppIdentifier != null) {
+                    this.connectionLog(
+                        'Child window closed – removing app instance',
+                        LogLevel.INFO,
+                        openedAppIdentifier,
+                    );
+                    this.handleProxyDisconnect(openedAppIdentifier);
+                }
+            };
+
             const newAppConnectionAttemptUuid = await strategy
                 .open({
                     appDirectoryRecord: noManifests,
@@ -1030,6 +1045,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                     ),
                     context,
                     appReadyPromise,
+                    onWindowClosed,
                 })
                 .catch(err => {
                     openError = err;
@@ -1066,6 +1082,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 newAppConnectionAttemptUuid,
                 application,
             );
+
+            // Store the identifier so that the onWindowClosed callback can reference it.
+            openedAppIdentifier = appIdentifier;
 
             if (resolveAppIdentity != null) {
                 resolveAppIdentity(appIdentifier);
