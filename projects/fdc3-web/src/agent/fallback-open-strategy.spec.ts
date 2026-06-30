@@ -18,9 +18,9 @@ import {
     setupFunction,
     setupProperty,
 } from '@morgan-stanley/ts-mocking-bird';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectoryApplicationType } from '../app-directory.contracts.js';
-import { ApplicationStrategyParams, DesktopAgentNext } from '../contracts.js';
+import { ApplicationStrategyParams, DesktopAgentNext, OpenApplicationStrategyResolverParams } from '../contracts.js';
 import * as helpersImport from '../helpers/index.js';
 import { FallbackOpenStrategy } from './fallback-open-strategy.js';
 
@@ -200,6 +200,70 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
             (mockWindow.functionCallLookup.addEventListener?.[0][1] as EventListener)?.(mockMessageEvent);
 
             await expect(identityPromise).resolves.toStrictEqual('mock-connection-attempt-uuid');
+        });
+
+        it(`should invoke onWindowClosed callback when the opened popup window is detected as closed`, async () => {
+            vi.useFakeTimers();
+
+            const instance = createInstance(mockWindow.mock);
+
+            const onWindowClosed = vi.fn();
+
+            // Simulate child window starting open
+            mockChildWindow.setup(setupProperty('closed', false));
+
+            const params: OpenApplicationStrategyResolverParams = {
+                appDirectoryRecord: mockedApplication,
+                agent: mockDesktopAgent.mock,
+                appReadyPromise: new Promise(() => {
+                    /* never resolves in this test */
+                }),
+                onWindowClosed,
+            };
+
+            // Start the open – the connection attempt promise will never resolve but that is fine
+            // for this test because we only care about the window-close side-effect.
+            instance.open(params);
+
+            // Window is still open – callback should not have been called yet
+            await vi.advanceTimersByTimeAsync(500);
+            expect(onWindowClosed).not.toHaveBeenCalled();
+
+            // Simulate the popup window being closed
+            mockChildWindow.setup(setupProperty('closed', true));
+
+            // Advance past the next poll interval
+            await vi.advanceTimersByTimeAsync(500);
+
+            expect(onWindowClosed).toHaveBeenCalledOnce();
+
+            // Advancing again should NOT trigger a second call (poll stopped after first fire)
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(onWindowClosed).toHaveBeenCalledOnce();
+
+            vi.useRealTimers();
+        });
+
+        it(`should not invoke onWindowClosed if no callback is provided`, async () => {
+            vi.useFakeTimers();
+
+            // Simulate child window immediately closed – no callback is registered so there
+            // should be no error thrown.
+            mockChildWindow.setup(setupProperty('closed', true));
+
+            const instance = createInstance(mockWindow.mock);
+
+            const params: ApplicationStrategyParams = {
+                appDirectoryRecord: mockedApplication,
+                agent: mockDesktopAgent.mock,
+            };
+
+            // Should not throw even when the child window is already closed
+            instance.open(params);
+
+            await vi.advanceTimersByTimeAsync(1000);
+
+            vi.useRealTimers();
         });
     });
 });

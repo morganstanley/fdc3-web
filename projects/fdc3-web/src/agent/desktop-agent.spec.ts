@@ -2398,6 +2398,86 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         .withParametersEqualTo(expectedMessage, source),
                 ).wasCalledOnce();
             });
+
+            it(`should pass an onWindowClosed callback to the open strategy and remove the app instance when invoked`, async () => {
+                createInstance([mockOpenStrategy.mock]);
+
+                const openMessage: BrowserTypes.OpenRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        app: { appId: mockedTargetAppId },
+                    },
+                    type: 'openRequest',
+                };
+
+                await postRequestMessage(openMessage, source);
+
+                // Verify that the strategy received an onWindowClosed callback
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+                expect(openParams?.onWindowClosed).toBeDefined();
+
+                // Invoking onWindowClosed should remove the opened app instance from the directory
+                openParams?.onWindowClosed?.();
+
+                const openedAppIdentifier = { appId: mockedTargetAppId, instanceId: mockedGeneratedUuid };
+
+                expect(
+                    mockAppDirectory
+                        .withFunction('removeDisconnectedApp')
+                        .withParametersEqualTo(openedAppIdentifier),
+                ).wasCalledOnce();
+
+                expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasCalledOnce();
+            });
+
+            it(`should not remove the app instance when onWindowClosed is called before the child window has connected`, async () => {
+                // Simulate strategy whose open() resolves before awaitAppIdentity completes, so
+                // onWindowClosed fires while openedAppIdentifier is still undefined.
+                const neverResolvingStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canOpen', () => Promise.resolve(true)),
+                    setupFunction('open', () => Promise.resolve(`mock-connection-attempt-uuid`)),
+                );
+
+                mockRootPublisher.setupFunction(
+                    'awaitAppIdentity',
+                    () => new Promise(() => { /* never resolves */ }),
+                );
+
+                createInstance([neverResolvingStrategy.mock]);
+
+                const openMessage: BrowserTypes.OpenRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        app: { appId: mockedTargetAppId },
+                    },
+                    type: 'openRequest',
+                };
+
+                // Fire and forget – openAppWithStrategy will stall at awaitAppIdentity
+                postRequestMessage(openMessage, source);
+
+                // Let microtasks run so strategy.open() is called
+                await wait();
+
+                const openParams = neverResolvingStrategy.functionCallLookup['open']?.[0][0];
+                expect(openParams?.onWindowClosed).toBeDefined();
+
+                // Call onWindowClosed before the app has connected
+                openParams?.onWindowClosed?.();
+
+                // No cleanup should have happened because openedAppIdentifier is not yet set
+                expect(mockAppDirectory.withFunction('removeDisconnectedApp')).wasNotCalled();
+                expect(mockChannelHandler.withFunction('cleanupDisconnectedProxy')).wasNotCalled();
+            });
         });
 
         describe(`getUserChannelsRequest`, () => {

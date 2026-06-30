@@ -355,6 +355,12 @@ export type ApplicationStrategyParams = {
 
 export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & {
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
+    /**
+     * Optional callback invoked by the strategy when the opened window or frame is detected to have
+     * closed. The desktop agent uses this to eagerly remove the associated app instance from the
+     * directory rather than waiting for the heartbeat to time out.
+     */
+    onWindowClosed?: () => void;
 };
 
 export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy;
