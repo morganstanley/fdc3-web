@@ -1491,6 +1491,41 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
             expect(contexts).toBeUndefined();
         });
+
+        it('should resolve the correct app when two apps share the same base domain but differ only by query params (#185)', async () => {
+            // Reproduces the scenario from issue #185: apps that have no path but use query params
+            // to distinguish themselves (e.g. http://mydomain?fdc=app1 vs http://mydomain?fdc=app2).
+            const appWithQueryParamOne: AppDirectoryApplication = {
+                appId: 'query-param-app-one',
+                title: 'Query Param App One',
+                type: mockedApplicationType,
+                details: { url: 'http://mydomain?fdc=app1' },
+            };
+            const appWithQueryParamTwo: AppDirectoryApplication = {
+                appId: 'query-param-app-two',
+                title: 'Query Param App Two',
+                type: mockedApplicationType,
+                details: { url: 'http://mydomain?fdc=app2' },
+            };
+
+            const instance = createInstance([
+                {
+                    host: 'mydomain',
+                    apps: [appWithQueryParamOne, appWithQueryParamTwo],
+                },
+            ]);
+
+            // App one connects with its identity URL which includes the distinguishing query param
+            const { identifier: identifierOne } = await instance.registerNewInstance('http://mydomain?fdc=app1');
+            expect(identifierOne.appId).toBe('query-param-app-one@mydomain');
+
+            // App two connects with its own identity URL
+            const { identifier: identifierTwo } = await instance.registerNewInstance('http://mydomain?fdc=app2');
+            expect(identifierTwo.appId).toBe('query-param-app-two@mydomain');
+
+            // The two instances must belong to different apps
+            expect(identifierOne.appId).not.toBe(identifierTwo.appId);
+        });
     });
 
     describe('removeDisconnectedApp', () => {

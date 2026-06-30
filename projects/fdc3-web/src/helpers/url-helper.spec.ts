@@ -174,6 +174,24 @@ describe(`urlContainsAllElements`, () => {
             appDUrl: 'https://example.com/',
             matches: ['https://example.com#unknownHash'],
         },
+        // below tests for issue #185 - query-param-only URLs (no explicit path)
+        {
+            description: 'No path, query param present - exact match',
+            appDUrl: 'http://mydomain?fdc=app1',
+            matches: ['http://mydomain?fdc=app1', 'http://mydomain/?fdc=app1'],
+            failures: [
+                'http://mydomain?fdc=app2',
+                'http://mydomain/?fdc=app2',
+                'http://mydomain',
+                'http://mydomain/',
+            ],
+        },
+        {
+            description: 'No path, query param present - identity URL has additional params',
+            appDUrl: 'http://mydomain?fdc=app1',
+            matches: ['http://mydomain?fdc=app1&extra=value', 'http://mydomain?extra=value&fdc=app1'],
+            failures: ['http://mydomain?fdc=app2&extra=value'],
+        },
     ];
 
     tests.forEach(({ description, appDUrl, matches, failures }) => {
