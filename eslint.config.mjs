@@ -32,6 +32,7 @@ const ignores = globalIgnores(
         : [
             '**/dist/**/*',
             '**/docs/**/*',
+            '**/site/**/*',
             '**/node_modules/**/*',
             ...(additionalIgnorePatterns != null ? additionalIgnorePatterns.split(',') : []),
         ],
