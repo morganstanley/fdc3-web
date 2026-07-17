@@ -13,6 +13,7 @@ import { IMSHostManifest, WebAppDetails } from '../app-directory.contracts.js';
 import {
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
+    ICloseApplicationStrategy,
     INewInstanceStrategy,
     IOpenApplicationStrategy,
     IRootOutgoingMessageEnvelope,
@@ -99,6 +100,15 @@ export function isNewInstanceStrategy(value: any): value is INewInstanceStrategy
     const strategy = value as INewInstanceStrategy;
 
     return strategy != null && typeof strategy.onNewInstance === 'function';
+}
+
+/**
+ * type predicate to determine if a strategy is an ICloseApplicationStrategy
+ */
+export function isCloseApplicationStrategy(value: any): value is ICloseApplicationStrategy {
+    const strategy = value as ICloseApplicationStrategy;
+
+    return strategy != null && typeof strategy.canCloseApp === 'function' && typeof strategy.closeApp === 'function';
 }
 
 export function isDefined<T>(value: T | null | undefined): value is T {

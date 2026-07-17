@@ -46,6 +46,8 @@ import {
     IProxyOutgoingMessageEnvelope,
     ResponseMessage,
 } from '../contracts.js';
+// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
+import { CloseError, CloseRequest, CloseResponse } from '../fdc3-next/index.js';
 import * as helpersImport from '../helpers/index.js';
 import { RootMessagePublisher } from '../messaging/index.js';
 import { DesktopAgentImpl } from './desktop-agent.js';
@@ -2358,6 +2360,97 @@ tests.forEach(({ proxy }) => {
         });
 
         //https://fdc3.finos.org/docs/api/ref/DesktopAgent#raiseintent
+        // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
+        describe('close', () => {
+            it('should send a closeRequest to the Desktop Agent', async () => {
+                const instance = await createInstance();
+
+                instance.close();
+
+                const expectedMessage: CloseRequest = {
+                    meta: createExpectedRequestMeta(),
+                    payload: {},
+                    type: 'closeRequest',
+                };
+
+                await wait();
+
+                expect(
+                    mockMessagingProvider
+                        .withFunction('sendMessage')
+                        .withParametersEqualTo({ payload: expectedMessage }),
+                ).wasCalledOnce();
+            });
+
+            it('should resolve when a success closeResponse is received', async () => {
+                const instance = await createInstance();
+
+                const closePromise = instance.close();
+
+                const responseMessage: CloseResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {},
+                    type: 'closeResponse',
+                };
+                postMessage(responseMessage);
+
+                await expect(closePromise).resolves.toBeUndefined();
+            });
+
+            it('should reject with the error returned in the response', async () => {
+                const instance = await createInstance();
+
+                const closePromise = instance.close();
+
+                const responseMessage: CloseResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {
+                        error: CloseError.ErrorOnClose,
+                    },
+                    type: 'closeResponse',
+                };
+                postMessage(responseMessage);
+
+                await expect(closePromise).rejects.toStrictEqual(CloseError.ErrorOnClose);
+            });
+
+            it('should not resolve when a non-matching requestUuid is received', async () => {
+                const instance = await createInstance();
+
+                let resolved = false;
+                let rejected = false;
+
+                instance
+                    .close()
+                    .then(() => (resolved = true))
+                    .catch(() => (rejected = true));
+
+                const responseMessage: CloseResponse = {
+                    meta: {
+                        requestUuid: requestUuIdentifier2,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {},
+                    type: 'closeResponse',
+                };
+                postMessage(responseMessage);
+
+                await wait();
+
+                expect(resolved).toBe(false);
+                expect(rejected).toBe(false);
+            });
+        });
+
         describe('raiseIntent', () => {
             it('should raise specific intent for resolution against apps registered with desktop agent', async () => {
                 const instance = await createInstance();

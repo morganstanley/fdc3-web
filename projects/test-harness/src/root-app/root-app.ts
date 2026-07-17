@@ -17,12 +17,14 @@ import {
     AppDirectoryApplication,
     ApplicationStrategyParams,
     BackoffRetryParams,
+    CloseApplicationStrategyParams,
     createLogger,
     createWebAppDirectoryEntry,
     DesktopAgentFactory,
     FullyQualifiedAppIdentifier,
     generateUUID,
     getAgent,
+    ICloseApplicationStrategy,
     IOpenApplicationStrategy,
     ISelectApplicationStrategy,
     isFullyQualifiedAppId,
@@ -88,10 +90,19 @@ const retryParams: BackoffRetryParams = {
  * and rendering the main UI components including the header, app containers, and settings panel.
  */
 @customElement('root-app')
-export class RootApp extends LitElement implements IOpenApplicationStrategy, ISelectApplicationStrategy {
+export class RootApp
+    extends LitElement
+    implements IOpenApplicationStrategy, ISelectApplicationStrategy, ICloseApplicationStrategy
+{
     private log = createLogger(RootApp, 'proxy');
 
     private windowLookup: Record<string, WindowProxy> = {};
+
+    /**
+     * Tracks which WebAppDetails (and therefore which rendered iframe) hosts a given app instance,
+     * so that the iframe can be removed when the app requests to be closed via fdc3.close().
+     */
+    private iframeAppLookup: Record<string, WebAppDetails> = {};
 
     @state()
     private appDetails: WebAppDetails[] = [];
@@ -232,6 +243,9 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
 
                     this.log('Opening app in iframe', LogLevel.DEBUG, details);
 
+                    // track which iframe hosts this app instance so that fdc3.close() can remove it
+                    params.appReadyPromise.then(identity => (this.iframeAppLookup[identity.instanceId] = details));
+
                     return new Promise(resolve => {
                         // wait for iframe window to be created
                         this.iframeCreationCallbacks.set(details, (iframeWindow, app) => {
@@ -278,6 +292,47 @@ export class RootApp extends LitElement implements IOpenApplicationStrategy, ISe
 
     /**
      * ISelectApplicationStrategy implementation END
+     */
+
+    /**
+     * ICloseApplicationStrategy implementation
+     *
+     * Closes apps that this strategy opened, either in a popup window or in an iframe rendered by
+     * the root app. This is the consumer-provided counterpart to the open/select strategies above.
+     */
+
+    public async canCloseApp(params: CloseApplicationStrategyParams): Promise<boolean> {
+        return (
+            this.windowLookup[params.appIdentifier.instanceId] != null ||
+            this.iframeAppLookup[params.appIdentifier.instanceId] != null
+        );
+    }
+
+    public async closeApp(params: CloseApplicationStrategyParams): Promise<void> {
+        const { instanceId } = params.appIdentifier;
+
+        const openedWindow = this.windowLookup[instanceId];
+        if (openedWindow != null) {
+            this.log(`Closing window for app ${params.appIdentifier.appId}(${instanceId})`, LogLevel.DEBUG);
+            openedWindow.close();
+            delete this.windowLookup[instanceId];
+            return;
+        }
+
+        const iframeDetails = this.iframeAppLookup[instanceId];
+        if (iframeDetails != null) {
+            this.log(`Closing iframe for app ${params.appIdentifier.appId}(${instanceId})`, LogLevel.DEBUG);
+            this.appDetails = this.appDetails.filter(details => details !== iframeDetails);
+            delete this.iframeAppLookup[instanceId];
+            this.requestUpdate();
+            return;
+        }
+
+        return Promise.reject(`No window or iframe tracked for instanceId ${instanceId}`);
+    }
+
+    /**
+     * ICloseApplicationStrategy implementation END
      */
 
     private onAppDirectoryLoaded(): void {

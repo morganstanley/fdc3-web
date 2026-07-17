@@ -26,6 +26,8 @@ import type {
 } from '@finos/fdc3';
 import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
 import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from './contracts.internal.js';
+// TEMPORARY (FDC3 3.0): remove this import and use BrowserTypes.CloseRequest / BrowserTypes.CloseResponse once @finos/fdc3 3.0 is installed. See ./fdc3-next/close.ts
+import type { CloseRequest, CloseResponse } from './fdc3-next/index.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -55,7 +57,9 @@ export type RequestMessage =
     | BrowserTypes.IntentResultRequest
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerRequest
     | BrowserTypes.PrivateChannelAddEventListenerRequest
-    | UpdateInstanceMetadataRequest;
+    | UpdateInstanceMetadataRequest
+    // TEMPORARY (FDC3 3.0): replace with BrowserTypes.CloseRequest once @finos/fdc3 3.0 is installed
+    | CloseRequest;
 
 export type ResponseMessage =
     | BrowserTypes.AddContextListenerResponse
@@ -87,7 +91,9 @@ export type ResponseMessage =
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerResponse
     | BrowserTypes.PrivateChannelAddEventListenerResponse
     | BrowserTypes.PrivateChannelDisconnectResponse
-    | UpdateInstanceMetadataResponse;
+    | UpdateInstanceMetadataResponse
+    // TEMPORARY (FDC3 3.0): replace with BrowserTypes.CloseResponse once @finos/fdc3 3.0 is installed
+    | CloseResponse;
 
 export type EventMessage =
     | BrowserTypes.PrivateChannelOnAddContextListenerEvent
@@ -223,6 +229,21 @@ export interface DesktopAgentNext extends FinosDesktopAgent {
      * Overrides the base DesktopAgent.findInstances to return enriched metadata.
      */
     findInstances(app: AppIdentifier): Promise<AppMetadata[]>;
+
+    /**
+     * TEMPORARY (FDC3 3.0): remove this declaration once @finos/fdc3 3.0 is installed — `close()`
+     * will then be part of the base `DesktopAgent` interface. See ./fdc3-next/close.ts
+     *
+     * Requests that the Desktop Agent close the calling application's own window or frame.
+     *
+     * This API is limited to self-close only — it cannot be used to close another application.
+     *
+     * On a successful close the app is destroyed. The promise rejects with a value from
+     * `CloseError` if the Desktop Agent cannot close the app.
+     *
+     * Feature issue: https://github.com/finos/FDC3/issues/1809
+     */
+    close(): Promise<void>;
 }
 
 export type AppIdentifierListenerPair = {
@@ -362,7 +383,8 @@ export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & 
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
 };
 
-export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy | INewInstanceStrategy;
+export type DesktopAgentStrategies =
+    IOpenApplicationStrategy | ISelectApplicationStrategy | INewInstanceStrategy | ICloseApplicationStrategy;
 
 export type NewInstanceStrategyParams = {
     /**
@@ -446,6 +468,54 @@ export interface ISelectApplicationStrategy {
      * @param params
      */
     selectApp(params: SelectApplicationStrategyParams): Promise<void>;
+}
+
+export type CloseApplicationStrategyParams = {
+    agent: DesktopAgent;
+    /**
+     * The fully qualified identifier of the application instance that has requested to be closed.
+     */
+    appIdentifier: FullyQualifiedAppIdentifier;
+    /**
+     * The app directory record for the application, if one could be resolved. May be undefined for
+     * apps that are not backed by an app directory entry.
+     */
+    appDirectoryRecord?: Omit<AppDirectoryApplication, 'hostManifests'>;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
+    manifest?: unknown;
+};
+
+/**
+ * Allows a consumer to provide an implementation for closing applications that were opened by the
+ * desktop agent, following the same pattern as {@link IOpenApplicationStrategy} and
+ * {@link ISelectApplicationStrategy}.
+ *
+ * This is triggered by an app calling `agent.close()` to request that its own window or frame be
+ * closed. A default implementation ({@link FallbackOpenStrategy}) is always provided that tracks
+ * and closes windows opened by the agent itself; consumers that open apps in their own windows or
+ * iframes (e.g. via a custom {@link IOpenApplicationStrategy}) should provide a matching
+ * `ICloseApplicationStrategy`.
+ */
+export interface ICloseApplicationStrategy {
+    /**
+     * Used to identify the manifest key that is used to lookup the specific manifest from the
+     * appDirectory record's hostManifests. The manifest identified through this key will then be
+     * passed to the closeApp() and canCloseApp() functions
+     */
+    manifestKey?: string;
+
+    /**
+     * If the strategy is able to close the given application instance returns true.
+     * If false is returned the strategy will not be used by the desktop agent and the next one will be tried.
+     */
+    canCloseApp(params: CloseApplicationStrategyParams): Promise<boolean>;
+
+    /**
+     * Closes the window or frame that hosts the given application instance.
+     */
+    closeApp(params: CloseApplicationStrategyParams): Promise<void>;
 }
 
 /**

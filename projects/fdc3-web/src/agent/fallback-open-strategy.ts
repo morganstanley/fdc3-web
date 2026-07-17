@@ -9,10 +9,34 @@
  * and limitations under the License. */
 
 import { OpenError } from '@finos/fdc3';
-import { ApplicationStrategyParams, IOpenApplicationStrategy } from '../contracts.js';
+import {
+    ApplicationStrategyParams,
+    CloseApplicationStrategyParams,
+    ICloseApplicationStrategy,
+    IOpenApplicationStrategy,
+    OpenApplicationStrategyResolverParams,
+} from '../contracts.js';
 import { isWebAppDetails, subscribeToConnectionAttemptUuids } from '../helpers/index.js';
 
-export class FallbackOpenStrategy implements IOpenApplicationStrategy {
+/**
+ * The default application strategy used by the desktop agent when no consumer-provided strategy is
+ * able to open (or close) an application.
+ *
+ * As an {@link IOpenApplicationStrategy} it opens web apps in a new browser window.
+ *
+ * As an {@link ICloseApplicationStrategy} it provides the default `fdc3.close()` implementation:
+ * it keeps a reference to every window it opened (keyed by instanceId) and closes that window when
+ * the app requests to be closed. It will only ever close windows that it opened itself — apps
+ * opened by a consumer-provided strategy must be closed by a consumer-provided
+ * {@link ICloseApplicationStrategy}.
+ */
+export class FallbackOpenStrategy implements IOpenApplicationStrategy, ICloseApplicationStrategy {
+    /**
+     * Windows opened by this strategy, keyed by the instanceId of the app they host, so that they
+     * can be closed later in response to an `fdc3.close()` call.
+     */
+    private readonly openedWindows: Map<string, WindowProxy> = new Map();
+
     //window parameter is passed during testing
     constructor(private currentWindow: Window = window) {}
 
@@ -20,7 +44,7 @@ export class FallbackOpenStrategy implements IOpenApplicationStrategy {
         return params.appDirectoryRecord.type === 'web' && isWebAppDetails(params.appDirectoryRecord.details);
     }
 
-    public async open(params: ApplicationStrategyParams): Promise<string> {
+    public async open(params: OpenApplicationStrategyResolverParams): Promise<string> {
         if (!isWebAppDetails(params.appDirectoryRecord.details)) {
             //this should not occur since canOpen() will have already checked this
             return Promise.reject(OpenError.ErrorOnLaunch);
@@ -30,6 +54,13 @@ export class FallbackOpenStrategy implements IOpenApplicationStrategy {
             //new window could not be opened
             return Promise.reject(OpenError.ErrorOnLaunch);
         }
+
+        // track the opened window so that it can be closed later in response to an fdc3.close() call
+        params.appReadyPromise
+            .then(identity => this.openedWindows.set(identity.instanceId, newWindow))
+            .catch(() => {
+                /* app never became ready - nothing to track */
+            });
 
         return new Promise(resolve => {
             const subscription = subscribeToConnectionAttemptUuids(
@@ -42,5 +73,24 @@ export class FallbackOpenStrategy implements IOpenApplicationStrategy {
                 },
             );
         });
+    }
+
+    /**
+     * The default close strategy can only close windows that this strategy opened itself.
+     */
+    public async canCloseApp(params: CloseApplicationStrategyParams): Promise<boolean> {
+        return this.openedWindows.has(params.appIdentifier.instanceId);
+    }
+
+    public async closeApp(params: CloseApplicationStrategyParams): Promise<void> {
+        const openedWindow = this.openedWindows.get(params.appIdentifier.instanceId);
+
+        if (openedWindow == null) {
+            //this should not occur since canCloseApp() will have already checked this
+            return Promise.reject(`No window tracked for instanceId ${params.appIdentifier.instanceId}`);
+        }
+
+        openedWindow.close();
+        this.openedWindows.delete(params.appIdentifier.instanceId);
     }
 }
