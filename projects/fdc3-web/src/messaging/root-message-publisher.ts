@@ -20,6 +20,7 @@ import {
     IProxyOutgoingMessageEnvelope,
     IRootIncomingMessageEnvelope,
     IRootMessagingProvider,
+    NewInstanceStrategyParams,
     RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
@@ -53,6 +54,12 @@ export class RootMessagePublisher implements IRootPublisher {
      * Used for passing requests from incoming messages received from proxy agents (or from the root agent itself) to the request handler function in desktop-agent
      */
     public requestMessageHandler: RequestMessageHandler | undefined;
+
+    /**
+     * Called whenever a new instanceId has been assigned to an app instance completing the handshake, so that
+     * any registered INewInstanceStrategy can be notified (along with the window it connected from, if known)
+     */
+    public newInstanceHandler: ((params: NewInstanceStrategyParams) => void) | undefined;
 
     /**
      * Used for loopback response messages that the desktop-agent has published but that need to be returned to the proxy-agent code (which desktop-agent extends)
@@ -179,7 +186,7 @@ export class RootMessagePublisher implements IRootPublisher {
         >,
     ): void {
         if (isWCPValidateAppIdentity(message.payload)) {
-            this.registerNewInstance(message.payload, message.channelId);
+            this.registerNewInstance(message.payload, message.channelId, message.window);
             return;
         }
 
@@ -226,6 +233,7 @@ export class RootMessagePublisher implements IRootPublisher {
     private async registerNewInstance(
         validateMessage: BrowserTypes.WebConnectionProtocol4ValidateAppIdentity,
         channelId: string,
+        window: Window | undefined,
     ): Promise<FullyQualifiedAppIdentifier | undefined> {
         this.log('Registering new instance', LogLevel.DEBUG, { validateMessage, channelId });
 
@@ -239,6 +247,8 @@ export class RootMessagePublisher implements IRootPublisher {
 
         this.channelIdToAppIdentifier[channelId] = identifier;
         this.instanceIdToChannelId[identifier.instanceId] = channelId;
+
+        this.newInstanceHandler?.({ window, fullyQualifiedAppIdentifier: identifier });
 
         const response: BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse = {
             type: 'WCP5ValidateAppIdentityResponse',

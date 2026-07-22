@@ -39,6 +39,7 @@ import {
     FullyQualifiedAppIdentifier,
     IOpenApplicationStrategy,
     ISelectApplicationStrategy,
+    NewInstanceStrategyParams,
     RequestMessage,
 } from '../contracts.js';
 import {
@@ -56,6 +57,7 @@ import {
     isDefined,
     isFindInstancesErrors,
     isFullyQualifiedAppIdentifier,
+    isNewInstanceStrategy,
     isOpenApplicationStrategy,
     isOpenError,
     isResponsePayloadError,
@@ -119,6 +121,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         this.rootMessagePublisher = params.rootMessagePublisher;
         params.rootMessagePublisher.requestMessageHandler = this.onRequestMessage.bind(this);
+        params.rootMessagePublisher.newInstanceHandler = this.notifyNewInstanceStrategies.bind(this);
         this.directory = params.directory;
         this.channelMessageHandler = params.channelFactory.createMessageHandler(this.rootMessagePublisher);
 
@@ -1097,6 +1100,17 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 source,
             );
         }
+    }
+
+    /**
+     * Informs any registered INewInstanceStrategy that a new instanceId has been assigned to an application.
+     * Invoked by rootMessagePublisher.newInstanceHandler once the handshake with the app instance completes,
+     * regardless of how the app's window was opened (FDC3 open() or the app opening/registering itself).
+     */
+    private notifyNewInstanceStrategies(params: NewInstanceStrategyParams): void {
+        this.applicationStrategies.filter(isNewInstanceStrategy).forEach(strategy => {
+            strategy.onNewInstance(params);
+        });
     }
 
     /**

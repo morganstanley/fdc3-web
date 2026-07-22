@@ -161,7 +161,7 @@ Configure singleton behavior via the `hostManifests` property in your app direct
 
 ## Custom Application Strategies
 
-Application strategies control how apps are opened and selected. There are two types of strategies:
+Application strategies control how apps are opened, selected, and tracked. There are three types of strategies:
 
 ### Open Application Strategy
 
@@ -216,18 +216,36 @@ const customSelectStrategy = {
 };
 ```
 
+### New Instance Strategy
+
+Notified whenever a new app instance completes its connection handshake and is assigned an `instanceId`. Unlike
+`IOpenApplicationStrategy`, this is called for every new instance regardless of how its window was created (via an
+`IOpenApplicationStrategy`, a plain `window.open()` call, an iframe, etc.), so it is useful for strategies that need
+to track or manage all app windows rather than just the ones they opened themselves. Implement `INewInstanceStrategy`:
+
+```js
+const customNewInstanceStrategy = {
+  onNewInstance: (params) => {
+    // params.fullyQualifiedAppIdentifier contains the appId/instanceId of the new app instance
+    // params.window is the window the app instance connected from, if known
+    myWindowRegistry.track(params.fullyQualifiedAppIdentifier, params.window);
+  }
+};
+```
+
 Pass strategies when creating the root agent:
 
 ```js
 const agent = await getAgent({
   failover: () =>
     new DesktopAgentFactory().createRoot({
-      applicationStrategies: [customOpenStrategy, customSelectStrategy],
+      applicationStrategies: [customOpenStrategy, customSelectStrategy, customNewInstanceStrategy],
     }),
 });
 ```
 
-Strategies are evaluated in order. The first strategy where `canOpen()` or `canSelectApp()` returns `true` will be used.
+Strategies are evaluated in order. The first strategy where `canOpen()` or `canSelectApp()` returns `true` will be
+used. All `INewInstanceStrategy` strategies are notified for every new instance.
 
 ## Backoff Retry for App Directory Loading
 
