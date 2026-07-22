@@ -40,6 +40,7 @@ import {
     DesktopAgentStrategies,
     EventMessage,
     FullyQualifiedAppIdentifier,
+    INewInstanceStrategy,
     IOpenApplicationStrategy,
     ISelectApplicationStrategy,
     RequestMessage,
@@ -127,6 +128,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             setupFunction('publishResponseMessage'),
             setupFunction('addResponseHandler'),
             setupProperty('requestMessageHandler'),
+            setupProperty('newInstanceHandler'),
             setupFunction('sendMessage'),
         );
 
@@ -290,6 +292,29 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         expect(instance).toBeDefined();
 
         expect(mockRootPublisher.withSetter('requestMessageHandler')).wasCalledOnce();
+        expect(mockRootPublisher.withSetter('newInstanceHandler')).wasCalledOnce();
+    });
+
+    it(`should notify any INewInstanceStrategy when rootMessagePublisher.newInstanceHandler is invoked`, async () => {
+        const mockNewInstanceStrategy = Mock.create<INewInstanceStrategy>().setup(setupFunction('onNewInstance'));
+
+        createInstance([mockNewInstanceStrategy.mock]);
+
+        const newInstanceHandler = mockRootPublisher.setterCallLookup.newInstanceHandler?.[0][0];
+
+        const mockAppWindow = Mock.create<Window>().mock;
+
+        newInstanceHandler?.({
+            window: mockAppWindow,
+            fullyQualifiedAppIdentifier: { appId: mockedTargetAppId, instanceId: mockedGeneratedUuid },
+        });
+
+        expect(
+            mockNewInstanceStrategy.withFunction('onNewInstance').withParametersEqualTo({
+                window: mockAppWindow,
+                fullyQualifiedAppIdentifier: { appId: mockedTargetAppId, instanceId: mockedGeneratedUuid },
+            }),
+        ).wasCalledOnce();
     });
 
     describe(`onMessage`, () => {

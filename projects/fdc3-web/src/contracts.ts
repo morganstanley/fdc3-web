@@ -134,6 +134,11 @@ export interface IRootIncomingMessageEnvelope<
      * Indicates which channel (which maps to a given proxy agent) the message was received from
      */
     channelId: string;
+    /**
+     * The window of the app instance the message was received from, if known (e.g. captured from the
+     * WCP1Hello handshake). Used to notify INewInstanceStrategy once an instanceId has been assigned.
+     */
+    window?: Window;
 }
 
 /**
@@ -357,7 +362,28 @@ export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & 
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
 };
 
-export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy;
+export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy | INewInstanceStrategy;
+
+export type NewInstanceStrategyParams = {
+    /**
+     * The window of the newly registered application instance, if known. This is populated from the window
+     * that completed the WCP1Hello/WCP4ValidateAppIdentity handshake, so it is available regardless of how the
+     * window was created (e.g. via an IOpenApplicationStrategy, `window.open()`, or an iframe that registers itself).
+     * It will be undefined if the app instance is not window-based (e.g. connects via a non-window transport).
+     */
+    window?: Window;
+    fullyQualifiedAppIdentifier: FullyQualifiedAppIdentifier;
+};
+
+/**
+ * Notified by the desktop agent whenever a new instanceId has been assigned to an application instance that has
+ * completed its connection handshake. Unlike IOpenApplicationStrategy/ISelectApplicationStrategy, this is invoked
+ * for every new instance regardless of how it was opened, so it can be used to track or manage windows that were
+ * not opened via an IOpenApplicationStrategy.
+ */
+export interface INewInstanceStrategy {
+    onNewInstance(params: NewInstanceStrategyParams): void;
+}
 
 /**
  * Replaces the default mechanism used to open new applications

@@ -26,6 +26,7 @@ import {
     IncomingMessageCallback,
     IProxyIncomingMessageEnvelope,
     IRootMessagingProvider,
+    NewInstanceStrategyParams,
     RequestMessage,
 } from '../contracts.js';
 import * as helpersImport from '../helpers/index.js';
@@ -258,6 +259,90 @@ describe('RootMessagePublisher', () => {
 
             expect(
                 mockRequestHandler.withFunction('handler').withParametersEqualTo(requestMessage, sourceApp),
+            ).wasCalledOnce();
+        });
+    });
+
+    describe('newInstanceHandler', () => {
+        it('should notify newInstanceHandler with the window captured from the handshake once a new instance is registered', async () => {
+            const instance = createInstance();
+
+            const mockNewInstanceHandler = Mock.create<{
+                handler: (params: NewInstanceStrategyParams) => void;
+            }>().setup(setupFunction('handler'));
+
+            instance.newInstanceHandler = mockNewInstanceHandler.mock.handler;
+
+            const sourceApp: FullyQualifiedAppIdentifier = {
+                appId: sourceAppId,
+                instanceId: 'instanceOne',
+            };
+
+            generateUuidResult = sourceApp.instanceId;
+            mockDirectory.setupFunction('registerNewInstance', () => {
+                return Promise.resolve({
+                    application: Mock.create<AppDirectoryApplication>().setup(setupProperty('appId', sourceApp.appId))
+                        .mock,
+                    identifier: sourceApp,
+                });
+            });
+
+            const mockAppWindow = Mock.create<Window>().mock;
+            const validationMessage = createValidationRequestMessage();
+
+            mockRootMessagingProvider.functionCallLookup.subscribe?.[0][0]({
+                payload: validationMessage,
+                channelId: 'channelOne',
+                window: mockAppWindow,
+            });
+
+            await waitForMessage(message => message.payload.type === 'WCP5ValidateAppIdentityResponse');
+
+            expect(
+                mockNewInstanceHandler.withFunction('handler').withParametersEqualTo({
+                    window: mockAppWindow,
+                    fullyQualifiedAppIdentifier: sourceApp,
+                }),
+            ).wasCalledOnce();
+        });
+
+        it('should notify newInstanceHandler with an undefined window when none was captured', async () => {
+            const instance = createInstance();
+
+            const mockNewInstanceHandler = Mock.create<{
+                handler: (params: NewInstanceStrategyParams) => void;
+            }>().setup(setupFunction('handler'));
+
+            instance.newInstanceHandler = mockNewInstanceHandler.mock.handler;
+
+            const sourceApp: FullyQualifiedAppIdentifier = {
+                appId: sourceAppId,
+                instanceId: 'instanceTwo',
+            };
+
+            generateUuidResult = sourceApp.instanceId;
+            mockDirectory.setupFunction('registerNewInstance', () => {
+                return Promise.resolve({
+                    application: Mock.create<AppDirectoryApplication>().setup(setupProperty('appId', sourceApp.appId))
+                        .mock,
+                    identifier: sourceApp,
+                });
+            });
+
+            const validationMessage = createValidationRequestMessage();
+
+            mockRootMessagingProvider.functionCallLookup.subscribe?.[0][0]({
+                payload: validationMessage,
+                channelId: 'channelTwo',
+            });
+
+            await waitForMessage(message => message.payload.type === 'WCP5ValidateAppIdentityResponse');
+
+            expect(
+                mockNewInstanceHandler.withFunction('handler').withParametersEqualTo({
+                    window: undefined,
+                    fullyQualifiedAppIdentifier: sourceApp,
+                }),
             ).wasCalledOnce();
         });
     });
