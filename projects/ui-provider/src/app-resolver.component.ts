@@ -376,9 +376,9 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                     <svg height="15" width="15">
                         <path
                             d="M0 0 L15 15 M0 15 L15 0"
-                            style="fill:none;stroke:${document.documentElement.getAttribute('data-bs-theme') === 'dark'
-                                ? 'white'
-                                : 'black'};stroke-width:1.5"
+                            style="fill:none;stroke:${
+                                document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'white' : 'black'
+                            };stroke-width:1.5"
                         />
                         Close
                     </svg>
