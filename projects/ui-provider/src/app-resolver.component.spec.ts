@@ -258,9 +258,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         type IntentApps = { intent: string; apps: AppIdentifier[] };
 
         type ContextTestExpected =
-            | undefined
-            | { app: number; intent: number }
-            | { intent: number; apps: ExpectedIndexes }[];
+            undefined | { app: number; intent: number } | { intent: number; apps: ExpectedIndexes }[];
 
         interface ResolveContextTest extends Omit<ResolveIntentTest, 'apps' | 'expected'> {
             intents: IntentApps[];
@@ -356,9 +354,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
                     const payload = createContextPayload(appsInPayload, intents, filterApp, singletonLookup);
 
                     let expectedApps:
-                        | { app: number; intent: number }
-                        | { intent: string; apps: ExpectedApps }[]
-                        | undefined;
+                        { app: number; intent: number } | { intent: string; apps: ExpectedApps }[] | undefined;
 
                     if (expected != null) {
                         // map intent and app indexed to actual intents / appIdentifiers from app list

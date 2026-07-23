@@ -457,8 +457,8 @@ describe(`messages.helper`, () => {
             const mockCallback = vi.fn();
 
             const mockIsWCPHelloMessage:
-                | ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello)
-                | undefined = (() => true) as unknown as typeof mockIsWCPHelloMessage;
+                ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello) | undefined = (() =>
+                true) as unknown as typeof mockIsWCPHelloMessage;
 
             // Setup isWCPHelloMessage mock
             mockedTypePredicateHelper.setup(setupFunction('isWCPHelloMessage', mockIsWCPHelloMessage));
@@ -505,8 +505,8 @@ describe(`messages.helper`, () => {
             const mockCallback = vi.fn();
 
             const mockIsWCPHelloMessage:
-                | ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello)
-                | undefined = (() => true) as unknown as typeof mockIsWCPHelloMessage;
+                ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello) | undefined = (() =>
+                true) as unknown as typeof mockIsWCPHelloMessage;
 
             // Setup isWCPHelloMessage mock
             mockedTypePredicateHelper.setup(setupFunction('isWCPHelloMessage', mockIsWCPHelloMessage));

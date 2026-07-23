@@ -1248,8 +1248,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it('should add app when iterator emits app after initial load', async () => {
             let emitFunction:
-                | ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>)
-                | undefined;
+                ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>) | undefined;
 
             const updates: AsyncIterator<AppDirectoryApplication> = {
                 next: async () => {
@@ -1297,8 +1296,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it(`should not clear app instances when an existing local app directory entry is updated`, async () => {
             let emitFunction:
-                | ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>)
-                | undefined;
+                ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>) | undefined;
 
             const updates: AsyncIterator<AppDirectoryApplication> = {
                 next: async () => {
@@ -1383,8 +1381,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it('should add multiple apps when iterator emits apps after initial load', async () => {
             let emitFunction:
-                | ((value: AppDirectoryApplication[]) => Promise<IteratorResult<AppDirectoryApplication[]>>)
-                | undefined;
+                ((value: AppDirectoryApplication[]) => Promise<IteratorResult<AppDirectoryApplication[]>>) | undefined;
 
             const updates: AsyncIterator<AppDirectoryApplication[]> = {
                 next: async () => {

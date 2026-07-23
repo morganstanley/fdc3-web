@@ -35,14 +35,16 @@ export class ListComponent extends LitElement {
                 ${this.items?.map(
                     item => html`
                         <li class="list-group-item">
-                            ${this.checkbox
-                                ? html`<input
-                                      type="checkbox"
-                                      class="form-check-input me-3"
-                                      ?checked=${this.selectedItems.includes(item)}
-                                      @change=${(e: Event) => this.change(e, item)}
-                                  />`
-                                : ''}
+                            ${
+                                this.checkbox
+                                    ? html`<input
+                                          type="checkbox"
+                                          class="form-check-input me-3"
+                                          ?checked=${this.selectedItems.includes(item)}
+                                          @change=${(e: Event) => this.change(e, item)}
+                                      />`
+                                    : ''
+                            }
                             ${item}
                         </li>
                     `,

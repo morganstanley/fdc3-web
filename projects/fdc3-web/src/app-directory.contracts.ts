@@ -17,11 +17,7 @@ export type CitrixAppDetails = { alias: string; arguments?: string };
 export type OnlineNativeAppDetails = { url: string };
 export type OtherAppDetails = undefined;
 export type AppDirectoryApplicationDetails =
-    | WebAppDetails
-    | NativeAppDetails
-    | CitrixAppDetails
-    | OnlineNativeAppDetails
-    | OtherAppDetails;
+    WebAppDetails | NativeAppDetails | CitrixAppDetails | OnlineNativeAppDetails | OtherAppDetails;
 
 //manifest key can map to manifest object or URI from which manifest can be retrieved
 export type ApplicationHostManifests = { [key: string]: object | string };
