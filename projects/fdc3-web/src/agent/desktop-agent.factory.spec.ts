@@ -63,8 +63,7 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
 
     let defaultRootMessagingProviderFactory: MessagingProviderFactory<IRootMessagingProvider> | undefined;
     let rootMessagePublisherFactory:
-        | ((messagingProvider: IRootMessagingProvider, directory: AppDirectory) => RootMessagePublisher)
-        | undefined;
+        ((messagingProvider: IRootMessagingProvider, directory: AppDirectory) => RootMessagePublisher) | undefined;
 
     function createInstance(): DesktopAgentFactory {
         return new DesktopAgentFactory(defaultRootMessagingProviderFactory, rootMessagePublisherFactory);

@@ -280,8 +280,9 @@ function renderChannelBtn(channel: Channel, component: ChannelSelectorComponent)
         <button
             class="ms-channel-btn"
             type="button"
-            style="background-color: ${channel.displayMetadata?.color}; border-color: ${channel.displayMetadata
-                ?.color};"
+            style="background-color: ${channel.displayMetadata?.color}; border-color: ${
+                channel.displayMetadata?.color
+            };"
             @click=${() => component.joinChannel(channel.id)}
             @mouseover=${(event: MouseEvent) => {
                 if (event.target instanceof HTMLElement) {
