@@ -28,6 +28,7 @@ import { LogLevel } from '@finos/fdc3';
 import {
     AppDirectoryApplication,
     createLogger,
+    type DesktopAgentNext,
     FullyQualifiedAppIdentifier,
     getAgent,
     isChannel,
@@ -154,11 +155,20 @@ export class DefaultApp extends LitElement {
     protected override render(): TemplateResult<1> | undefined {
         return html`
             <div class="${this.getSelectedAppClass()}">
-                <app-header
-                    .heading="${this.appTitle} (${this.appIdentifier?.appId} / ${this.appIdentifier?.instanceId})"
-                    class="bg-body-tertiary d-flex h6 clickable"
-                    @click="${this.selectApp}"
-                ></app-header>
+                <div class="d-flex bg-body-tertiary">
+                    <app-header
+                        .heading="${this.appTitle} (${this.appIdentifier?.appId} / ${this.appIdentifier?.instanceId})"
+                        class="d-flex h6 clickable flex-grow-1"
+                        @click="${this.selectApp}"
+                    ></app-header>
+                    <button
+                        type="button"
+                        class="btn-close m-2"
+                        title="Close this app via fdc3.close()"
+                        aria-label="Close"
+                        @click="${this.closeApp}"
+                    ></button>
+                </div>
                 <main class="vstack gap-3 flex-grow-1 p-4">
                     ${this.renderSupportedIntents()} ${this.renderRaiseIntentSection()}
                     ${this.renderAddIntentListenerSection()} ${this.renderAppAndInstanceInfoSection()}
@@ -901,6 +911,18 @@ export class DefaultApp extends LitElement {
             .getInfo()
             .then(info => this.log(`Information about DesktopAgent:`, info))
             .catch(err => this.log(err, undefined, 'error'));
+    }
+
+    /**
+     * Closes this app instance via fdc3.close()
+     */
+    private async closeApp(): Promise<void> {
+        this.log(`Closing app via fdc3.close()`);
+
+        const agent = await getAgent();
+
+        // TEMPORARY (FDC3 3.0): close() is declared on DesktopAgentNext until it lands on the base DesktopAgent type
+        await (agent as DesktopAgentNext).close().catch(err => this.log(`Error closing app`, err, 'error'));
     }
 
     /**
