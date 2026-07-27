@@ -1,3 +1,21 @@
+## 0.17.0 (2026-07-24)
+
+### Added
+
+ * Added a `close()` implementation allowing an app to request that its own window or frame be closed (`fdc3.close()`). This feature is planned for FDC3 3.0 but is not yet available from `@finos/fdc3`, so the supporting `closeRequest`/`closeResponse` DACP message types and the `CloseError` enumeration are temporarily maintained in this library under `projects/fdc3-web/src/fdc3-next` and will be removed once FDC3 3.0 can be installed. To call `close()` the agent must be typed as `DesktopAgentNext`:
+
+ ```ts
+import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
+
+ const agent = await getAgent();
+
+ await (agent as DesktopAgentNext).close();
+```
+
+ Closing of the app's window or frame is delegated to an `ICloseApplicationStrategy`, following the same pattern as the existing open and select strategies. A default strategy is always provided that tracks and closes windows opened by the agent itself; consumers that open apps in their own windows or iframes should provide a matching `ICloseApplicationStrategy`.
+
+ Feature issue: https://github.com/finos/FDC3/issues/1809
+
 ## 0.16.0 (2026-07-22)
 
 ### 🚀 Features

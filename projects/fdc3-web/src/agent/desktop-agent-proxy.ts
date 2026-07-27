@@ -33,6 +33,8 @@ import {
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { AddIntentListenerWithContextRequest, UpdateInstanceMetadataRequest } from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
+// TEMPORARY (FDC3 3.0): import CloseRequest / isCloseResponse from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
+import { CloseRequest, isCloseResponse } from '../fdc3-next/index.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
     createRequestMessage,
@@ -168,6 +170,25 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('appIdentifier is null');
         }
         return response.payload.appIdentifier;
+    }
+
+    /**
+     * TEMPORARY (FDC3 3.0): part of the `DesktopAgentNext` extension until `close()` is added to the
+     * base FDC3 `DesktopAgent` interface. See ../fdc3-next/close.ts
+     *
+     * Requests that the Desktop Agent close this app's own window or frame. On a successful close
+     * the app is destroyed, so the returned promise will typically never resolve (the window hosting
+     * this proxy is torn down before the `closeResponse` can be handled). The promise rejects with a
+     * `CloseError` value if the Desktop Agent reports that it could not close the app.
+     */
+    public async close(): Promise<void> {
+        const message = createRequestMessage<CloseRequest>('closeRequest', this.appIdentifier, {});
+
+        const response = await this.getResponse(message, isCloseResponse);
+
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        }
     }
 
     public async findIntent(

@@ -40,12 +40,15 @@ import {
     DesktopAgentStrategies,
     EventMessage,
     FullyQualifiedAppIdentifier,
+    ICloseApplicationStrategy,
     INewInstanceStrategy,
     IOpenApplicationStrategy,
     ISelectApplicationStrategy,
     RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
+// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
+import { CloseError, CloseRequest, CloseResponse } from '../fdc3-next/index.js';
 import { isFullyQualifiedAppId } from '../helpers/index.js';
 import * as helpersImport from '../helpers/index.js';
 import { RootMessagePublisher } from '../messaging/index.js';
@@ -2415,6 +2418,137 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     meta: { ...openMessage.meta, responseUuid: mockedResponseUuid },
                     payload: { error: OpenError.ErrorOnLaunch },
                     type: 'openResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedMessage, source),
+                ).wasCalledOnce();
+            });
+        });
+
+        // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
+        describe(`closeRequest`, () => {
+            let mockCloseStrategy: IMocked<ICloseApplicationStrategy>;
+            let mockDisabledCloseStrategy: IMocked<ICloseApplicationStrategy>;
+            let mockErrorCloseStrategy: IMocked<ICloseApplicationStrategy>;
+
+            let closeMessage: CloseRequest;
+
+            beforeEach(() => {
+                mockCloseStrategy = Mock.create<ICloseApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canCloseApp', () => Promise.resolve(true)),
+                    setupFunction('closeApp', () => Promise.resolve()),
+                );
+                mockDisabledCloseStrategy = Mock.create<ICloseApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canCloseApp', () => Promise.resolve(false)),
+                    setupFunction('closeApp', () => Promise.resolve()),
+                );
+                mockErrorCloseStrategy = Mock.create<ICloseApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canCloseApp', () => Promise.resolve(true)),
+                    setupFunction('closeApp', () => Promise.reject(`could not close`)),
+                );
+
+                closeMessage = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {},
+                    type: 'closeRequest',
+                };
+            });
+
+            it(`should close app using ICloseApplicationStrategy if applicable one is provided`, async () => {
+                createInstance([mockCloseStrategy.mock]);
+
+                await postRequestMessage(closeMessage, source);
+
+                expect(mockCloseStrategy.withFunction('canCloseApp')).wasCalledOnce();
+                expect(mockCloseStrategy.withFunction('closeApp')).wasCalledOnce();
+
+                const closeParams = mockCloseStrategy.functionCallLookup['closeApp']?.[0][0];
+                expect(closeParams?.appIdentifier).toEqual(source);
+            });
+
+            it(`should not call closeApp on a strategy that returns false for canCloseApp`, async () => {
+                createInstance([mockDisabledCloseStrategy.mock, mockCloseStrategy.mock]);
+
+                await postRequestMessage(closeMessage, source);
+
+                expect(mockCloseStrategy.withFunction('closeApp')).wasCalledOnce();
+                expect(mockDisabledCloseStrategy.withFunction('closeApp')).wasNotCalled();
+            });
+
+            it(`should publish a success closeResponse when the app is closed`, async () => {
+                createInstance([mockCloseStrategy.mock]);
+
+                await postRequestMessage(closeMessage, source);
+
+                const expectedMessage: CloseResponse = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        responseUuid: mockedGeneratedUuid,
+                        source,
+                    },
+                    payload: {},
+                    type: 'closeResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedMessage, source),
+                ).wasCalledOnce();
+            });
+
+            it(`should publish closeResponse with CloseError.ErrorOnClose when no strategy can close the app`, async () => {
+                createInstance([]);
+
+                await postRequestMessage(closeMessage, source);
+
+                const expectedMessage: CloseResponse = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        responseUuid: mockedGeneratedUuid,
+                        source,
+                    },
+                    payload: {
+                        error: CloseError.ErrorOnClose,
+                    },
+                    type: 'closeResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedMessage, source),
+                ).wasCalledOnce();
+            });
+
+            it(`should publish closeResponse with CloseError.ErrorOnClose when the closing strategy throws`, async () => {
+                createInstance([mockErrorCloseStrategy.mock]);
+
+                await postRequestMessage(closeMessage, source);
+
+                const expectedMessage: CloseResponse = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        responseUuid: mockedGeneratedUuid,
+                        source,
+                    },
+                    payload: {
+                        error: CloseError.ErrorOnClose,
+                    },
+                    type: 'closeResponse',
                 };
 
                 expect(

@@ -32,16 +32,20 @@ import {
 } from '../contracts.internal.js';
 import {
     AppIdentifierListenerPair,
+    CloseApplicationStrategyParams,
     DesktopAgentNext,
     DesktopAgentStrategies,
     EventListenerKey,
     EventListenerLookup,
     FullyQualifiedAppIdentifier,
+    ICloseApplicationStrategy,
     IOpenApplicationStrategy,
     ISelectApplicationStrategy,
     NewInstanceStrategyParams,
     RequestMessage,
 } from '../contracts.js';
+// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
+import { CloseError, CloseRequest, CloseResponsePayload, createCloseResponseMessage } from '../fdc3-next/index.js';
 import {
     appInstanceEquals,
     convertToEventListenerIndex,
@@ -53,6 +57,7 @@ import {
     generateUUUrl,
     getHostManifest,
     getImplementationMetadata,
+    isCloseApplicationStrategy,
     isContext,
     isDefined,
     isFindInstancesErrors,
@@ -176,6 +181,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 return this.onIntentListenerUnsubscribeRequest(requestMessage, sourceApp);
             case 'openRequest':
                 return this.onOpenRequest(requestMessage, sourceApp);
+            // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
+            case 'closeRequest':
+                return this.onCloseRequest(requestMessage, sourceApp);
             case 'getUserChannelsRequest':
                 return this.channelMessageHandler.onGetUserChannelsRequest(requestMessage, sourceApp);
             case 'getCurrentChannelRequest':
@@ -1171,6 +1179,97 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             }),
             [fullyQualifiedAppIdentifier],
         );
+    }
+
+    /**
+     * TEMPORARY (FDC3 3.0): handles a `closeRequest` from an app that wishes to close its own
+     * window or frame. See ../fdc3-next/close.ts
+     *
+     * The actual closing of the window/frame is delegated to a registered
+     * {@link ICloseApplicationStrategy} (a default one that closes windows opened by the agent is
+     * always provided). If no strategy can close the app, or the chosen strategy throws, the app is
+     * sent a `closeResponse` carrying `CloseError.ErrorOnClose`.
+     */
+    private async onCloseRequest(requestMessage: CloseRequest, source: FullyQualifiedAppIdentifier): Promise<void> {
+        this.proxyLog('CloseRequest', LogLevel.DEBUG, { requestMessage, source });
+
+        const payload = await this.tryToCloseApp(source);
+
+        this.rootMessagePublisher.publishResponseMessage(
+            createCloseResponseMessage(payload, requestMessage.meta.requestUuid, source),
+            source,
+        );
+    }
+
+    /**
+     * Finds the first strategy that can close the given app and uses it to close the app's window
+     * or frame. Mirrors {@link tryToSelectApp}.
+     * @returns the payload to send back to the requesting app: an empty payload on success or one
+     * containing a `CloseError` if the app could not be closed.
+     */
+    private async tryToCloseApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<CloseResponsePayload> {
+        const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
+
+        const closeStrategies = (
+            await Promise.all(
+                this.applicationStrategies.filter(isCloseApplicationStrategy).map(async strategy => {
+                    const canClose = await this.canStrategyCloseApp(appIdentifier, strategy, application).catch(
+                        () => false,
+                    );
+                    return canClose ? strategy : undefined;
+                }),
+            )
+        ).filter(isDefined);
+
+        if (closeStrategies.length === 0) {
+            this.proxyLog('CloseRequest no closing strategies found', LogLevel.ERROR, { appIdentifier });
+            return { error: CloseError.ErrorOnClose };
+        }
+
+        try {
+            await this.closeAppWithStrategy(appIdentifier, closeStrategies[0], application);
+            return {};
+        } catch (err) {
+            this.proxyLog('CloseRequest error closing application', LogLevel.ERROR, { appIdentifier, err });
+            return { error: CloseError.ErrorOnClose };
+        }
+    }
+
+    private async canStrategyCloseApp(
+        appIdentifier: FullyQualifiedAppIdentifier,
+        strategy: ICloseApplicationStrategy,
+        application?: AppDirectoryApplication,
+    ): Promise<boolean> {
+        const manifest = await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
+            console.error(err),
+        );
+
+        return strategy.canCloseApp(this.createCloseStrategyParams(appIdentifier, application, manifest));
+    }
+
+    private async closeAppWithStrategy(
+        appIdentifier: FullyQualifiedAppIdentifier,
+        strategy: ICloseApplicationStrategy,
+        application?: AppDirectoryApplication,
+    ): Promise<void> {
+        const manifest = await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
+            console.error(err),
+        );
+
+        await strategy.closeApp(this.createCloseStrategyParams(appIdentifier, application, manifest));
+    }
+
+    private createCloseStrategyParams(
+        appIdentifier: FullyQualifiedAppIdentifier,
+        application: AppDirectoryApplication | undefined,
+        manifest: unknown,
+    ): CloseApplicationStrategyParams {
+        return {
+            agent: this,
+            appIdentifier,
+            appDirectoryRecord: removeHostManifests(application),
+            manifest,
+        };
     }
 
     /**
