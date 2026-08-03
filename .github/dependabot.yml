@@ -68,3 +68,7 @@ updates:
       - "/"
     schedule:
       interval: "monthly"
+    groups:
+      codeql-actions:
+        patterns:
+          - "github/codeql-action/*"
