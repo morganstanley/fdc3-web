@@ -17,6 +17,7 @@ import {
     AppDirectoryApplication,
     ApplicationStrategyParams,
     BackoffRetryParams,
+    BridgeParams,
     CloseApplicationStrategyParams,
     createLogger,
     createWebAppDirectoryEntry,
@@ -79,6 +80,17 @@ function getAppDirectoryUrls(): (string | LocalAppDirectory)[] {
     return defaultAppDirectoryUrls;
 }
 
+/**
+ * Opts in to FDC3 Desktop Agent Bridging (https://fdc3.finos.org/docs/agent-bridging/spec) only
+ * when explicitly requested via `?bridge=true` - without it, undefined is spread away entirely so
+ * the agent is constructed exactly as it was before bridging existed, with zero new network activity.
+ */
+function getBridgeParams(): BridgeParams | undefined {
+    const params = new URLSearchParams(window.location.search);
+
+    return params.get('bridge') === 'true' ? {} : undefined;
+}
+
 const retryParams: BackoffRetryParams = {
     maxAttempts: 5,
     baseDelay: 500,
@@ -125,12 +137,15 @@ export class RootApp
 
         getAgent({
             failover: async () => {
+                const bridge = getBridgeParams();
+
                 const agent = await new DesktopAgentFactory().createRoot({
                     rootAppId: 'test-harness-root-app',
                     uiProvider: agent => Promise.resolve(new AppResolverComponent(agent, document)),
                     appDirectoryEntries: getAppDirectoryUrls(), //passes in app directory web service base url
                     applicationStrategies: [this],
                     backoffRetry: retryParams,
+                    ...(bridge != null ? { bridge } : {}),
                 });
 
                 this.directory = agent.directory;

@@ -68,4 +68,13 @@ export const BRIDGE = {
      * interaction. The bridge connection rejects immediately on disconnect regardless.
      */
     INTENT_RESULT_TIMEOUT_MS: 300000,
+    /**
+     * Bound on how long DesktopAgentImpl.raiseIntentFromRemote waits for a local intent listener to
+     * register, deliberately shorter than the default RESPONSE_TIMEOUT_MS (15000): a bridge server
+     * relaying a raiseIntentRequest must itself answer the originating agent within its own
+     * per-family timeout (recommended default 12000ms), so a slow-but-eventual local listener must
+     * time out here first and produce a meaningful IntentDeliveryFailed, rather than the bridge
+     * timing the whole request out with a generic error while the intent is still in flight locally.
+     */
+    REMOTE_INTENT_LISTENER_TIMEOUT_MS: 10000,
 } as const;

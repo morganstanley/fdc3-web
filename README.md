@@ -294,8 +294,9 @@ Available log levels from `@finos/fdc3` are:
 - `messaging-provider` - A messaging provider for the fdc3 library. This is an implementation of the messaging-provider interface that provides communications between frames and windows, including in other domains. This will be published for use in other applications.
 - `ui-provider` - A UI provider for the fdc3 library. This provides a Resolver and Channel Selector. This will be published for use in other applications.
 - `test-harness` - A Lit app for testing local messaging between different apps working in the same context. Will depend on `lib`.
+- `bridging-server` - An [FDC3 Desktop Agent Bridge](https://fdc3.finos.org/docs/agent-bridging/spec) server, implementing the bridge side of the protocol that `lib`'s `bridge` option connects to. Run it with `npx nx serve fdc3-web-bridging-server`. Not depended on by `lib` - it's a separate process a Desktop Agent connects to over WebSocket.
 
-For most development running `npm start` will be sufficient to test implementation and cross-frame / cross origin communication. This will build and run `test-harness`.
+For most development running `npm start` will be sufficient to test implementation and cross-frame / cross origin communication. This will build and run `test-harness`. To also test Desktop Agent Bridging, run `npx nx serve fdc3-web-bridging-server` in a second terminal, then open the test harness with `?bridge=true` appended to the root app's URL.
 
 
 ### Running Conformance Tests

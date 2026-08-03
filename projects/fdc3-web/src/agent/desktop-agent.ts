@@ -23,7 +23,7 @@ import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
-import { HEARTBEAT } from '../constants.js';
+import { BRIDGE, HEARTBEAT } from '../constants.js';
 import {
     AddIntentListenerWithContextRequest,
     IDesktopAgentBridge,
@@ -710,7 +710,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     }): Promise<BrowserTypes.IntentResolution> {
         const app = await this.returnOrLaunchAppInstance(params.app, params.context);
 
-        await this.awaitIntentListener(app, params.intent);
+        await this.awaitIntentListener(app, params.intent, BRIDGE.REMOTE_INTENT_LISTENER_TIMEOUT_MS);
 
         this.rootMessagePublisher.publishEvent(
             createEvent<BrowserTypes.IntentEvent>('intentEvent', {

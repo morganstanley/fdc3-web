@@ -1,0 +1,42 @@
+{
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "name": "fdc3-web-bridging-server",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "executor": "@nx/js:tsc"
+        },
+        "generate-docs": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "npx typedoc {projectRoot}/src/index.ts --out docs/{projectName} --options typedoc.json --tsconfig {projectRoot}/tsconfig.lib.json"
+            },
+            "dependsOn": []
+        },
+        "type-check-specs": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "tsc -p {projectRoot}/tsconfig.spec.json --noEmit"
+            },
+            "dependsOn": []
+        },
+        "build:release": {},
+        "build-node": {
+            "executor": "@nx/esbuild:esbuild",
+            "options": {
+                "outputPath": "build/{projectName}/node",
+                "format": ["esm"],
+                "main": "{projectRoot}/src/main.ts",
+                "tsConfig": "{projectRoot}/tsconfig.lib.json"
+            }
+        },
+        "serve": {
+            "continuous": true,
+            "executor": "@nx/js:node",
+            "options": {
+                "buildTarget": "fdc3-web-bridging-server:build-node",
+                "runBuildTargetDependencies": false
+            }
+        }
+    }
+}

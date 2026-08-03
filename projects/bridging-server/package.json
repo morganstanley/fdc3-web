@@ -1,0 +1,29 @@
+{
+    "name": "@morgan-stanley/fdc3-web-bridging-server",
+    "main": "index.js",
+    "types": "index.d.ts",
+    "type": "module",
+    "version": "0.17.0",
+    "license": "Apache-2.0",
+    "author": "Morgan Stanley",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/morganstanley/fdc3-web"
+    },
+    "bin": {
+        "fdc3-web-bridging-server": "main.js"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "peerDependencies": {
+        "@finos/fdc3": "^2.2.0"
+    },
+    "dependencies": {
+        "ws": "^8.18.2"
+    },
+    "devDependencies": {
+        "@morgan-stanley/fdc3-web": "^0.17.0",
+        "@types/ws": "^8.18.1"
+    }
+}

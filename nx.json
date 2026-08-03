@@ -83,7 +83,8 @@
             "manifestRootsToUpdate": [
                 "projects/fdc3-web/",
                 "projects/messaging-provider/",
-                "projects/ui-provider/"
+                "projects/ui-provider/",
+                "projects/bridging-server/"
             ]
         }
     },

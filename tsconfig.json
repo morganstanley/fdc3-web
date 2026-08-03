@@ -27,7 +27,8 @@
         "paths": {
             "@morgan-stanley/fdc3-web": ["./dist/@morgan-stanley/fdc3-web/"],
             "@morgan-stanley/fdc3-web-messaging-provider": ["./dist/@morgan-stanley/fdc3-web-messaging-provider"],
-            "@morgan-stanley/fdc3-web-ui-provider": ["./dist/@morgan-stanley/fdc3-web-ui-provider"]
+            "@morgan-stanley/fdc3-web-ui-provider": ["./dist/@morgan-stanley/fdc3-web-ui-provider"],
+            "@morgan-stanley/fdc3-web-bridging-server": ["./dist/@morgan-stanley/fdc3-web-bridging-server"]
         }
     }
 }

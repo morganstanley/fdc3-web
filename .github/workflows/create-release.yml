@@ -41,3 +41,6 @@ jobs:
 
             - name: Publish UI Provider Library
               run: cd dist/fdc3-web-ui-provider && npm publish --provenance --access public
+
+            - name: Publish Bridging Server
+              run: cd dist/fdc3-web-bridging-server && npm publish --provenance --access public
