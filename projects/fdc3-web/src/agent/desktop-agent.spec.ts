@@ -34,7 +34,12 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
-import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
+import {
+    IDesktopAgentBridge,
+    RemoteAppIdentifier,
+    UpdateInstanceMetadataRequest,
+    UpdateInstanceMetadataResponse,
+} from '../contracts.internal.js';
 import {
     DesktopAgentNext,
     DesktopAgentStrategies,
@@ -1092,10 +1097,18 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 };
 
                 mockedHelpers.setupFunction('decodeUUUrl', value => {
-                    const parsed = JSON.parse(value);
-                    const { uuid, ...payload } = parsed;
+                    // mirrors the real decodeUUUrl's contract of returning undefined for a value it
+                    // didn't encode, rather than throwing - this mock stays registered on the shared
+                    // helpers mock for the rest of the suite (reset() here only clears call counts),
+                    // so it must tolerate being invoked by unrelated later tests/background timers
+                    try {
+                        const parsed = JSON.parse(value);
+                        const { uuid, ...payload } = parsed;
 
-                    return { uuid, payload };
+                        return { uuid, payload };
+                    } catch {
+                        return undefined;
+                    }
                 });
             });
 
@@ -3447,6 +3460,478 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         .withFunction('publishEvent')
                         .withParametersEqualTo(expectedHeartbeat, [appIdentifier]),
                 ).wasNotCalled();
+            });
+        });
+    });
+
+    describe(`bridging`, () => {
+        const remoteApp: RemoteAppIdentifier = {
+            appId: 'remote-app-id',
+            instanceId: 'remote-instance-id',
+            desktopAgent: 'agent-b',
+        };
+
+        let mockBridge: IMocked<IDesktopAgentBridge>;
+
+        beforeEach(() => {
+            mockBridge = Mock.create<IDesktopAgentBridge>().setup(
+                setupProperty('agentName', 'agent-a'),
+                setupFunction('findIntent', () => Promise.resolve([])),
+                setupFunction('findIntentsByContext', () => Promise.resolve([])),
+                setupFunction('findInstances', () => Promise.resolve([])),
+                setupFunction('getAppMetadata', () => Promise.resolve(undefined)),
+                setupFunction('raiseIntent', () =>
+                    Promise.resolve({
+                        intentResolution: { intent: 'StartChat', source: remoteApp },
+                        result: new Promise<BrowserTypes.IntentResult>(() => {
+                            //never resolves by default - individual tests resolve/reject via the captured promise
+                        }),
+                    }),
+                ),
+                setupFunction('open', () => Promise.resolve(remoteApp)),
+                setupFunction('publishIntentResult'),
+                setupFunction('broadcast'),
+                setupFunction('privateChannelBroadcast'),
+                setupFunction('privateChannelOnAddContextListener'),
+                setupFunction('privateChannelOnUnsubscribe'),
+                setupFunction('privateChannelOnDisconnect'),
+                setupFunction('privateChannelEventListenerAdded'),
+                setupFunction('privateChannelEventListenerRemoved'),
+            );
+
+            mockChannelHandler.setupFunction('markPrivateChannelShared');
+        });
+
+        function createBridgedInstance(applicationStrategies?: DesktopAgentStrategies[]): DesktopAgentImpl {
+            const instance = new DesktopAgentImpl({
+                appIdentifier,
+                rootMessagePublisher: mockRootPublisher.mock,
+                directory: mockAppDirectory.mock,
+                channelFactory: Mock.create<ChannelFactory>().setup(
+                    setupFunction('createPublicChannel', channel => createMockChannel(channel).mock),
+                    setupFunction('createChannels', () => Mock.create<Channels>().mock),
+                    setupFunction('createMessageHandler', () => mockChannelHandler.mock),
+                ).mock,
+                applicationStrategies,
+                window: mockWindow.mock,
+            });
+
+            instance.connectBridge(mockBridge.mock);
+
+            return instance;
+        }
+
+        it(`connectBridge should wire the bridge into the app directory and channel message handler`, () => {
+            createBridgedInstance();
+
+            expect(mockAppDirectory.mock.remoteAppSource).toBe(mockBridge.mock);
+            expect(mockChannelHandler.mock.bridge).toBe(mockBridge.mock);
+        });
+
+        describe(`raiseIntentRequest targeting a remote app`, () => {
+            beforeEach(() => {
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(remoteApp));
+            });
+
+            it(`should delegate to the bridge instead of local resolution, and not raise a local intentEvent`, async () => {
+                createBridgedInstance();
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat', context: contact },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, source);
+
+                expect(
+                    mockBridge
+                        .withFunction('raiseIntent')
+                        .withParametersEqualTo({ intent: 'StartChat', context: contact, app: remoteApp, source }),
+                ).wasCalledOnce();
+
+                const expectedResponse: BrowserTypes.RaiseIntentResponse = {
+                    meta: { ...raiseIntentRequest.meta, responseUuid: mockedResponseUuid },
+                    payload: { intentResolution: { intent: 'StartChat', source: remoteApp } },
+                    type: 'raiseIntentResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+
+                const intentEventCalls =
+                    mockRootPublisher.functionCallLookup.publishEvent?.filter(call => call[0].type === 'intentEvent') ??
+                    [];
+                expect(intentEventCalls).toHaveLength(0);
+            });
+
+            it(`should relay a later result from the bridge as raiseIntentResultResponse to the originating app`, async () => {
+                let resolveResult: (result: BrowserTypes.IntentResult) => void = () => undefined;
+                mockBridge.setupFunction('raiseIntent', () =>
+                    Promise.resolve({
+                        intentResolution: { intent: 'StartChat', source: remoteApp },
+                        result: new Promise<BrowserTypes.IntentResult>(resolve => (resolveResult = resolve)),
+                    }),
+                );
+
+                createBridgedInstance();
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat', context: contact },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, source);
+
+                const sharedChannel: BrowserTypes.Channel = { id: mockedChannelId, type: 'private' };
+                const channelResult: BrowserTypes.IntentResult = { channel: sharedChannel };
+                resolveResult(channelResult);
+                await wait();
+
+                const expectedResultResponse: BrowserTypes.RaiseIntentResultResponse = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        responseUuid: mockedResponseUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: { intentResult: channelResult },
+                    type: 'raiseIntentResultResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResultResponse, source),
+                ).wasCalledOnce();
+
+                expect(
+                    mockChannelHandler
+                        .withFunction('markPrivateChannelShared')
+                        .withParametersEqualTo(sharedChannel, 'agent-b'),
+                ).wasCalledOnce();
+            });
+
+            it(`should publish a mapped error when the bridge rejects the raiseIntent`, async () => {
+                mockBridge.setupFunction('raiseIntent', () => Promise.reject(ResolveError.NoAppsFound));
+
+                createBridgedInstance();
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat', context: contact },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, source);
+
+                const expectedResponse: BrowserTypes.RaiseIntentResponse = {
+                    meta: { ...raiseIntentRequest.meta, responseUuid: mockedResponseUuid },
+                    payload: { error: ResolveError.NoAppsFound },
+                    type: 'raiseIntentResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+            });
+        });
+
+        describe(`raiseIntentForContextRequest targeting a remote app`, () => {
+            it(`should delegate the resolver's chosen intent to the bridge`, async () => {
+                mockAppDirectory.setupFunction('resolveAppForContext', () =>
+                    Promise.resolve({ intent: 'StartChat', app: remoteApp }),
+                );
+
+                createBridgedInstance();
+
+                const raiseIntentForContextRequest: BrowserTypes.RaiseIntentForContextRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { context: contact },
+                    type: 'raiseIntentForContextRequest',
+                };
+
+                await postRequestMessage(raiseIntentForContextRequest, source);
+
+                expect(
+                    mockBridge
+                        .withFunction('raiseIntent')
+                        .withParametersEqualTo({ intent: 'StartChat', context: contact, app: remoteApp, source }),
+                ).wasCalledOnce();
+
+                const expectedResponse: BrowserTypes.RaiseIntentForContextResponse = {
+                    meta: { ...raiseIntentForContextRequest.meta, responseUuid: mockedResponseUuid },
+                    payload: { intentResolution: { intent: 'StartChat', source: remoteApp } },
+                    type: 'raiseIntentForContextResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+            });
+        });
+
+        describe(`openRequest targeting a remote app`, () => {
+            it(`should delegate to the bridge and not consult the local app directory`, async () => {
+                createBridgedInstance();
+
+                const openRequest: BrowserTypes.OpenRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { app: remoteApp, context: contact },
+                    type: 'openRequest',
+                };
+
+                await postRequestMessage(openRequest, source);
+
+                expect(
+                    mockBridge.withFunction('open').withParametersEqualTo({ app: remoteApp, context: contact, source }),
+                ).wasCalledOnce();
+
+                const expectedResponse: BrowserTypes.OpenResponse = {
+                    meta: { ...openRequest.meta, responseUuid: mockedResponseUuid },
+                    payload: { appIdentifier: remoteApp },
+                    type: 'openResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+
+                expect(mockAppDirectory.withFunction('getAppDirectoryApplication')).wasNotCalled();
+            });
+
+            it(`should publish a mapped error when the bridge rejects the open`, async () => {
+                mockBridge.setupFunction('open', () => Promise.reject(OpenError.AppNotFound));
+
+                createBridgedInstance();
+
+                const openRequest: BrowserTypes.OpenRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { app: remoteApp },
+                    type: 'openRequest',
+                };
+
+                await postRequestMessage(openRequest, source);
+
+                const expectedResponse: BrowserTypes.OpenResponse = {
+                    meta: { ...openRequest.meta, responseUuid: mockedResponseUuid },
+                    payload: { error: OpenError.AppNotFound },
+                    type: 'openResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
+            });
+        });
+
+        it(`should treat an app whose desktopAgent equals our own assigned name as local, not remote`, async () => {
+            const chosenApp = { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId, desktopAgent: 'agent-a' };
+            mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(chosenApp));
+
+            createBridgedInstance([mockSelectStrategy.mock]);
+
+            const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                payload: { intent: 'StartChat' },
+                type: 'addIntentListenerRequest',
+            };
+            await postRequestMessage(addIntentListenerRequest, source);
+
+            const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                payload: { intent: 'StartChat', context: contact },
+                type: 'raiseIntentRequest',
+            };
+
+            await postRequestMessage(raiseIntentRequest, source);
+
+            expect(mockBridge.withFunction('raiseIntent')).wasNotCalled();
+
+            const expectedEvent: BrowserTypes.IntentEvent = {
+                meta: { timestamp: currentDate, eventUuid: mockedEventUuid },
+                payload: {
+                    context: contact,
+                    intent: 'StartChat',
+                    originatingApp: source,
+                    raiseIntentRequestUuid: mockedGeneratedUurl,
+                },
+                type: 'intentEvent',
+            };
+
+            expect(
+                mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedEvent, [chosenApp]),
+            ).wasCalledOnce();
+        });
+
+        describe(`raiseIntentFromRemote`, () => {
+            it(`should publish an intentEvent with the remote originatingApp and return the resolution`, async () => {
+                const instance = createBridgedInstance([mockSelectStrategy.mock]);
+
+                const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat' },
+                    type: 'addIntentListenerRequest',
+                };
+                await postRequestMessage(addIntentListenerRequest, source);
+
+                const resolution = await instance.raiseIntentFromRemote({
+                    requestUuid: 'bridge-request-uuid',
+                    intent: 'StartChat',
+                    context: contact,
+                    app: source,
+                    originatingApp: remoteApp,
+                });
+
+                expect(resolution).toEqual({ intent: 'StartChat', source });
+
+                const expectedEvent: BrowserTypes.IntentEvent = {
+                    meta: { timestamp: currentDate, eventUuid: mockedEventUuid },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        originatingApp: remoteApp,
+                        raiseIntentRequestUuid: mockedGeneratedUurl,
+                    },
+                    type: 'intentEvent',
+                };
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedEvent, [source]),
+                ).wasCalledOnce();
+            });
+        });
+
+        describe(`onIntentResultRequest for a remote-originated raiseIntent`, () => {
+            beforeEach(() => {
+                mockedHelpers.setupFunction('decodeUUUrl', value => {
+                    // mirrors the real decodeUUUrl's contract of returning undefined for a value it
+                    // didn't encode, rather than throwing - this mock stays registered on the shared
+                    // helpers mock for the rest of the suite (reset() here only clears call counts),
+                    // so it must tolerate being invoked by unrelated later tests/background timers
+                    try {
+                        const parsed = JSON.parse(value);
+                        const { uuid, ...payload } = parsed;
+
+                        return { uuid, payload };
+                    } catch {
+                        return undefined;
+                    }
+                });
+            });
+
+            afterEach(() => {
+                reset(mockedHelpers);
+            });
+
+            it(`should route the result to bridge.publishIntentResult instead of the local path`, async () => {
+                createBridgedInstance();
+
+                const intentResultRequest: BrowserTypes.IntentResultRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: {
+                        intentResult: { context: { type: 'expected.context' } },
+                        intentEventUuid: 'intentEventUUid',
+                        raiseIntentRequestUuid: JSON.stringify({ ...remoteApp, uuid: 'bridge-request-uuid' }),
+                    },
+                    type: 'intentResultRequest',
+                };
+
+                await postRequestMessage(intentResultRequest, source);
+
+                expect(
+                    mockBridge
+                        .withFunction('publishIntentResult')
+                        .withParametersEqualTo('bridge-request-uuid', remoteApp, {
+                            context: { type: 'expected.context' },
+                        }),
+                ).wasCalledOnce();
+
+                expect(
+                    mockRootPublisher.functionCallLookup.publishResponseMessage?.filter(
+                        call => call[0].type === 'raiseIntentResultResponse',
+                    ),
+                ).toHaveLength(0);
+            });
+        });
+
+        describe(`getInfoRequest`, () => {
+            it(`should report DesktopAgentBridging: true when a bridge is connected`, async () => {
+                createBridgedInstance();
+
+                const getInfoMessage: BrowserTypes.GetInfoRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: {},
+                    type: 'getInfoRequest',
+                };
+
+                await postRequestMessage(getInfoMessage, source);
+
+                const publishedResponse = mockRootPublisher.functionCallLookup.publishResponseMessage?.[0][0] as
+                    | BrowserTypes.GetInfoResponse
+                    | undefined;
+
+                expect(publishedResponse?.payload.implementationMetadata?.optionalFeatures.DesktopAgentBridging).toBe(
+                    true,
+                );
+            });
+        });
+
+        describe(`no-bridge invariant`, () => {
+            it(`should behave exactly as today for a foreign-desktopAgent target when no bridge is connected`, async () => {
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(remoteApp));
+
+                // createInstance() (not createBridgedInstance()) never calls connectBridge, so the
+                // desktopAgent field on the resolved app is simply ignored, exactly as before bridging existed
+                createInstance([mockSelectStrategy.mock]);
+
+                const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: remoteApp.appId, instanceId: remoteApp.instanceId! },
+                    },
+                    payload: { intent: 'StartChat' },
+                    type: 'addIntentListenerRequest',
+                };
+                await postRequestMessage(addIntentListenerRequest, {
+                    appId: remoteApp.appId,
+                    instanceId: remoteApp.instanceId!,
+                });
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat', context: contact },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, source);
+
+                expect(mockBridge.withFunction('raiseIntent')).wasNotCalled();
+
+                const expectedResponse: BrowserTypes.RaiseIntentResponse = {
+                    meta: { ...raiseIntentRequest.meta, responseUuid: mockedResponseUuid },
+                    payload: { intentResolution: { intent: 'StartChat', source: remoteApp } },
+                    type: 'raiseIntentResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedResponse, source),
+                ).wasCalledOnce();
             });
         });
     });

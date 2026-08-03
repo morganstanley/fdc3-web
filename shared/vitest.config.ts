@@ -26,6 +26,7 @@ export default defineConfig({
                 '**/dist/**',
                 '**/node_modules/**',
                 '**/index.ts',
+                '**/*.fake.ts',
                 '**/*.d.ts',
                 '**/test.ts',
                 '**/test-setup.ts',

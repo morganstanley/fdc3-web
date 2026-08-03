@@ -199,6 +199,77 @@ export interface IProxyMessagingProvider {
     addResponseHandler(callback: IncomingMessageCallback<IProxyIncomingMessageEnvelope>): void;
 }
 
+export type BridgeConnectionState = 'disconnected' | 'connecting' | 'connected';
+
+export type Subscription = { unsubscribe: () => void };
+
+/**
+ * Moves JSON payloads between this Desktop Agent and a Desktop Agent Bridge only - it never
+ * interprets them. Mirrors the role IRootMessagingProvider plays for proxy agents.
+ */
+export interface IBridgeTransport {
+    readonly state: BridgeConnectionState;
+    connect(): void;
+    send(message: unknown): void;
+    subscribe(callback: (message: unknown) => void): Subscription;
+    onStateChange(callback: (state: BridgeConnectionState) => void): Subscription;
+    /**
+     * The bridge rejected us (e.g. authentication failure). Drops this connection but keeps
+     * scanning for a bridge to connect to.
+     */
+    reset(): void;
+    /**
+     * Permanent teardown: closes the connection, clears all timers, and stops retrying.
+     */
+    close(): void;
+}
+
+export type BridgeTransportFactory = () => Promise<IBridgeTransport>;
+
+/**
+ * Configures Desktop Agent Bridging (https://fdc3.finos.org/docs/agent-bridging/spec). When omitted
+ * from RootDesktopAgentFactoryParams, no bridge is constructed and no bridging behaviour is active.
+ */
+export type BridgeParams = {
+    /**
+     * Desktop Agent name requested from the bridge. Defaults to rootAppId.
+     */
+    requestedName?: string;
+    /**
+     * Ports scanned to discover the bridge websocket. Defaults to BRIDGE.DEFAULT_PORT_RANGE.
+     */
+    portRange?: [number, number];
+    /**
+     * Overrides the default websocket transport. Used in unit tests to inject a fake transport so
+     * no real network connection is attempted.
+     */
+    transportFactory?: BridgeTransportFactory;
+    /**
+     * JWT presented to the bridge if ConnectionStep2Hello reports authRequired.
+     */
+    authToken?: string;
+    /**
+     * Verifies the bridge's own JWT from the hello message. If omitted, any bridge that identifies
+     * itself is trusted.
+     */
+    validateBridgeAuthToken?: (authToken: string | undefined) => boolean | Promise<boolean>;
+    /**
+     * Milliseconds to wait for another agent (via the bridge) to respond to a request. Defaults to
+     * BRIDGE.RESPONSE_TIMEOUT_MS.
+     */
+    responseTimeoutMs?: number;
+    /**
+     * Milliseconds to wait for the result of an intent raised on a remote agent. Defaults to
+     * BRIDGE.INTENT_RESULT_TIMEOUT_MS.
+     */
+    intentResultTimeoutMs?: number;
+    /**
+     * Milliseconds to pause after exhausting the port range before scanning again. Defaults to
+     * BRIDGE.RETRY_PAUSE_MS.
+     */
+    reconnectDelayMs?: number;
+};
+
 /**
  * Extends the FDC3 DesktopAgent interface with features planned for the next version of FDC3.
  */
@@ -361,6 +432,11 @@ export type RootDesktopAgentFactoryParams = {
      * The appId field is omitted as it is derived from rootAppId.
      */
     appDirectoryEntry?: Omit<AppDirectoryApplication, 'appId'>;
+    /**
+     * Opts this agent in to Desktop Agent Bridging (https://fdc3.finos.org/docs/agent-bridging/spec).
+     * When omitted no bridge is constructed and no bridging behaviour is active.
+     */
+    bridge?: BridgeParams;
 };
 
 export type ProxyDesktopAgentFactoryParams = {
@@ -384,7 +460,10 @@ export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & 
 };
 
 export type DesktopAgentStrategies =
-    IOpenApplicationStrategy | ISelectApplicationStrategy | INewInstanceStrategy | ICloseApplicationStrategy;
+    | IOpenApplicationStrategy
+    | ISelectApplicationStrategy
+    | INewInstanceStrategy
+    | ICloseApplicationStrategy;
 
 export type NewInstanceStrategyParams = {
     /**

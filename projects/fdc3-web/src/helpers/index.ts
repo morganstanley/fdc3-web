@@ -16,6 +16,7 @@ export * from './app-identity.helper.js';
 export * from './context.helper.js';
 export * from './url-helper.js';
 export * from './finos-type-predicate.helper.js';
+export * from './bridging-type-predicate.helper.js';
 export * from './app-directory-applications.helper.js';
 export * from './get-host-manifest.helper.js';
 export * from './event-type.helper.js';

@@ -73,6 +73,12 @@ export class RootMessagePublisher implements IRootPublisher {
             | BrowserTypes.WebConnectionProtocol6Goodbye
         >,
         private directory: AppDirectory,
+        /**
+         * Whether Desktop Agent Bridging is configured for this agent - reported in the
+         * implementationMetadata sent as part of the WCP5 handshake response, so it agrees with the
+         * value DesktopAgentImpl.getInfo() reports.
+         */
+        private bridgingEnabled = false,
     ) {
         rootMessagingProvider.subscribe(message => this.onMessage(message));
     }
@@ -259,7 +265,9 @@ export class RootMessagePublisher implements IRootPublisher {
             payload: {
                 ...identifier,
                 instanceUuid: generateUUID(),
-                implementationMetadata: await getImplementationMetadata(identifier, application),
+                implementationMetadata: await getImplementationMetadata(identifier, application, {
+                    DesktopAgentBridging: this.bridgingEnabled,
+                }),
             },
         };
 

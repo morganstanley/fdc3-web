@@ -19,6 +19,7 @@ import {
 } from '@morgan-stanley/ts-mocking-bird';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppDirectory } from '../app-directory/index.js';
+import { FakeBridgeTransport } from '../bridge/bridge-transport.fake.js';
 import {
     FullyQualifiedAppIdentifier,
     IProxyMessagingProvider,
@@ -63,7 +64,8 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
 
     let defaultRootMessagingProviderFactory: MessagingProviderFactory<IRootMessagingProvider> | undefined;
     let rootMessagePublisherFactory:
-        ((messagingProvider: IRootMessagingProvider, directory: AppDirectory) => RootMessagePublisher) | undefined;
+        | ((messagingProvider: IRootMessagingProvider, directory: AppDirectory) => RootMessagePublisher)
+        | undefined;
 
     function createInstance(): DesktopAgentFactory {
         return new DesktopAgentFactory(defaultRootMessagingProviderFactory, rootMessagePublisherFactory);
@@ -250,6 +252,41 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
             });
 
             expect(mockedWindow.withSetter('fdc3')).wasNotCalled();
+        });
+
+        describe(`bridge`, () => {
+            it(`should construct and connect the bridge via the injected transportFactory, without awaiting the handshake`, async () => {
+                const transport = new FakeBridgeTransport();
+                let transportFactoryCallCount = 0;
+                const instance = createInstance();
+
+                const agent = await instance.createRoot({
+                    rootAppId: mockRootAppId,
+                    messagingProviderFactory: mockedFactory.mock.factory,
+                    bridge: {
+                        transportFactory: () => {
+                            transportFactoryCallCount++;
+                            return Promise.resolve(transport);
+                        },
+                    },
+                });
+
+                // createRoot resolves even though the fake transport never completes the handshake
+                expect(agent).toBeInstanceOf(DesktopAgentImpl);
+                expect(transportFactoryCallCount).toBe(1);
+                expect(transport.connectCallCount).toBe(1);
+            });
+
+            it(`should not construct a bridge transport when no bridge param is supplied`, async () => {
+                const instance = createInstance();
+
+                const agent = await instance.createRoot({
+                    rootAppId: mockRootAppId,
+                    messagingProviderFactory: mockedFactory.mock.factory,
+                });
+
+                expect(agent).toBeInstanceOf(DesktopAgentImpl);
+            });
         });
     });
 });

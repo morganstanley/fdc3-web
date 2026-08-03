@@ -11,6 +11,7 @@
 import { type DesktopAgent, LogLevel } from '@finos/fdc3';
 import { DefaultResolver } from '../app-directory/app-resolver.default.js';
 import { AppDirectory } from '../app-directory/index.js';
+import { DesktopAgentBridge } from '../bridge/index.js';
 import { ChannelFactory } from '../channel/index.js';
 import {
     IRootMessagingProvider,
@@ -39,6 +40,7 @@ export class DesktopAgentFactory {
         private rootMessagePublisherFactory?: (
             messagingProvider: IRootMessagingProvider,
             directory: AppDirectory,
+            bridgingEnabled?: boolean,
         ) => RootMessagePublisher,
     ) {}
 
@@ -71,10 +73,12 @@ export class DesktopAgentFactory {
             factoryParams.backoffRetry,
             factoryParams.appDirectoryEntry,
         );
+        const bridgingEnabled = factoryParams.bridge != null;
+
         const rootMessagePublisher =
             this.rootMessagePublisherFactory != null
-                ? this.rootMessagePublisherFactory(messagingProvider, directory)
-                : new RootMessagePublisher(messagingProvider, directory);
+                ? this.rootMessagePublisherFactory(messagingProvider, directory, bridgingEnabled)
+                : new RootMessagePublisher(messagingProvider, directory, bridgingEnabled);
 
         log('Root App Identifier', LogLevel.DEBUG, directory.rootAppIdentifier);
 
@@ -92,6 +96,22 @@ export class DesktopAgentFactory {
         agentResolve(agent);
 
         this.updateWindow(agent);
+
+        if (factoryParams.bridge != null) {
+            const bridge = await DesktopAgentBridge.create({
+                agent,
+                params: factoryParams.bridge,
+                defaultRequestedName: factoryParams.rootAppId,
+                logLevels: factoryParams.logLevels,
+            });
+
+            agent.connectBridge(bridge);
+
+            // not awaited - a missing/slow bridge server must never delay or fail agent creation
+            bridge.connect();
+
+            log('Bridge connecting', LogLevel.DEBUG);
+        }
 
         return agent;
     }

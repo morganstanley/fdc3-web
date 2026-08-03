@@ -103,6 +103,7 @@ export async function getAppDirectoryApplicationsImpl(
 export function getImplementationMetadata(
     appIdentifier: FullyQualifiedAppIdentifier,
     applicationMetadata?: AppMetadata,
+    optionalFeatures?: Partial<ImplementationMetadata['optionalFeatures']>,
 ): ImplementationMetadata {
     return {
         //version must be a numeric semver version
@@ -112,6 +113,7 @@ export function getImplementationMetadata(
             OriginatingAppMetadata: true,
             UserChannelMembershipAPIs: true,
             DesktopAgentBridging: false,
+            ...optionalFeatures,
         },
         appMetadata: mapApplicationToMetadata(appIdentifier, applicationMetadata),
     };

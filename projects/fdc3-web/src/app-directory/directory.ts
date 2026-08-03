@@ -19,6 +19,7 @@ import {
     ResolveError,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, LocalAppDirectory, MS_HOST_MANIFEST_KEY } from '../app-directory.contracts.js';
+import { IRemoteAppSource } from '../contracts.internal.js';
 import {
     AppHostManifestLookup,
     BackoffRetryParams,
@@ -37,6 +38,7 @@ import {
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
     isIMSHostManifest,
+    isRemoteAppIdentifier,
     isWebAppDetails,
     mapApplicationToMetadata,
     mapLocalAppDirectory,
@@ -49,6 +51,26 @@ type DirectoryEntry = { application?: AppDirectoryApplication; instances: string
 
 type IntentToContextLookup = Partial<Record<Intent, Context[]>>;
 
+/**
+ * Merges local and remote AppIntent arrays by intent name: for an intent present in both, keeps the
+ * local intent object (so a directory-supplied displayName wins) and appends the remote apps after
+ * the local ones; an intent handled only remotely is appended as-is.
+ */
+function mergeAppIntents(local: AppIntent[], remote: AppIntent[]): AppIntent[] {
+    const merged = new Map<string, AppIntent>(local.map(appIntent => [appIntent.intent.name, appIntent]));
+
+    remote.forEach(remoteAppIntent => {
+        const existing = merged.get(remoteAppIntent.intent.name);
+
+        merged.set(
+            remoteAppIntent.intent.name,
+            existing == null ? remoteAppIntent : { ...existing, apps: [...existing.apps, ...remoteAppIntent.apps] },
+        );
+    });
+
+    return [...merged.values()];
+}
+
 export class AppDirectory {
     private log = createLogger(AppDirectory, 'proxy');
 
@@ -58,6 +80,12 @@ export class AppDirectory {
 
     private readonly appDirectoryEntries: (string | LocalAppDirectory)[];
     public readonly loadDirectoryPromise: Promise<void>;
+
+    /**
+     * Assigned by DesktopAgentImpl.connectBridge when Desktop Agent Bridging is configured. When
+     * unset (the default) every method below behaves exactly as it did before bridging existed.
+     */
+    public remoteAppSource?: IRemoteAppSource;
 
     constructor(
         rootAppId: string,
@@ -83,6 +111,21 @@ export class AppDirectory {
 
     public get rootAppIdentifier(): FullyQualifiedAppIdentifier {
         return this._rootAppIdentifier;
+    }
+
+    /**
+     * Runs a remote AppDirectory lookup, degrading to fallback when no bridge is connected or the
+     * lookup rejects/times out - a bridge outage or bug must never fail a local caller.
+     */
+    private async fromRemote<T>(fallback: T, lookup: (source: IRemoteAppSource) => Promise<T>): Promise<T> {
+        if (this.remoteAppSource == null) {
+            return fallback;
+        }
+
+        return lookup(this.remoteAppSource).catch(err => {
+            this.log('Remote app lookup failed', LogLevel.WARN, err);
+            return fallback;
+        });
     }
 
     private registerRootApp(
@@ -134,6 +177,11 @@ export class AppDirectory {
         if (typeof appIdentifier === 'string') {
             // if we got a resolve error return it.
             return Promise.reject(appIdentifier);
+        }
+
+        if (isRemoteAppIdentifier(appIdentifier, this.remoteAppSource?.agentName)) {
+            // the hosting agent performs its own resolution, including launching a new instance
+            return appIdentifier;
         }
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
@@ -250,9 +298,27 @@ export class AppDirectory {
 
     /**
      * @param appId of app whose instances are being returned
-     * @returns array of AppMetadata with appIds that match given appId, or undefined if app is not known to desktop agent
+     * @param desktopAgent when supplied, also queries that specific remote agent for instances via the bridge
+     * @returns array of AppMetadata with appIds that match given appId (local and, when a bridge is connected, remote), or undefined if the app is not known locally or remotely
      */
-    public async getAppInstances(appId: string): Promise<AppMetadata[] | undefined> {
+    public async getAppInstances(appId: string, desktopAgent?: string): Promise<AppMetadata[] | undefined> {
+        const local = await this.getLocalAppInstances(appId);
+        const remote = await this.fromRemote<AppMetadata[]>([], source =>
+            source.findInstances({ appId, desktopAgent }),
+        );
+
+        if (local == null) {
+            return remote.length > 0 ? remote : undefined;
+        }
+
+        return [...local, ...remote];
+    }
+
+    /**
+     * @param appId of app whose instances are being returned
+     * @returns array of AppMetadata with appIds that match given appId, or undefined if app is not known to desktop agent's local directory
+     */
+    public async getLocalAppInstances(appId: string): Promise<AppMetadata[] | undefined> {
         await this.loadDirectoryPromise;
 
         const matchingAppIds = this.getAllMatchingFullyQualifiedAppIds(appId);
@@ -267,7 +333,7 @@ export class AppDirectory {
             })),
         );
 
-        const metadataResults = await Promise.all(identifiers.map(identifier => this.getAppMetadata(identifier)));
+        const metadataResults = await Promise.all(identifiers.map(identifier => this.getLocalAppMetadata(identifier)));
 
         return metadataResults.map((metadata, index) => metadata ?? identifiers[index]);
     }
@@ -324,6 +390,14 @@ export class AppDirectory {
 
         if (appIdentifier == null) {
             return undefined;
+        }
+
+        if (
+            isRemoteAppIdentifier(appIdentifier, this.remoteAppSource?.agentName) &&
+            isFullyQualifiedAppId(appIdentifier.appId)
+        ) {
+            // apps hosted by another agent are not in the local directory; the hosting agent validates them
+            return { ...appIdentifier, appId: appIdentifier.appId };
         }
 
         const fullyQualifiedAppId = this.getKnownFullyQualifiedAppId(appIdentifier.appId);
@@ -385,10 +459,27 @@ export class AppDirectory {
     }
 
     /**
-     * @param appId of app whose metadata is being returned
-     * @returns metadata of given app or undefined if app is not registered in app directory
+     * @param app whose metadata is being returned
+     * @returns metadata of given app - resolved remotely via the bridge when app names another
+     * Desktop Agent, otherwise from the local directory falling back to a remote lookup on a local
+     * miss - or undefined if the app is not registered anywhere
      */
     public async getAppMetadata(app: AppIdentifier): Promise<AppMetadata | undefined> {
+        if (isRemoteAppIdentifier(app, this.remoteAppSource?.agentName)) {
+            return this.fromRemote(undefined, source => source.getAppMetadata(app));
+        }
+
+        return (
+            (await this.getLocalAppMetadata(app)) ??
+            (await this.fromRemote(undefined, source => source.getAppMetadata(app)))
+        );
+    }
+
+    /**
+     * @param appId of app whose metadata is being returned
+     * @returns metadata of given app or undefined if app is not registered in the local app directory
+     */
+    public async getLocalAppMetadata(app: AppIdentifier): Promise<AppMetadata | undefined> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
@@ -445,9 +536,23 @@ export class AppDirectory {
     /**
      * @param context for which apps and intents are being found to handle it
      * @param resultType used to optionally filter apps based on type of context or channel they return
-     * @returns appIntents containing intents which handle the given context and the apps that resolve them
+     * @returns appIntents containing intents which handle the given context and the apps that resolve them, merged with results from a connected bridge (when configured) - a remote-only intent is included even if no local intent handles the context
      */
     public async getAppIntentsForContext(context: Context, resultType?: string): Promise<AppIntent[]> {
+        const local = await this.getLocalAppIntentsForContext(context, resultType);
+        const remote = await this.fromRemote<AppIntent[]>([], source =>
+            source.findIntentsByContext(context, resultType),
+        );
+
+        return mergeAppIntents(local, remote);
+    }
+
+    /**
+     * @param context for which apps and intents are being found to handle it
+     * @param resultType used to optionally filter apps based on type of context or channel they return
+     * @returns appIntents containing intents which handle the given context and the apps that resolve them, considering only this agent's local app directory
+     */
+    public async getLocalAppIntentsForContext(context: Context, resultType?: string): Promise<AppIntent[]> {
         await this.loadDirectoryPromise;
 
         //find all intents which handle given context
@@ -455,7 +560,7 @@ export class AppDirectory {
 
         //for each intent which handles given context, find all apps which resolve that intent and context, and optionally return result of given resultType
         const appIntentsForContext = await Promise.all(
-            intents.map(async intent => await this.getAppIntent(intent, context, resultType)),
+            intents.map(async intent => await this.getLocalAppIntent(intent, context, resultType)),
         );
 
         //remove duplicate appIntents
@@ -501,9 +606,24 @@ export class AppDirectory {
      * @param intent for which apps are being found to resolve it
      * @param context used to optionally filter apps based on whether they handle it
      * @param resultType used to optionally filter apps based on type of context or channel they return
-     * @returns AppIntent containing info about given intent, as well as appMetadata for apps and app instances which resolve it
+     * @returns AppIntent containing info about given intent, as well as appMetadata for apps and app instances which resolve it, both locally and (when a bridge is configured) hosted by other Desktop Agents
      */
     public async getAppIntent(intent: Intent, context?: Context, resultType?: string): Promise<AppIntent> {
+        const local = await this.getLocalAppIntent(intent, context, resultType);
+        const remote = await this.fromRemote<AppMetadata[]>([], source =>
+            source.findIntent(intent, context, resultType),
+        );
+
+        return { ...local, apps: [...local.apps, ...remote] };
+    }
+
+    /**
+     * @param intent for which apps are being found to resolve it
+     * @param context used to optionally filter apps based on whether they handle it
+     * @param resultType used to optionally filter apps based on type of context or channel they return
+     * @returns AppIntent containing info about given intent, as well as appMetadata for apps and app instances which resolve it, considering only this agent's local app directory
+     */
+    public async getLocalAppIntent(intent: Intent, context?: Context, resultType?: string): Promise<AppIntent> {
         await this.loadDirectoryPromise;
 
         const appsForIntent = await this.getAppsForIntent(intent, context, resultType);
@@ -555,7 +675,7 @@ export class AppDirectory {
                         entry.application.interop.intents.listensFor[intent].contexts.includes(context.type)) &&
                     (resultType == null || this.doesAppReturnResultType(entry.application, intent, resultType))
                 ) {
-                    const appMetadata = await this.getAppMetadata({ appId });
+                    const appMetadata = await this.getLocalAppMetadata({ appId });
                     if (appMetadata != null) {
                         //this should always be the case as the app is definitely defined in the directory
                         apps.push({ metadata: appMetadata, application: entry.application });
@@ -604,10 +724,10 @@ export class AppDirectory {
         return Promise.all(
             this.directory[appId]?.instances
                 .filter(instanceId => this.checkInstanceResolvesIntent(instanceId, intent, context))
-                //should always return result of this.getAppMetadata() as app is definitely defined in directory
+                //should always return result of this.getLocalAppMetadata() as app is definitely defined in directory
                 .map(instanceId => {
                     const application = this.directory[appId]?.application;
-                    return this.getAppMetadata({ appId, instanceId })?.then(metadata =>
+                    return this.getLocalAppMetadata({ appId, instanceId })?.then(metadata =>
                         metadata != null ? { metadata, application } : { metadata: { appId, instanceId }, application },
                     );
                 }) ?? [],
