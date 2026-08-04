@@ -635,7 +635,13 @@ export class DefaultApp extends LitElement {
         this.openedWindowChannel = await agent.getOrCreateChannel(NEW_WINDOW_PUBLIC_CHANNEL);
 
         const context: ISelectableAppsRequestContext = { type: SelectableAppsRequestContextType };
-        const resolution = await agent.raiseIntent(SelectableAppsIntent, context).catch(err => {
+
+        const findIntentApps = await agent.findIntent(SelectableAppsIntent, context);
+
+        // filter out app instances from bridge
+        const localApps = findIntentApps.apps.filter(app => app.desktopAgent == null);
+
+        const resolution = await agent.raiseIntent(SelectableAppsIntent, context, localApps[0]).catch(err => {
             this.log(`Error raising intent '${SelectableAppsIntent}'`, err, 'error');
             return null;
         });

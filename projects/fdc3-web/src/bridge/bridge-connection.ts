@@ -147,6 +147,7 @@ export class BridgeConnection {
 
         if (isOurHandshakeReply) {
             this.assignedName = message.payload.addAgent;
+            this.log(`Connected to Desktop Agent Bridge as '${this.assignedName}'`, LogLevel.INFO);
 
             if (message.payload.channelsState != null) {
                 this.params.adoptChannelsState(message.payload.channelsState);

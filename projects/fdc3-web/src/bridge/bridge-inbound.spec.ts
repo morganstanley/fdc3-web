@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DesktopAgentImpl } from '../agent/desktop-agent.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
+import { IRemoteAppSource } from '../contracts.internal.js';
 import { BridgeInboundRouter } from './bridge-inbound.js';
 import { FakeBridgeTransport } from './bridge-transport.fake.js';
 
@@ -37,6 +38,7 @@ describe(`BridgeInboundRouter`, () => {
             ),
             setupFunction('getLocalAppInstances', () => Promise.resolve([{ appId: 'local-app', instanceId: 'i1' }])),
             setupFunction('getLocalAppMetadata', () => Promise.resolve({ appId: 'local-app' })),
+            setupProperty('remoteAppSource', { agentName: 'agent-a' } as IRemoteAppSource),
         );
 
         mockChannelHandler = Mock.create<ChannelMessageHandler>().setup(
@@ -76,7 +78,12 @@ describe(`BridgeInboundRouter`, () => {
             expect(mockDirectory.withFunction('getLocalAppIntent')).wasCalledOnce();
             expect(transport.sent[0]).toEqual({
                 type: 'findIntentResponse',
-                payload: { appIntent: { intent: { name: 'ViewChart' }, apps: [{ appId: 'local-app' }] } },
+                payload: {
+                    appIntent: {
+                        intent: { name: 'ViewChart' },
+                        apps: [{ appId: 'local-app', desktopAgent: 'agent-a' }],
+                    },
+                },
                 meta: { requestUuid: 'request-uuid', responseUuid: expect.any(String), timestamp: expect.any(Date) },
             });
         });
@@ -115,6 +122,9 @@ describe(`BridgeInboundRouter`, () => {
 
             expect(mockDirectory.withFunction('getLocalAppIntentsForContext')).wasCalledOnce();
             expect((transport.sent[0] as any).type).toBe('findIntentsByContextResponse');
+            expect((transport.sent[0] as any).payload).toEqual({
+                appIntents: [{ intent: { name: 'ViewChart' }, apps: [{ appId: 'local-app', desktopAgent: 'agent-a' }] }],
+            });
         });
 
         it(`should send MalformedContext for a missing context`, async () => {
@@ -133,7 +143,7 @@ describe(`BridgeInboundRouter`, () => {
 
             expect(mockDirectory.withFunction('getLocalAppInstances')).wasCalledOnce();
             expect((transport.sent[0] as any).payload).toEqual({
-                appIdentifiers: [{ appId: 'local-app', instanceId: 'i1' }],
+                appIdentifiers: [{ appId: 'local-app', instanceId: 'i1', desktopAgent: 'agent-a' }],
             });
         });
 
@@ -156,7 +166,9 @@ describe(`BridgeInboundRouter`, () => {
                 appId: 'local-app',
                 instanceId: undefined,
             });
-            expect((transport.sent[0] as any).payload).toEqual({ appMetadata: { appId: 'local-app' } });
+            expect((transport.sent[0] as any).payload).toEqual({
+                appMetadata: { appId: 'local-app', desktopAgent: 'agent-a' },
+            });
         });
 
         it(`should send TargetAppUnavailable when the app is unknown locally`, async () => {

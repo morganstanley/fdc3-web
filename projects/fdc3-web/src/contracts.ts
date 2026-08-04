@@ -268,6 +268,13 @@ export type BridgeParams = {
      * BRIDGE.RETRY_PAUSE_MS.
      */
     reconnectDelayMs?: number;
+    /**
+     * Milliseconds to wait for a single port's websocket to open before abandoning it and trying the
+     * next port in the range. Defaults to BRIDGE.PORT_CONNECT_TIMEOUT_MS (750ms) - too short for a
+     * connection that goes through an extra network hop (e.g. a forwarded/tunnelled port), in which
+     * case every attempt at the real port can time out before it ever opens.
+     */
+    portConnectTimeoutMs?: number;
 };
 
 /**

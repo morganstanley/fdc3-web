@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { AppIdentifier, BridgingTypes, GetAgentLogLevels, LogLevel } from '@finos/fdc3';
+import { AppIdentifier, AppIntent, BridgingTypes, GetAgentLogLevels, LogLevel } from '@finos/fdc3';
 import { DesktopAgentImpl } from '../agent/desktop-agent.js';
 import { RemoteAppIdentifier } from '../contracts.internal.js';
 import { IBridgeTransport, Subscription } from '../contracts.js';
@@ -49,6 +49,25 @@ export class BridgeInboundRouter {
 
     public close(): void {
         this.subscription.unsubscribe();
+    }
+
+    /**
+     * Every AppMetadata/AppIdentifier this agent hands back over the bridge must be stamped with its
+     * own agent name - a purely local lookup (directory.getLocal*) has no reason to set it, but
+     * without it the requesting agent has no way to tell these apps apart from its own local ones
+     * (see AppDirectory.remoteAppSource / isRemoteAppIdentifier), and would resolve intents and
+     * instances against them as if they were local.
+     */
+    private get ownAgentName(): string | undefined {
+        return this.params.agent.directory.remoteAppSource?.agentName;
+    }
+
+    private stampAppMetadata<T extends AppIdentifier>(metadata: T): T {
+        return { ...metadata, desktopAgent: this.ownAgentName };
+    }
+
+    private stampAppIntent(appIntent: AppIntent): AppIntent {
+        return { ...appIntent, apps: appIntent.apps.map(app => this.stampAppMetadata(app)) };
     }
 
     private async onMessage(message: unknown): Promise<void> {
@@ -162,7 +181,9 @@ export class BridgeInboundRouter {
 
         try {
             const appIntent = await this.params.agent.directory.getLocalAppIntent(intent, context, resultType);
-            this.sendResponse('findIntentResponse', message.meta.requestUuid, { appIntent });
+            this.sendResponse('findIntentResponse', message.meta.requestUuid, {
+                appIntent: this.stampAppIntent(appIntent),
+            });
         } catch (error) {
             this.sendError('findIntentResponse', message.meta.requestUuid, toFindInstancesError(error, 'NoAppsFound'));
         }
@@ -178,7 +199,9 @@ export class BridgeInboundRouter {
 
         try {
             const appIntents = await this.params.agent.directory.getLocalAppIntentsForContext(context, resultType);
-            this.sendResponse('findIntentsByContextResponse', message.meta.requestUuid, { appIntents });
+            this.sendResponse('findIntentsByContextResponse', message.meta.requestUuid, {
+                appIntents: appIntents.map(appIntent => this.stampAppIntent(appIntent)),
+            });
         } catch (error) {
             this.sendError(
                 'findIntentsByContextResponse',
@@ -197,7 +220,9 @@ export class BridgeInboundRouter {
                 return;
             }
 
-            this.sendResponse('findInstancesResponse', message.meta.requestUuid, { appIdentifiers });
+            this.sendResponse('findInstancesResponse', message.meta.requestUuid, {
+                appIdentifiers: appIdentifiers.map(appIdentifier => this.stampAppMetadata(appIdentifier)),
+            });
         } catch (error) {
             this.sendError(
                 'findInstancesResponse',
@@ -218,7 +243,9 @@ export class BridgeInboundRouter {
                 return;
             }
 
-            this.sendResponse('getAppMetadataResponse', message.meta.requestUuid, { appMetadata });
+            this.sendResponse('getAppMetadataResponse', message.meta.requestUuid, {
+                appMetadata: this.stampAppMetadata(appMetadata),
+            });
         } catch (error) {
             this.sendError(
                 'getAppMetadataResponse',

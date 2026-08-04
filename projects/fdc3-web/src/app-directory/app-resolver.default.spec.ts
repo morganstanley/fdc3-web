@@ -304,6 +304,23 @@ describe(`${DefaultResolver.name} (app-resolver.default)`, () => {
         });
     });
 
+    describe('desktopAgent preservation', () => {
+        it('should preserve desktopAgent on the single resolved app in resolveAppForContext', async () => {
+            const instance = createInstance();
+
+            const appIntents: AppIntent[] = [
+                { apps: [{ appId: 'remote-app', desktopAgent: 'agent-b' }], intent: { name: 'StartCall' } },
+            ];
+
+            await expect(
+                instance.resolveAppForContext({ context: { type: 'contact' }, appIntents, appManifests: {} }),
+            ).resolves.toEqual({
+                intent: 'StartCall',
+                app: { appId: 'remote-app', desktopAgent: 'agent-b' },
+            });
+        });
+    });
+
     describe('qualified and unqualified app ids', () => {
         const fullyQualifiedAppId = 'my-app@jubako.ms.com';
         const unqualifiedAppId = 'my-app';

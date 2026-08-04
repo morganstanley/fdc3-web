@@ -83,9 +83,14 @@ export class DefaultResolver implements IAppResolver {
         );
 
         if (appCandidates.length === 1) {
+            const app = appCandidates[0].app;
             return {
                 intent: appCandidates[0].intent,
-                app: { appId: appCandidates[0].app.appId, instanceId: appCandidates[0].app.instanceId },
+                app: {
+                    appId: app.appId,
+                    ...(app.instanceId != null ? { instanceId: app.instanceId } : {}),
+                    ...(app.desktopAgent != null ? { desktopAgent: app.desktopAgent } : {}),
+                },
             };
         }
 

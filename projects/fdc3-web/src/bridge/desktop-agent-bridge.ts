@@ -77,6 +77,7 @@ export class DesktopAgentBridge implements IDesktopAgentBridge {
                 : new WebSocketBridgeTransport({
                       portRange: params.params.portRange,
                       retryPauseMs: params.params.reconnectDelayMs,
+                      portConnectTimeoutMs: params.params.portConnectTimeoutMs,
                       logLevels: params.logLevels,
                   });
 

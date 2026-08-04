@@ -159,6 +159,7 @@ export class ConnectionHandshake {
 
         this.params.registry.allExcept(name).forEach(other => other.connection.send(updateForOthers));
 
+        this.params.logger.info(`Agent connected: ${name} (${session.connection.id})`);
         this.params.onAgentConnected?.(name);
     }
 
@@ -179,6 +180,7 @@ export class ConnectionHandshake {
 
             this.params.registry.allExcept(name).forEach(other => other.connection.send(update));
 
+            this.params.logger.info(`Agent disconnected: ${name} (${session.connection.id})`);
             this.params.onAgentDisconnected?.(name);
         }
     }

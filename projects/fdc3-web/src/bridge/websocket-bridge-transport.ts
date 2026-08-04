@@ -157,11 +157,16 @@ export class WebSocketBridgeTransport implements IBridgeTransport {
             return;
         }
 
+        const portConnectTimeoutMs = this.params.portConnectTimeoutMs ?? BRIDGE.PORT_CONNECT_TIMEOUT_MS;
+
         this.connectTimeoutId = setTimeout(() => {
-            this.log('Timed out waiting for the connection to open', LogLevel.DEBUG);
+            this.log(
+                `Timed out waiting for ${socket.url} to open after ${portConnectTimeoutMs}ms - trying the next port`,
+                LogLevel.WARN,
+            );
             this.detachAndClose();
             this.advance();
-        }, this.params.portConnectTimeoutMs ?? BRIDGE.PORT_CONNECT_TIMEOUT_MS);
+        }, portConnectTimeoutMs);
 
         socket.onopen = () => {
             if (this.connectTimeoutId != null) {
@@ -169,6 +174,7 @@ export class WebSocketBridgeTransport implements IBridgeTransport {
                 this.connectTimeoutId = undefined;
             }
             this.lastGoodPortIndex = this.portIndex;
+            this.log(`Connected to Desktop Agent Bridge at ${socket.url}`, LogLevel.INFO);
             this.setState('connected');
         };
 

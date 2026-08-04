@@ -88,7 +88,18 @@ function getAppDirectoryUrls(): (string | LocalAppDirectory)[] {
 function getBridgeParams(): BridgeParams | undefined {
     const params = new URLSearchParams(window.location.search);
 
-    return params.get('bridge') === 'true' ? {} : undefined;
+    if (params.get('bridge') !== 'true') {
+        return undefined;
+    }
+
+    // `?bridgePortConnectTimeoutMs=5000` raises the per-port connect budget above the default
+    // 750ms - useful when the bridge port is reached through an extra hop (e.g. a forwarded/
+    // tunnelled port) that can't open a websocket that fast.
+    const portConnectTimeoutMs = Number(params.get('bridgePortConnectTimeoutMs'));
+
+    return {
+        ...(Number.isFinite(portConnectTimeoutMs) && portConnectTimeoutMs > 0 ? { portConnectTimeoutMs } : {}),
+    };
 }
 
 const retryParams: BackoffRetryParams = {
