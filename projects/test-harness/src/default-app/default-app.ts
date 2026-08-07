@@ -90,6 +90,9 @@ export class DefaultApp extends LitElement {
     @query('#app-selector')
     private appSelector!: SelectComponent;
 
+    @query('#desktop-agent-selector')
+    private desktopAgentSelector?: SelectComponent;
+
     @query('#event-type-selector')
     private eventTypeSelector!: SelectComponent;
 
@@ -145,6 +148,15 @@ export class DefaultApp extends LitElement {
 
     @state()
     private applications: AppDirectoryApplication[] = [];
+
+    /**
+     * Deduplicated `desktopAgent` names discovered (via `findInstances`) among the currently selected
+     * target app's existing instances. Used to populate the "Open on Desktop Agent" dropdown so a
+     * specific bridged Desktop Agent can be targeted when calling `open()`. Only ever populated when
+     * running in bridged mode - see `renderDesktopAgentSelector`.
+     */
+    @state()
+    private desktopAgentsForSelectedApp: string[] = [];
 
     @state()
     private possibleIntents: Intent[] = getStandardIntents();
@@ -396,19 +408,57 @@ export class DefaultApp extends LitElement {
         return html`<div class="vstack gap-2 flex-grow-1">
             <select-component
                 id="app-selector"
+                automation-id="fth-app-selector"
                 .items=${this.applications.map(app => app.appId)}
                 aria-label="Select App to Get Metadata or Find Instances for"
+                @change="${this.onAppSelectorChanged}"
             ></select-component>
+            ${this.renderDesktopAgentSelector()}
             <div class="hstack gap-2">
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.getAppMetadata}">
+                <button
+                    automation-id="fth-get-app-metadata-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.getAppMetadata}"
+                >
                     Get Metadata
                 </button>
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.findInstances}">
+                <button
+                    automation-id="fth-find-instances-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.findInstances}"
+                >
                     Find Instances
                 </button>
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.openInstance}">Open</button>
+                <button
+                    automation-id="fth-open-instance-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.openInstance}"
+                >
+                    Open
+                </button>
             </div>
         </div>`;
+    }
+
+    /**
+     * Renders the "Open on Desktop Agent" dropdown, letting the user target a specific bridged
+     * Desktop Agent when calling `open()`. It is populated by calling `findInstances()` for the
+     * currently selected target app (see `onAppSelectorChanged`) and extracting/deduplicating each
+     * instance's `desktopAgent` (present only for instances hosted by a remote, bridged Desktop
+     * Agent). When no `desktopAgent`s are found - e.g. because bridging isn't enabled, or the target
+     * app has no existing remote instances - only the "local (no desktopAgent)" option is available,
+     * and `open()` is called with no `desktopAgent` property at all on the `AppIdentifier`.
+     * @returns {TemplateResult} The template result for the desktop agent selector.
+     */
+    private renderDesktopAgentSelector(): TemplateResult {
+        return html`
+            <select-component
+                id="desktop-agent-selector"
+                automation-id="fth-desktop-agent-selector"
+                .items=${['local (no desktopAgent)', ...this.desktopAgentsForSelectedApp]}
+                aria-label="Select Desktop Agent to Open the app on"
+            ></select-component>
+        `;
     }
 
     /**
@@ -979,20 +1029,29 @@ export class DefaultApp extends LitElement {
     }
 
     /**
-     * Opens a new instance of the app selected in the app selector
+     * Opens a new instance of the app selected in the app selector, targeting the specific bridged
+     * Desktop Agent chosen in the desktop agent selector (if any). When the "local (no
+     * desktopAgent)" option is selected (the default), `open()` is called with no `desktopAgent`
+     * property on the `AppIdentifier` at all - not just `undefined` - so it behaves identically to
+     * calling `open({ appId })` directly.
      */
     private async openInstance(): Promise<void> {
-        this.log(`Opening new instance: '${this.appSelector.value}'`);
+        const desktopAgent = this.selectedDesktopAgent();
+        this.log(
+            `Opening new instance: '${this.appSelector.value}'${desktopAgent != null ? ` on desktopAgent '${desktopAgent}'` : ''}`,
+        );
         const chosenApp = this.applications.find(app => app.appId === this.appSelector.value);
 
         const agent = await getAgent();
 
         if (chosenApp != null) {
-            const identifier = await agent.open({ appId: chosenApp.appId }).catch(err => {
-                this.log(`Error opening new instance:`, err, 'error');
+            const identifier = await agent
+                .open({ appId: chosenApp.appId, ...(desktopAgent != null ? { desktopAgent } : {}) })
+                .catch(err => {
+                    this.log(`Error opening new instance:`, err, 'error');
 
-                return undefined;
-            });
+                    return undefined;
+                });
 
             if (identifier != null) {
                 this.log(`New instance opened: `, identifier);
@@ -1001,7 +1060,9 @@ export class DefaultApp extends LitElement {
     }
 
     /**
-     * Gets all current instances registered in the root desktop agent's app directory for an app
+     * Gets all current instances registered in the root desktop agent's app directory for an app,
+     * and refreshes the "Open on Desktop Agent" dropdown with any `desktopAgent`s discovered among
+     * those instances (see `renderDesktopAgentSelector`).
      */
     private async findInstances(): Promise<void> {
         this.log(`Finding all instances of app: ${this.appSelector.value}`);
@@ -1012,9 +1073,67 @@ export class DefaultApp extends LitElement {
         if (chosenApp != null) {
             await agent
                 .findInstances({ appId: chosenApp.appId })
-                .then(instances => this.log(`Instances of app ${this.appSelector.value}`, instances))
+                .then(instances => {
+                    this.log(`Instances of app ${this.appSelector.value}`, instances);
+                    this.updateDesktopAgentsForSelectedApp(instances);
+                })
                 .catch(err => this.log(err, undefined, 'error'));
         }
+    }
+
+    /**
+     * Returns the `desktopAgent` currently chosen in the "Open on Desktop Agent" dropdown, or
+     * `undefined` if the "local (no desktopAgent)" option is selected (or the dropdown hasn't
+     * rendered yet).
+     */
+    private selectedDesktopAgent(): string | undefined {
+        const value = this.desktopAgentSelector?.value;
+
+        return value == null || value === 'local (no desktopAgent)' ? undefined : value;
+    }
+
+    /**
+     * Deduplicates the `desktopAgent` of each given instance (present only on instances hosted by a
+     * remote, bridged Desktop Agent) and merges the result into the known set of remote desktop
+     * agents for the "Open on Desktop Agent" dropdown.
+     *
+     * This is deliberately *cumulative* (a union with whatever was already known) rather than a
+     * replace: the app currently being targeted for `open()` (e.g. `app-1-domain-A`) may not yet have
+     * any instances open anywhere, including on remote agents, so a `findInstances()` call for that
+     * app alone can never discover a remote agent's name. Desktop agents are instead typically
+     * discovered via some *other*, already-open app (e.g. `app-1-root`, open in every container by
+     * default) and should remain available afterwards even once a different, not-yet-open target app
+     * is selected.
+     */
+    private updateDesktopAgentsForSelectedApp(instances: Array<{ desktopAgent?: string }>): void {
+        this.desktopAgentsForSelectedApp = [
+            ...new Set([
+                ...this.desktopAgentsForSelectedApp,
+                ...instances.map(instance => instance.desktopAgent).filter((name): name is string => name != null),
+            ]),
+        ];
+    }
+
+    /**
+     * Re-fetches instances (and, in turn, the available desktop agents) whenever a different target
+     * app is chosen in the app selector, so the "Open on Desktop Agent" dropdown picks up any remote
+     * agents hosting instances of the newly selected app too.
+     */
+    private async onAppSelectorChanged(): Promise<void> {
+        const chosenApp = this.applications.find(app => app.appId === this.appSelector.value);
+        if (chosenApp == null) {
+            return;
+        }
+
+        const agent = await getAgent();
+
+        await agent
+            .findInstances({ appId: chosenApp.appId })
+            .then(instances => this.updateDesktopAgentsForSelectedApp(instances))
+            .catch(() => {
+                // Silently ignore - this is a background refresh triggered by dropdown selection,
+                // not a user-initiated action, so errors here shouldn't be surfaced to the console.
+            });
     }
 
     /**

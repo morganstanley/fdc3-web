@@ -51,12 +51,6 @@ TEST_MODES.forEach(mode => {
                 ? await TestHarnessContainer.open(await openPageB(), { bridge: bridged })
                 : containerA;
 
-            // Start from a clean slate in every default app in both containers.
-            await containerA.clearConsoles(['app-1-root', 'app-2-root']);
-            if (containerB !== containerA) {
-                await containerB.clearConsoles(['app-1-root', 'app-2-root']);
-            }
-
             // Raise the (default) intent/context from app-1-root in container A. Multiple candidate
             // apps (local, and in bridged mode also remote) will cause the resolver popup to appear.
             await containerA.raiseIntent('app-1-root');

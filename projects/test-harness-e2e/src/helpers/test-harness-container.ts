@@ -19,6 +19,11 @@ const AUTOMATION_ID = {
     consoleClearBtn: 'fth-console-clear-btn',
     console: 'fth-console',
     resolverAppSelector: 'fdc3-app-resolver_app-selector',
+    appSelector: 'fth-app-selector',
+    desktopAgentSelector: 'fth-desktop-agent-selector',
+    openInstanceBtn: 'fth-open-instance-btn',
+    getAppMetadataBtn: 'fth-get-app-metadata-btn',
+    findInstancesBtn: 'fth-find-instances-btn',
 } as const;
 
 /**
@@ -89,6 +94,12 @@ export class TestHarnessContainer {
         // The two default apps (app-1-root/app-2-root) are opened automatically once the app
         // directory has loaded - wait for both so tests can rely on them being present immediately.
         await container.verifyApps(['app-1-root', 'app-2-root']);
+
+        // Start every test from a clean slate - clear out any pre-existing console output (e.g. from
+        // the app directory/bridge connection logging that happens automatically on load) in both
+        // default apps, so `verifyConsoleContains` assertions later in a test can't accidentally
+        // match leftover output from container startup.
+        await container.clearConsoles(['app-1-root', 'app-2-root']);
 
         return container;
     }
@@ -209,5 +220,109 @@ export class TestHarnessContainer {
         await expect(this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.console}"]`)).toContainText(pattern, {
             timeout: options.timeout,
         });
+    }
+
+    /**
+     * Selects `targetAppId` in the given app's app/instance selector dropdown (used by the
+     * open/getAppMetadata/findInstances actions), waiting for the corresponding `<option>` to appear
+     * first - the dropdown is populated asynchronously from the local app directory shortly after the
+     * app loads (see `getSelectableApps` in `default-app.ts`), so it may not be populated yet. Options
+     * are rendered using each app's fully qualified appId (e.g. `app-1-domain-A@localhost`), so
+     * `targetAppId` (the short form) is matched as a prefix rather than selected verbatim.
+     */
+    private async selectTargetApp(appId: string, targetAppId: string): Promise<void> {
+        const frame = this.frame(appId);
+        const selector = frame.locator(`[automation-id="${AUTOMATION_ID.appSelector}"] select`);
+        const option = selector.locator('option', { hasText: new RegExp(`^${targetAppId}(@|$)`) });
+
+        await expect(option).toBeAttached();
+        await selector.selectOption(await option.first().innerText());
+    }
+
+    /**
+     * Selects `desktopAgent` (or `undefined` for the "local (no desktopAgent)" option) in the given
+     * app's "Open on Desktop Agent" dropdown, waiting for it to appear first - it is populated
+     * asynchronously via a `findInstances()` call triggered by the app selector's `change` event (see
+     * `onAppSelectorChanged` in `default-app.ts`), so it may not have refreshed yet.
+     * @param appId The appId of the app whose desktop agent dropdown should be set.
+     * @param desktopAgent The desktop agent name to select, or `undefined`/omitted to select the local option.
+     */
+    private async selectDesktopAgent(appId: string, desktopAgent?: string): Promise<void> {
+        const frame = this.frame(appId);
+        const selector = frame.locator(`[automation-id="${AUTOMATION_ID.desktopAgentSelector}"] select`);
+
+        if (desktopAgent == null) {
+            await selector.selectOption('local (no desktopAgent)');
+            return;
+        }
+
+        const option = selector.locator('option', { hasText: desktopAgent });
+        await expect(option).toBeAttached();
+        await selector.selectOption(await option.first().innerText());
+    }
+
+    /**
+     * Calls `fdc3.open()` (via the "Open" button) from the given app to open a new instance of
+     * `targetAppId`, using the app/instance selector dropdown populated from the local app directory
+     * (see `renderAppAndInstanceInfoSection`/`getSelectableApps` in `default-app.ts` - this dropdown
+     * is always sourced from the *local* app directory, never bridge-merged, so this call opens a new
+     * instance within the *same* container regardless of bridged/non-bridged mode).
+     *
+     * To open a new instance on a *specific, remote* bridged Desktop Agent instead, pass its name as
+     * `options.desktopAgent` - this selects it in the "Open on Desktop Agent" dropdown first, which is
+     * populated by calling `findInstances()` for `targetAppId` and extracting/deduplicating each
+     * returned instance's `desktopAgent` (see `updateDesktopAgentsForSelectedApp` in `default-app.ts`).
+     * This requires at least one instance of `targetAppId` to already be open on that remote agent -
+     * call {@link findInstances} (or open one) first if needed.
+     * @param appId The appId of the app that should call `open()`.
+     * @param targetAppId The appId (from the app directory) to open a new instance of.
+     * @param options.desktopAgent When given, targets this specific bridged Desktop Agent rather than opening locally.
+     */
+    public async open(appId: string, targetAppId: string, options: { desktopAgent?: string } = {}): Promise<void> {
+        await this.selectTargetApp(appId, targetAppId);
+        await this.selectDesktopAgent(appId, options.desktopAgent);
+        await this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.openInstanceBtn}"]`).click();
+    }
+
+    /**
+     * Waits for the given app's "Open on Desktop Agent" dropdown to be populated with at least one
+     * remote `desktopAgent` option (beyond the always-present "local (no desktopAgent)" one), then
+     * returns all of the discovered remote agent names. The dropdown is populated asynchronously via
+     * a `findInstances()` call (see {@link findInstances}/`onAppSelectorChanged` in `default-app.ts`),
+     * so this should be called *after* triggering that (e.g. via {@link findInstances}) rather than
+     * immediately reading the dropdown, which may not have updated yet.
+     * @param appId The appId of the app whose desktop agent dropdown options should be waited on/read.
+     * @param options.timeout Optional override for how long to wait, in milliseconds.
+     */
+    public async getDesktopAgentOptions(appId: string, options: { timeout?: number } = {}): Promise<string[]> {
+        const remoteOptions = this.frame(appId).locator(
+            `[automation-id="${AUTOMATION_ID.desktopAgentSelector}"] select option:not(:text-is("local (no desktopAgent)"))`,
+        );
+
+        await expect(remoteOptions.first()).toBeAttached({ timeout: options.timeout });
+
+        return await remoteOptions.allInnerTexts();
+    }
+
+    /**
+     * Calls `fdc3.getAppMetadata()` (via the "Get Metadata" button) from the given app for
+     * `targetAppId`, logging the result to the calling app's console.
+     * @param appId The appId of the app that should call `getAppMetadata()`.
+     * @param targetAppId The appId (from the app directory) to fetch metadata for.
+     */
+    public async getAppMetadata(appId: string, targetAppId: string): Promise<void> {
+        await this.selectTargetApp(appId, targetAppId);
+        await this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.getAppMetadataBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.findInstances()` (via the "Find Instances" button) from the given app for
+     * `targetAppId`, logging the result to the calling app's console.
+     * @param appId The appId of the app that should call `findInstances()`.
+     * @param targetAppId The appId (from the app directory) to find open instances of.
+     */
+    public async findInstances(appId: string, targetAppId: string): Promise<void> {
+        await this.selectTargetApp(appId, targetAppId);
+        await this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.findInstancesBtn}"]`).click();
     }
 }
