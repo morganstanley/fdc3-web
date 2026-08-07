@@ -348,11 +348,13 @@ export class DefaultApp extends LitElement {
                 <div class="flex-grow-1">
                     <select-component
                         id="intent-listener-selector"
+                        automation-id="fth-intent-listener-selector"
                         .items=${this.possibleIntents}
                         aria-label="Select Intent to Add Intent Listener"
                     ></select-component>
                 </div>
                 <button
+                    automation-id="fth-add-intent-listener-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     title="add intentListener for selected intent"
                     @click="${this.addIntentListener}"

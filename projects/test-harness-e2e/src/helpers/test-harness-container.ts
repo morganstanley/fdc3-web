@@ -16,6 +16,7 @@ const AUTOMATION_ID = {
     appContainer: 'fth-app-container',
     appIframe: 'fth-app-iframe',
     raiseIntentBtn: 'fth-raise-intent-btn',
+    raiseIntentForContextBtn: 'fth-raise-intent-for-context-btn',
     findIntentBtn: 'fth-find-intent-btn',
     findIntentsByContextBtn: 'fth-find-intents-by-context-btn',
     addContextListenerBtn: 'fth-add-context-listener-btn',
@@ -166,6 +167,24 @@ export class TestHarnessContainer {
         }
 
         await frame.locator(`[automation-id="${AUTOMATION_ID.raiseIntentBtn}"]`).click();
+    }
+
+    /**
+     * Clicks the "Raise Intent for Context" button for the given app, optionally first setting the
+     * context to raise it with. Unlike {@link raiseIntent}, no specific intent is chosen up front -
+     * `fdc3.raiseIntentForContext()` lets the Desktop Agent/resolver pick from every intent
+     * registered against the given context type.
+     * @param appId The appId of the app that should raise the intent for context.
+     * @param options.context Optional context type override. When omitted, whatever is currently entered in the UI is used.
+     */
+    public async raiseIntentForContext(appId: string, options: { context?: string } = {}): Promise<void> {
+        const frame = this.frame(appId);
+
+        if (options.context != null) {
+            await frame.locator('#context-input').fill(options.context);
+        }
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.raiseIntentForContextBtn}"]`).click();
     }
 
     /**
