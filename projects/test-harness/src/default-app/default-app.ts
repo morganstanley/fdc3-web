@@ -226,6 +226,13 @@ export class DefaultApp extends LitElement {
                         </div>
                     </div>
                     <div id="channel-collapsible-body" class="vstack gap-1" style="display: none;">
+                        <button
+                            automation-id="fth-get-user-channels-btn"
+                            class="btn btn-secondary bg-primary-subtle"
+                            @click="${this.getUserChannels}"
+                        >
+                            Get User Channels
+                        </button>
                         ${this.renderAppChannelsSection()} ${this.renderPrivateChannelsSection()}
                         ${this.renderContextSection()}
                     </div>
@@ -495,11 +502,13 @@ export class DefaultApp extends LitElement {
                 <div class="flex-grow-1">
                     <select-component
                         id="event-type-selector"
+                        automation-id="fth-event-type-selector"
                         .items=${this.fdc3EventTypes}
                         aria-label="Select Event Type for Event Listener"
                     ></select-component>
                 </div>
                 <button
+                    automation-id="fth-add-event-listener-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     title="add eventListener for selected event"
                     @click="${this.addFDC3EventListener}"

@@ -33,6 +33,10 @@ const AUTOMATION_ID = {
     openInstanceBtn: 'fth-open-instance-btn',
     getAppMetadataBtn: 'fth-get-app-metadata-btn',
     findInstancesBtn: 'fth-find-instances-btn',
+    intentListenerSelector: 'fth-intent-listener-selector',
+    addIntentListenerBtn: 'fth-add-intent-listener-btn',
+    eventTypeSelector: 'fth-event-type-selector',
+    addEventListenerBtn: 'fth-add-event-listener-btn',
 } as const;
 
 /**
@@ -185,6 +189,36 @@ export class TestHarnessContainer {
         }
 
         await frame.locator(`[automation-id="${AUTOMATION_ID.raiseIntentForContextBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.addIntentListener()` (via the "Add" button in the "Add Intent Listener" section)
+     * from the given app, for the given intent (selected from the dropdown of intents not already
+     * listened for). Once registered, the app will log `Received Intent::` whenever that intent is
+     * raised at it, and will return an `ms.test-harness.raiseIntentResult` context as the result.
+     * @param appId The appId of the app that should add the intent listener.
+     * @param intent The intent to add a listener for, e.g. `"StartCall"`.
+     */
+    public async addIntentListener(appId: string, intent: string): Promise<void> {
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.intentListenerSelector}"] select`).selectOption(intent);
+        await frame.locator(`[automation-id="${AUTOMATION_ID.addIntentListenerBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.addEventListener()` (via the "Add" button in the "Add Event Listener" section)
+     * from the given app, for the given event type. Once registered, the app will log
+     * `Received Event::` whenever a matching FDC3 event occurs (e.g. `userChannelChanged` after
+     * {@link joinUserChannel}/`leaveCurrentChannel()` is called).
+     * @param appId The appId of the app that should add the event listener.
+     * @param eventType The event type to listen for - `"userChannelChanged"` or `"all events"` (adds a listener for every FDC3 event type, passing `null` to `addEventListener()`).
+     */
+    public async addEventListener(appId: string, eventType: 'userChannelChanged' | 'all events'): Promise<void> {
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.eventTypeSelector}"] select`).selectOption(eventType);
+        await frame.locator(`[automation-id="${AUTOMATION_ID.addEventListenerBtn}"]`).click();
     }
 
     /**
