@@ -23,6 +23,9 @@ To build the test harness for deployment:
 npm run build
 ```
 
+### Testing Desktop Agent Bridging
+Appending `?bridge=true` to the root app's URL opts that window in to [FDC3 Desktop Agent Bridging](https://fdc3.finos.org/docs/agent-bridging/spec) - requires a bridge server running separately (`npx nx serve fdc3-web-bridging-server` from the repo root). Without the param, no bridge connection is attempted. Open two browser windows both with `?bridge=true` to test interoperability between two separate Desktop Agent instances via the bridge.
+
 ### Configuration of Apps in the Test Harness
 ```test-harness-config.json```
 This file contains the configuration for the apps that can be added either by default or dynamically, with currently 10 apps configured across 6 different domains. More apps can be added to this configuration by following the established format. Apps marked with `default`: true are added by default upon loading the test harness, while other apps are made available in the `Select App` dropdown of the settings panel for dynamic addition at a later time. For apps added by default, the intents that are to be raised and supported by each app can also be specified.

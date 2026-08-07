@@ -19,7 +19,7 @@ import {
 } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEARTBEAT } from '../constants.js';
-import { IRootPublisher } from '../contracts.internal.js';
+import { IChannelBridge, IRootPublisher } from '../contracts.internal.js';
 import {
     EventListenerLookup,
     EventMessage,
@@ -2357,6 +2357,448 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                     return targets.some(target => helpersImport.appInstanceEquals(target, otherSource));
                 }) || [];
             expect(eventCallsToOtherSource.length).toBeGreaterThan(0);
+        });
+    });
+
+    describe(`bridging`, () => {
+        let mockBridge: IMocked<IChannelBridge>;
+
+        beforeEach(() => {
+            mockBridge = Mock.create<IChannelBridge>().setup(
+                setupProperty('agentName', 'agent-a'),
+                setupFunction('broadcast'),
+                setupFunction('privateChannelBroadcast'),
+                setupFunction('privateChannelOnAddContextListener'),
+                setupFunction('privateChannelOnUnsubscribe'),
+                setupFunction('privateChannelOnDisconnect'),
+                setupFunction('privateChannelEventListenerAdded'),
+                setupFunction('privateChannelEventListenerRemoved'),
+            );
+        });
+
+        describe(`getChannelsState / applyChannelsState`, () => {
+            it(`should return one entry per channel with mostRecent first, omitting empty channels`, () => {
+                const instance = createInstance();
+
+                mockGetOrCreateChannel(mockedChannelId, instance);
+                mockBroadcast(mockedChannelId, contact, instance);
+
+                const state = instance.getChannelsState();
+
+                expect(state[mockedChannelId]).toEqual([contact]);
+            });
+
+            it(`should never include private channels`, () => {
+                const instance = createInstance();
+                mockCreatePrivateChannel(instance);
+
+                const state = instance.getChannelsState();
+
+                expect(state[mockedGeneratedUuid]).toBeUndefined();
+            });
+
+            it(`should adopt a merged channel state, creating a missing app channel and using the first entry as mostRecent`, () => {
+                const instance = createInstance();
+                const otherContext: Context = { type: 'fdc3.instrument' };
+
+                instance.applyChannelsState({ [mockedChannelId]: [contact, otherContext] });
+
+                const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId: mockedChannelId, contextType: null },
+                    type: 'getCurrentContextRequest',
+                };
+                instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishResponseMessage').withParametersEqualTo(
+                        {
+                            type: 'getCurrentContextResponse',
+                            meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                            payload: { context: contact },
+                        },
+                        source,
+                    ),
+                ).wasCalledOnce();
+            });
+
+            it(`should retain a local-only context type absent from the merged state`, () => {
+                const instance = createInstance();
+                mockGetOrCreateChannel(mockedChannelId, instance);
+                mockBroadcast(mockedChannelId, contact, instance);
+
+                instance.applyChannelsState({ [mockedChannelId]: [{ type: 'fdc3.instrument' }] });
+
+                const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId: mockedChannelId, contextType: 'fdc3.contact' },
+                    type: 'getCurrentContextRequest',
+                };
+                instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishResponseMessage').withParametersEqualTo(
+                        {
+                            type: 'getCurrentContextResponse',
+                            meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                            payload: { context: contact },
+                        },
+                        source,
+                    ),
+                ).wasCalledOnce();
+            });
+
+            it(`should not publish any events when adopting state`, () => {
+                const instance = createInstance();
+
+                instance.applyChannelsState({ [mockedChannelId]: [contact] });
+
+                expect(mockRootMessagingProvider.withFunction('publishEvent')).wasNotCalled();
+            });
+        });
+
+        describe(`broadcast forwarding`, () => {
+            it(`should forward a user/app channel broadcast to the bridge`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockGetOrCreateChannel(mockedChannelId, instance);
+
+                mockBroadcast(mockedChannelId, contact, instance);
+
+                expect(
+                    mockBridge.withFunction('broadcast').withParametersEqualTo(mockedChannelId, contact, source),
+                ).wasCalledOnce();
+            });
+
+            it(`should not forward a private channel broadcast that has not been shared`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+
+                mockBroadcast(mockedGeneratedUuid, contact, instance);
+
+                expect(mockBridge.withFunction('privateChannelBroadcast')).wasNotCalled();
+                expect(mockBridge.withFunction('broadcast')).wasNotCalled();
+            });
+
+            it(`should forward a shared private channel broadcast with the sharing agents`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+
+                mockBroadcast(mockedGeneratedUuid, contact, instance);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelBroadcast')
+                        .withParametersEqualTo(mockedGeneratedUuid, contact, source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+
+            it(`should do nothing when no bridge is assigned`, () => {
+                const instance = createInstance();
+                mockGetOrCreateChannel(mockedChannelId, instance);
+
+                expect(() => mockBroadcast(mockedChannelId, contact, instance)).not.toThrow();
+            });
+        });
+
+        describe(`applyRemoteBroadcast`, () => {
+            it(`should fan out locally, update history, and never call the bridge`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockGetOrCreateChannel(mockedChannelId, instance);
+                mockAddContextListener(mockedChannelId, null, sourceTwo, instance);
+
+                const remoteSource = { appId: 'remote-app', desktopAgent: 'agent-b' };
+                instance.applyRemoteBroadcast(mockedChannelId, contact, remoteSource);
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishEvent').withParametersEqualTo(
+                        {
+                            type: 'broadcastEvent',
+                            meta: { timestamp: mockedDate, eventUuid: mockedEventUuid },
+                            payload: { channelId: mockedChannelId, context: contact, originatingApp: remoteSource },
+                        },
+                        [sourceTwo],
+                    ),
+                ).wasCalledOnce();
+                expect(mockBridge.withFunction('broadcast')).wasNotCalled();
+                expect(mockBridge.withFunction('privateChannelBroadcast')).wasNotCalled();
+
+                const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId: mockedChannelId, contextType: null },
+                    type: 'getCurrentContextRequest',
+                };
+                instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+                expect(
+                    mockRootMessagingProvider.withFunction('publishResponseMessage').withParametersEqualTo(
+                        {
+                            type: 'getCurrentContextResponse',
+                            meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                            payload: { context: contact },
+                        },
+                        source,
+                    ),
+                ).wasCalledOnce();
+            });
+        });
+
+        describe(`private channel lifecycle forwarding`, () => {
+            it(`should forward onAddContextListener only when the channel is shared`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+
+                mockAddContextListener(mockedGeneratedUuid, 'fdc3.contact', source, instance);
+                expect(mockBridge.withFunction('privateChannelOnAddContextListener')).wasNotCalled();
+
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+                mockAddContextListener(mockedGeneratedUuid, 'fdc3.contact', source, instance);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelOnAddContextListener')
+                        .withParametersEqualTo(mockedGeneratedUuid, 'fdc3.contact', source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+
+            it(`should not forward the addEventListener replay of existing context listeners`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+                mockAddContextListener(mockedGeneratedUuid, 'fdc3.contact', source, instance);
+                mockBridge.functionCallLookup.privateChannelOnAddContextListener = [];
+
+                mockPrivateChannelAddEventListener('addContextListener', mockedGeneratedUuid, sourceTwo, instance);
+
+                expect(mockBridge.withFunction('privateChannelOnAddContextListener')).wasNotCalled();
+            });
+
+            it(`should forward eventListenerAdded when the channel is shared`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+
+                mockPrivateChannelAddEventListener('disconnect', mockedGeneratedUuid, source, instance);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelEventListenerAdded')
+                        .withParametersEqualTo(mockedGeneratedUuid, 'disconnect', source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+
+            it(`cleanupDisconnectedProxy should still forward onUnsubscribe for a shared channel`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+                mockAddContextListener(mockedGeneratedUuid, 'fdc3.contact', source, instance);
+                mockBridge.functionCallLookup.privateChannelOnUnsubscribe = [];
+
+                instance.cleanupDisconnectedProxy(source);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelOnUnsubscribe')
+                        .withParametersEqualTo(mockedGeneratedUuid, 'fdc3.contact', source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+
+            it(`should forward onDisconnect when the channel is shared`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+
+                const disconnectRequest: BrowserTypes.PrivateChannelDisconnectRequest = {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId: mockedGeneratedUuid },
+                    type: 'privateChannelDisconnectRequest',
+                };
+                instance.onPrivateChannelDisconnectRequest(disconnectRequest, source);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelOnDisconnect')
+                        .withParametersEqualTo(mockedGeneratedUuid, source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+        });
+
+        describe(`applyRemote private channel events`, () => {
+            it(`applyRemotePrivateChannelOnAddContextListener should publish locally and call no bridge method`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.addToPrivateChannelAllowedList(mockedGeneratedUuid, sourceTwo);
+                mockPrivateChannelAddEventListener('addContextListener', mockedGeneratedUuid, sourceTwo, instance);
+
+                instance.applyRemotePrivateChannelOnAddContextListener(mockedGeneratedUuid, 'fdc3.contact');
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishEvent').withParametersEqualTo(
+                        {
+                            type: 'privateChannelOnAddContextListenerEvent',
+                            meta: { timestamp: mockedDate, eventUuid: mockedEventUuid },
+                            payload: { contextType: 'fdc3.contact', privateChannelId: mockedGeneratedUuid },
+                        },
+                        [sourceTwo],
+                    ),
+                ).wasCalledOnce();
+                expect(mockBridge.withFunction('privateChannelOnAddContextListener')).wasNotCalled();
+            });
+
+            it(`applyRemotePrivateChannelOnUnsubscribe should publish locally and call no bridge method`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.addToPrivateChannelAllowedList(mockedGeneratedUuid, sourceTwo);
+                mockPrivateChannelAddEventListener('unsubscribe', mockedGeneratedUuid, sourceTwo, instance);
+
+                instance.applyRemotePrivateChannelOnUnsubscribe(mockedGeneratedUuid, 'fdc3.contact');
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishEvent').withParametersEqualTo(
+                        {
+                            type: 'privateChannelOnUnsubscribeEvent',
+                            meta: { timestamp: mockedDate, eventUuid: mockedEventUuid },
+                            payload: { contextType: 'fdc3.contact', privateChannelId: mockedGeneratedUuid },
+                        },
+                        [sourceTwo],
+                    ),
+                ).wasCalledOnce();
+                expect(mockBridge.withFunction('privateChannelOnUnsubscribe')).wasNotCalled();
+            });
+
+            it(`applyRemotePrivateChannelOnDisconnect should publish locally and call no bridge method`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.addToPrivateChannelAllowedList(mockedGeneratedUuid, sourceTwo);
+                mockPrivateChannelAddEventListener('disconnect', mockedGeneratedUuid, sourceTwo, instance);
+
+                instance.applyRemotePrivateChannelOnDisconnect(mockedGeneratedUuid);
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishEvent').withParametersEqualTo(
+                        {
+                            type: 'privateChannelOnDisconnectEvent',
+                            meta: { timestamp: mockedDate, eventUuid: mockedEventUuid },
+                            payload: { privateChannelId: mockedGeneratedUuid },
+                        },
+                        [sourceTwo],
+                    ),
+                ).wasCalledOnce();
+                expect(mockBridge.withFunction('privateChannelOnDisconnect')).wasNotCalled();
+            });
+
+            it(`applyRemotePrivateChannelEventListenerAdded should only mark the channel as shared, publishing nothing`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+
+                instance.applyRemotePrivateChannelEventListenerAdded(mockedGeneratedUuid, 'agent-b');
+
+                expect(mockRootMessagingProvider.withFunction('publishEvent')).wasNotCalled();
+
+                mockBroadcast(mockedGeneratedUuid, contact, instance);
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelBroadcast')
+                        .withParametersEqualTo(mockedGeneratedUuid, contact, source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+
+            it(`applyRemotePrivateChannelEventListenerRemoved should be a no-op`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+
+                expect(() =>
+                    instance.applyRemotePrivateChannelEventListenerRemoved(mockedGeneratedUuid, 'agent-b'),
+                ).not.toThrow();
+                expect(mockRootMessagingProvider.withFunction('publishEvent')).wasNotCalled();
+            });
+        });
+
+        describe(`markPrivateChannelShared`, () => {
+            it(`should adopt an unknown channel so subsequent broadcasts forward`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                const unknownChannelId = 'unknown-private-channel';
+
+                instance.markPrivateChannelShared({ id: unknownChannelId, type: 'private' }, 'agent-b');
+                instance.addToPrivateChannelAllowedList(unknownChannelId, source);
+                mockBroadcast(unknownChannelId, contact, instance);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelBroadcast')
+                        .withParametersEqualTo(unknownChannelId, contact, source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+
+            it(`should be idempotent`, () => {
+                const instance = createInstance();
+                mockCreatePrivateChannel(instance);
+
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+
+                instance.bridge = mockBridge.mock;
+                mockBroadcast(mockedGeneratedUuid, contact, instance);
+
+                expect(
+                    mockBridge
+                        .withFunction('privateChannelBroadcast')
+                        .withParametersEqualTo(mockedGeneratedUuid, contact, source, ['agent-b']),
+                ).wasCalledOnce();
+            });
+        });
+
+        describe(`cleanupDisconnectedAgent`, () => {
+            it(`should publish privateChannelOnDisconnectEvent to local listeners of a shared channel and stop forwarding afterwards`, () => {
+                const instance = createInstance();
+                instance.bridge = mockBridge.mock;
+                mockCreatePrivateChannel(instance);
+                instance.markPrivateChannelShared({ id: mockedGeneratedUuid, type: 'private' }, 'agent-b');
+                instance.addToPrivateChannelAllowedList(mockedGeneratedUuid, sourceTwo);
+                mockPrivateChannelAddEventListener('disconnect', mockedGeneratedUuid, sourceTwo, instance);
+                mockBridge.functionCallLookup.privateChannelEventListenerAdded = [];
+
+                instance.cleanupDisconnectedAgent('agent-b');
+
+                expect(
+                    mockRootMessagingProvider.withFunction('publishEvent').withParametersEqualTo(
+                        {
+                            type: 'privateChannelOnDisconnectEvent',
+                            meta: { timestamp: mockedDate, eventUuid: mockedEventUuid },
+                            payload: { privateChannelId: mockedGeneratedUuid },
+                        },
+                        [sourceTwo],
+                    ),
+                ).wasCalledOnce();
+
+                mockBroadcast(mockedGeneratedUuid, contact, instance);
+                expect(mockBridge.withFunction('privateChannelBroadcast')).wasNotCalled();
+            });
+
+            it(`should not purge user/app channel context history`, () => {
+                const instance = createInstance();
+                mockGetOrCreateChannel(mockedChannelId, instance);
+                mockBroadcast(mockedChannelId, contact, instance);
+
+                instance.cleanupDisconnectedAgent('agent-b');
+
+                const state = instance.getChannelsState();
+                expect(state[mockedChannelId]).toEqual([contact]);
+            });
         });
     });
 

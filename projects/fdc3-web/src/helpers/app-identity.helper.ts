@@ -9,6 +9,7 @@
  * and limitations under the License. */
 
 import type { AppIdentifier } from '@finos/fdc3';
+import { RemoteAppIdentifier } from '../contracts.internal.js';
 import { FullyQualifiedAppIdentifier } from '../contracts.js';
 import { isFullyQualifiedAppId } from './type-predicate.helper.js';
 
@@ -75,4 +76,16 @@ export function appIdsMatch(appIdOne: string, appIdTwo: string): boolean {
     }
 
     return toUnqualifiedAppId(appIdOne) === toUnqualifiedAppId(appIdTwo);
+}
+
+/**
+ * Returns true if the identifier names a Desktop Agent other than localAgentName, i.e. an app
+ * discovered or targeted via Desktop Agent Bridging rather than this agent's own AppDirectory. Apps
+ * carrying no desktopAgent, or naming our own agent, are local.
+ */
+export function isRemoteAppIdentifier(
+    app: AppIdentifier | undefined,
+    localAgentName: string | undefined,
+): app is RemoteAppIdentifier {
+    return app?.desktopAgent != null && app.desktopAgent !== localAgentName;
 }

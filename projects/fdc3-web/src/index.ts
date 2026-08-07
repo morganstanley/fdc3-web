@@ -9,6 +9,7 @@
  * and limitations under the License. */
 
 export * from './agent/index.js';
+export * from './bridge/index.js';
 export * from './contracts.js';
 export * from './helpers/index.js';
 export * from './get-agent/index.js';

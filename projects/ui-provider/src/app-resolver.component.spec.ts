@@ -678,6 +678,52 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         }
     });
 
+    describe('remote agent icon', () => {
+        function shadowRoot(): ShadowRoot | null | undefined {
+            return mockDocument.querySelector('body')?.querySelector('ms-app-resolver')?.shadowRoot;
+        }
+
+        it('should not render a remote agent icon for a local app', async () => {
+            const instance = createInstance();
+
+            const payload = createIntentPayload(true, [create(1), create(2)]);
+            instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            expect(shadowRoot()?.querySelector('.ms-app-resolver-app-remote-agent-icon')).toBeNull();
+        });
+
+        it('should render a remote agent icon with the desktop agent name for an app sourced from another agent', async () => {
+            const instance = createInstance();
+
+            const payload = createIntentPayload(true, [create(1), { appId: '2', desktopAgent: 'agent-b' }]);
+            instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            const icons = shadowRoot()?.querySelectorAll('.ms-app-resolver-app-remote-agent-icon');
+
+            expect(icons?.length).toBe(1);
+            expect(icons?.[0].getAttribute('title')).toBe('Hosted by Desktop Agent: agent-b');
+        });
+
+        it('should preserve desktopAgent on the resolved AppIdentifier when the user selects a remote app', async () => {
+            const instance = createInstance();
+
+            const payload = createIntentPayload(true, [create(1), { appId: '2', desktopAgent: 'agent-b' }]);
+            const promise = instance.resolveAppForIntent(payload);
+
+            await wait();
+
+            const remoteOption = shadowRoot()?.querySelector('[data-app-id="2"]') as HTMLElement;
+            expect(remoteOption).toBeDefined();
+            remoteOption.click();
+
+            await expect(promise).resolves.toEqual({ appId: '2', desktopAgent: 'agent-b' });
+        });
+    });
+
     describe('intent displayName', () => {
         function shadowRoot(): ShadowRoot | null | undefined {
             return mockDocument.querySelector('body')?.querySelector('ms-app-resolver')?.shadowRoot;

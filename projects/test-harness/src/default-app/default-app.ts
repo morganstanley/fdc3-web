@@ -40,6 +40,7 @@ import {
 } from '@morgan-stanley/fdc3-web';
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, query, state } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants.js';
 import {
     AppOpenedContextType,
@@ -70,6 +71,13 @@ export class DefaultApp extends LitElement {
     @state()
     private nestedAppDetails: WebAppDetails[] = [];
 
+    /**
+     * Tracks the appId (and instanceId, once resolved) of each nested WebAppDetails entry. Exposed to
+     * `app-container` as `app-id`/`instance-id` attributes so automation can reliably locate a
+     * specific nested app's iframe.
+     */
+    private nestedAppIdentities = new Map<WebAppDetails, FullyQualifiedAppIdentifier | { appId: string }>();
+
     @state()
     private logs: string[] = [];
 
@@ -81,6 +89,9 @@ export class DefaultApp extends LitElement {
 
     @query('#app-selector')
     private appSelector!: SelectComponent;
+
+    @query('#desktop-agent-selector')
+    private desktopAgentSelector?: SelectComponent;
 
     @query('#event-type-selector')
     private eventTypeSelector!: SelectComponent;
@@ -138,6 +149,15 @@ export class DefaultApp extends LitElement {
     @state()
     private applications: AppDirectoryApplication[] = [];
 
+    /**
+     * Deduplicated `desktopAgent` names discovered (via `findInstances`) among the currently selected
+     * target app's existing instances. Used to populate the "Open on Desktop Agent" dropdown so a
+     * specific bridged Desktop Agent can be targeted when calling `open()`. Only ever populated when
+     * running in bridged mode - see `renderDesktopAgentSelector`.
+     */
+    @state()
+    private desktopAgentsForSelectedApp: string[] = [];
+
     @state()
     private possibleIntents: Intent[] = getStandardIntents();
 
@@ -154,15 +174,22 @@ export class DefaultApp extends LitElement {
      */
     protected override render(): TemplateResult<1> | undefined {
         return html`
-            <div class="${this.getSelectedAppClass()}">
+            <div
+                class="${this.getSelectedAppClass()}"
+                automation-id="fth-default-app"
+                data-app-id=${ifDefined(this.appIdentifier?.appId)}
+                data-instance-id=${ifDefined(this.appIdentifier?.instanceId)}
+            >
                 <div class="d-flex bg-body-tertiary">
                     <app-header
+                        automation-id="fth-app-header"
                         .heading="${this.appTitle} (${this.appIdentifier?.appId} / ${this.appIdentifier?.instanceId})"
                         class="d-flex h6 clickable flex-grow-1"
                         @click="${this.selectApp}"
                     ></app-header>
                     <button
                         type="button"
+                        automation-id="fth-close-app-btn"
                         class="btn-close m-2"
                         title="Close this app via fdc3.close()"
                         aria-label="Close"
@@ -186,6 +213,7 @@ export class DefaultApp extends LitElement {
                 <div class="vstack gap-2 flex-grow-1">
                     <div
                         class="btn btn-secondary bg-primary-subtle"
+                        automation-id="fth-channels-toggle-btn"
                         style="display: flex; justify-content: space-between;"
                         @click="${this.toggleChannelCollapsibleBody}"
                     >
@@ -198,6 +226,20 @@ export class DefaultApp extends LitElement {
                         </div>
                     </div>
                     <div id="channel-collapsible-body" class="vstack gap-1" style="display: none;">
+                        <button
+                            automation-id="fth-get-user-channels-btn"
+                            class="btn btn-secondary bg-primary-subtle"
+                            @click="${this.getUserChannels}"
+                        >
+                            Get User Channels
+                        </button>
+                        <button
+                            automation-id="fth-get-current-channel-btn"
+                            class="btn btn-secondary bg-primary-subtle"
+                            @click="${this.getCurrentChannel}"
+                        >
+                            Get Current Channel
+                        </button>
                         ${this.renderAppChannelsSection()} ${this.renderPrivateChannelsSection()}
                         ${this.renderContextSection()}
                     </div>
@@ -259,11 +301,18 @@ export class DefaultApp extends LitElement {
         return html`
             <div class="hstack gap-2">
                 <div class="flex-grow-1">
-                    <input id="context-input" class="w-100" type="text" value="fdc3.contact" />
+                    <input
+                        id="context-input"
+                        automation-id="fth-context-input"
+                        class="w-100"
+                        type="text"
+                        value="fdc3.contact"
+                    />
                 </div>
                 <div class="flex-grow-1">
                     <select-component
                         id="intent-selector"
+                        automation-id="fth-intent-selector"
                         .items=${this.supportedRaiseIntent}
                         aria-label="Select Intent to Raise"
                     ></select-component>
@@ -271,9 +320,33 @@ export class DefaultApp extends LitElement {
             </div>
 
             <div class="hstack gap-2">
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntent}">Raise Intent</button>
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntentForContext}">
+                <button
+                    automation-id="fth-raise-intent-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.raiseIntent}"
+                >
+                    Raise Intent
+                </button>
+                <button
+                    automation-id="fth-raise-intent-for-context-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.raiseIntentForContext}"
+                >
                     Raise Intent for Context
+                </button>
+                <button
+                    automation-id="fth-find-intent-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.findIntent}"
+                >
+                    Find Intent
+                </button>
+                <button
+                    automation-id="fth-find-intents-by-context-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.findIntentsByContext}"
+                >
+                    Find Intents By Context
                 </button>
             </div>
         `;
@@ -289,11 +362,13 @@ export class DefaultApp extends LitElement {
                 <div class="flex-grow-1">
                     <select-component
                         id="intent-listener-selector"
+                        automation-id="fth-intent-listener-selector"
                         .items=${this.possibleIntents}
                         aria-label="Select Intent to Add Intent Listener"
                     ></select-component>
                 </div>
                 <button
+                    automation-id="fth-add-intent-listener-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     title="add intentListener for selected intent"
                     @click="${this.addIntentListener}"
@@ -314,6 +389,7 @@ export class DefaultApp extends LitElement {
                 <div class="vstack gap-1">
                     <select-component
                         id="broadcast-channel-selector"
+                        automation-id="fth-broadcast-channel-selector"
                         .items=${['current user channel', ...Object.keys(this.currentChannels)]}
                         aria-label="Select channel to interact with"
                     ></select-component>
@@ -321,19 +397,25 @@ export class DefaultApp extends LitElement {
                 <div class="vstack gap-1">
                     <div class="hstack gap-2 justify-content-end">
                         <button
+                            automation-id="fth-add-context-listener-btn"
                             class="btn btn-secondary bg-primary-subtle"
                             @click="${() => this.setupContextListener(this.broadcastContext.value)}"
                             title="Add a context listener for this app for the context type specified. Leave input empty to add listener for all contexts"
                         >
                             Add Context Listener
                         </button>
-                        <button class="btn btn-secondary bg-primary-subtle" @click="${this.broadcast}">
+                        <button
+                            automation-id="fth-broadcast-btn"
+                            class="btn btn-secondary bg-primary-subtle"
+                            @click="${this.broadcast}"
+                        >
                             Broadcast
                         </button>
                     </div>
 
                     <div class="hstack gap-2 justify-content-end">
                         <button
+                            automation-id="fth-get-context-btn"
                             class="btn btn-secondary bg-primary-subtle"
                             @click="${this.getCurrentContext}"
                             title="Get current context of inputted type on selected channel"
@@ -352,7 +434,13 @@ export class DefaultApp extends LitElement {
      */
     private renderGetInfoSection(): TemplateResult {
         return html`<div class="hstack gap-2">
-            <button class="btn btn-secondary bg-primary-subtle" @click="${this.getInfo}">Get Info</button>
+            <button
+                automation-id="fth-get-info-btn"
+                class="btn btn-secondary bg-primary-subtle"
+                @click="${this.getInfo}"
+            >
+                Get Info
+            </button>
         </div>`;
     }
 
@@ -364,19 +452,57 @@ export class DefaultApp extends LitElement {
         return html`<div class="vstack gap-2 flex-grow-1">
             <select-component
                 id="app-selector"
+                automation-id="fth-app-selector"
                 .items=${this.applications.map(app => app.appId)}
                 aria-label="Select App to Get Metadata or Find Instances for"
+                @change="${this.onAppSelectorChanged}"
             ></select-component>
+            ${this.renderDesktopAgentSelector()}
             <div class="hstack gap-2">
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.getAppMetadata}">
+                <button
+                    automation-id="fth-get-app-metadata-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.getAppMetadata}"
+                >
                     Get Metadata
                 </button>
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.findInstances}">
+                <button
+                    automation-id="fth-find-instances-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.findInstances}"
+                >
                     Find Instances
                 </button>
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.openInstance}">Open</button>
+                <button
+                    automation-id="fth-open-instance-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.openInstance}"
+                >
+                    Open
+                </button>
             </div>
         </div>`;
+    }
+
+    /**
+     * Renders the "Open on Desktop Agent" dropdown, letting the user target a specific bridged
+     * Desktop Agent when calling `open()`. It is populated by calling `findInstances()` for the
+     * currently selected target app (see `onAppSelectorChanged`) and extracting/deduplicating each
+     * instance's `desktopAgent` (present only for instances hosted by a remote, bridged Desktop
+     * Agent). When no `desktopAgent`s are found - e.g. because bridging isn't enabled, or the target
+     * app has no existing remote instances - only the "local (no desktopAgent)" option is available,
+     * and `open()` is called with no `desktopAgent` property at all on the `AppIdentifier`.
+     * @returns {TemplateResult} The template result for the desktop agent selector.
+     */
+    private renderDesktopAgentSelector(): TemplateResult {
+        return html`
+            <select-component
+                id="desktop-agent-selector"
+                automation-id="fth-desktop-agent-selector"
+                .items=${['local (no desktopAgent)', ...this.desktopAgentsForSelectedApp]}
+                aria-label="Select Desktop Agent to Open the app on"
+            ></select-component>
+        `;
     }
 
     /**
@@ -389,11 +515,13 @@ export class DefaultApp extends LitElement {
                 <div class="flex-grow-1">
                     <select-component
                         id="event-type-selector"
+                        automation-id="fth-event-type-selector"
                         .items=${this.fdc3EventTypes}
                         aria-label="Select Event Type for Event Listener"
                     ></select-component>
                 </div>
                 <button
+                    automation-id="fth-add-event-listener-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     title="add eventListener for selected event"
                     @click="${this.addFDC3EventListener}"
@@ -412,9 +540,16 @@ export class DefaultApp extends LitElement {
         return html`
             <div class="hstack gap-2">
                 <div class="flex-grow-1">
-                    <input id="app-channel-id" class="w-100" type="text" value="default-app-channel-id" />
+                    <input
+                        id="app-channel-id"
+                        automation-id="fth-app-channel-id"
+                        class="w-100"
+                        type="text"
+                        value="default-app-channel-id"
+                    />
                 </div>
                 <button
+                    automation-id="fth-get-app-channel-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     @click="${this.getOrCreateAppChannel}"
                     title="Get an app channel by id if it exists, or create one with that id if it doesn't"
@@ -435,6 +570,7 @@ export class DefaultApp extends LitElement {
             <div class="hstack gap-2">
                 <select-component
                     id="private-channel-selector"
+                    automation-id="fth-private-channel-selector"
                     .items=${[
                         ...Object.entries(this.currentChannels)
                             .filter(([_, channel]) => channel.type === 'private')
@@ -446,6 +582,7 @@ export class DefaultApp extends LitElement {
             </div>
             <div class="hstack gap-2">
                 <button
+                    automation-id="fth-create-private-channel-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     @click="${this.createPrivateChannel}"
                     title="Create private channel"
@@ -453,6 +590,7 @@ export class DefaultApp extends LitElement {
                     Private Channel
                 </button>
                 <button
+                    automation-id="fth-disconnect-private-channel-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     @click="${this.disconnect}"
                     title="Disconnect from private channel"
@@ -465,11 +603,13 @@ export class DefaultApp extends LitElement {
                 <div class="flex-grow-1">
                     <select-component
                         id="private-channel-event-type-selector"
+                        automation-id="fth-private-channel-event-type-selector"
                         .items=${this.privateChannelEventTypes}
                         aria-label="Select Event Type for Private Channel Event Listener"
                     ></select-component>
                 </div>
                 <button
+                    automation-id="fth-add-private-channel-event-listener-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     title="add private channel eventListener for selected event"
                     @click="${this.addPrivateChannelEventListener}"
@@ -489,9 +629,19 @@ export class DefaultApp extends LitElement {
             <div class="vstack gap-2">
                 <div class="hstack gap-2">
                     <label class="form-label flex-grow-1">Console:</label>
-                    <button class="btn btn-secondary bg-primary-subtle btn-sm" @click="${this.clearLog}">Clear</button>
+                    <button
+                        automation-id="fth-console-clear-btn"
+                        class="btn btn-secondary bg-primary-subtle btn-sm"
+                        @click="${this.clearLog}"
+                    >
+                        Clear
+                    </button>
                 </div>
-                <div class="bg-dark-subtle p-2 text-muted h-auto" style="font-size: 14px; word-wrap: break-word;">
+                <div
+                    automation-id="fth-console"
+                    class="bg-dark-subtle p-2 text-muted h-auto"
+                    style="font-size: 14px; word-wrap: break-word;"
+                >
                     ${this.logs.map(log => html`${log}<br /><br />`)}
                 </div>
             </div>
@@ -505,15 +655,17 @@ export class DefaultApp extends LitElement {
     private renderNestedApps(): TemplateResult {
         return html`
             <div class="nested-apps-container d-flex flex-wrap gap-4">
-                ${this.nestedAppDetails.map(
-                    details =>
-                        html`<app-container
-                            @onIframeCreated="${(event: CustomEvent<{ window: WindowProxy; app: WebAppDetails }>) =>
-                                this.handleNewIframe(event)}"
-                            .details=${details}
-                            style="height: 60vh;min-width: 400px;"
-                        ></app-container>`,
-                )}
+                ${this.nestedAppDetails.map(details => {
+                    const identity = this.nestedAppIdentities.get(details);
+                    return html`<app-container
+                        @onIframeCreated="${(event: CustomEvent<{ window: WindowProxy; app: WebAppDetails }>) =>
+                            this.handleNewIframe(event)}"
+                        .details=${details}
+                        app-id=${ifDefined(identity?.appId)}
+                        instance-id=${ifDefined((identity as FullyQualifiedAppIdentifier | undefined)?.instanceId)}
+                        style="height: 60vh;min-width: 400px;"
+                    ></app-container>`;
+                })}
             </div>
         `;
     }
@@ -635,7 +787,13 @@ export class DefaultApp extends LitElement {
         this.openedWindowChannel = await agent.getOrCreateChannel(NEW_WINDOW_PUBLIC_CHANNEL);
 
         const context: ISelectableAppsRequestContext = { type: SelectableAppsRequestContextType };
-        const resolution = await agent.raiseIntent(SelectableAppsIntent, context).catch(err => {
+
+        const findIntentApps = await agent.findIntent(SelectableAppsIntent, context);
+
+        // filter out app instances from bridge
+        const localApps = findIntentApps.apps.filter(app => app.desktopAgent == null);
+
+        const resolution = await agent.raiseIntent(SelectableAppsIntent, context, localApps[0]).catch(err => {
             this.log(`Error raising intent '${SelectableAppsIntent}'`, err, 'error');
             return null;
         });
@@ -661,6 +819,9 @@ export class DefaultApp extends LitElement {
             windowProxy = window.open(openWindowContext.webDetails.url, '_blank', 'popup');
         } else {
             //open app in iframe
+            this.nestedAppIdentities.set(openWindowContext.webDetails, {
+                appId: openWindowContext.appIdentifier.appId,
+            });
             this.nestedAppDetails = [...this.nestedAppDetails, openWindowContext.webDetails];
 
             windowProxy = await new Promise(resolve => {
@@ -804,6 +965,42 @@ export class DefaultApp extends LitElement {
     }
 
     /**
+     * Calls `fdc3.findIntent()` for whichever intent is currently selected in the intent dropdown,
+     * with the context currently entered in the context input, logging the resulting `AppIntent`
+     * (intent metadata plus the apps/app instances registered to handle it, local and - when bridged
+     * and remote instances exist - remote) to the console.
+     * @returns {Promise<void>} A promise that resolves when the intent has been found and logged.
+     */
+    private async findIntent(): Promise<void> {
+        const context = this.broadcastContext.value;
+        this.log(`Finding intent: ${this.intentSelector.value} (context: '${context}')`);
+        const agent = await getAgent();
+
+        await agent
+            .findIntent(this.intentSelector.value, { type: context })
+            .then(appIntent => this.log(`AppIntent for ${this.intentSelector.value}:`, appIntent))
+            .catch(err => this.log(`Error finding intent '${this.intentSelector.value}'`, err, 'error'));
+    }
+
+    /**
+     * Calls `fdc3.findIntentsByContext()` for the context currently entered in the context input,
+     * logging the resulting `AppIntent[]` (every intent registered against that context type, plus
+     * the apps/app instances registered to handle each - local and, when bridged and remote instances
+     * exist, remote) to the console.
+     * @returns {Promise<void>} A promise that resolves when the intents have been found and logged.
+     */
+    private async findIntentsByContext(): Promise<void> {
+        const context = this.broadcastContext.value;
+        this.log(`Finding intents by context: '${context}'`);
+        const agent = await getAgent();
+
+        await agent
+            .findIntentsByContext({ type: context })
+            .then(appIntents => this.log(`AppIntents for context '${context}':`, appIntents))
+            .catch(err => this.log(`Error finding intents by context '${context}'`, err, 'error'));
+    }
+
+    /**
      * Raises an intent using the FDC3 agent. This method demonstrates how to raise an intent and handle its resolution.
      * @returns {Promise<void>} A promise that resolves when the intent has been raised and handled.
      */
@@ -886,14 +1083,17 @@ export class DefaultApp extends LitElement {
      * Fetches metadata for app from desktop agent's app directory
      */
     private async getAppMetadata(): Promise<void> {
-        this.log(`Fetching metadata for app: ${this.appSelector.value}`);
+        const desktopAgent = this.selectedDesktopAgent();
+        this.log(
+            `Fetching metadata for app: ${this.appSelector.value}${desktopAgent != null ? ` on desktopAgent '${desktopAgent}'` : ''}`,
+        );
 
         const chosenApp = this.applications.find(app => app.appId === this.appSelector.value);
         if (chosenApp != null) {
             const agent = await getAgent();
 
             await agent
-                .getAppMetadata({ appId: chosenApp.appId })
+                .getAppMetadata({ appId: chosenApp.appId, ...(desktopAgent != null ? { desktopAgent } : {}) })
                 .then(metadata => this.log(`Metadata for ${chosenApp.appId}:`, metadata))
                 .catch(err => this.log(`Error getting appMetadata for '${chosenApp.appId}'`, err, 'error'));
         }
@@ -926,20 +1126,29 @@ export class DefaultApp extends LitElement {
     }
 
     /**
-     * Opens a new instance of the app selected in the app selector
+     * Opens a new instance of the app selected in the app selector, targeting the specific bridged
+     * Desktop Agent chosen in the desktop agent selector (if any). When the "local (no
+     * desktopAgent)" option is selected (the default), `open()` is called with no `desktopAgent`
+     * property on the `AppIdentifier` at all - not just `undefined` - so it behaves identically to
+     * calling `open({ appId })` directly.
      */
     private async openInstance(): Promise<void> {
-        this.log(`Opening new instance: '${this.appSelector.value}'`);
+        const desktopAgent = this.selectedDesktopAgent();
+        this.log(
+            `Opening new instance: '${this.appSelector.value}'${desktopAgent != null ? ` on desktopAgent '${desktopAgent}'` : ''}`,
+        );
         const chosenApp = this.applications.find(app => app.appId === this.appSelector.value);
 
         const agent = await getAgent();
 
         if (chosenApp != null) {
-            const identifier = await agent.open({ appId: chosenApp.appId }).catch(err => {
-                this.log(`Error opening new instance:`, err, 'error');
+            const identifier = await agent
+                .open({ appId: chosenApp.appId, ...(desktopAgent != null ? { desktopAgent } : {}) })
+                .catch(err => {
+                    this.log(`Error opening new instance:`, err, 'error');
 
-                return undefined;
-            });
+                    return undefined;
+                });
 
             if (identifier != null) {
                 this.log(`New instance opened: `, identifier);
@@ -948,7 +1157,9 @@ export class DefaultApp extends LitElement {
     }
 
     /**
-     * Gets all current instances registered in the root desktop agent's app directory for an app
+     * Gets all current instances registered in the root desktop agent's app directory for an app,
+     * and refreshes the "Open on Desktop Agent" dropdown with any `desktopAgent`s discovered among
+     * those instances (see `renderDesktopAgentSelector`).
      */
     private async findInstances(): Promise<void> {
         this.log(`Finding all instances of app: ${this.appSelector.value}`);
@@ -959,9 +1170,67 @@ export class DefaultApp extends LitElement {
         if (chosenApp != null) {
             await agent
                 .findInstances({ appId: chosenApp.appId })
-                .then(instances => this.log(`Instances of app ${this.appSelector.value}`, instances))
+                .then(instances => {
+                    this.log(`Instances of app ${this.appSelector.value}`, instances);
+                    this.updateDesktopAgentsForSelectedApp(instances);
+                })
                 .catch(err => this.log(err, undefined, 'error'));
         }
+    }
+
+    /**
+     * Returns the `desktopAgent` currently chosen in the "Open on Desktop Agent" dropdown, or
+     * `undefined` if the "local (no desktopAgent)" option is selected (or the dropdown hasn't
+     * rendered yet).
+     */
+    private selectedDesktopAgent(): string | undefined {
+        const value = this.desktopAgentSelector?.value;
+
+        return value == null || value === 'local (no desktopAgent)' ? undefined : value;
+    }
+
+    /**
+     * Deduplicates the `desktopAgent` of each given instance (present only on instances hosted by a
+     * remote, bridged Desktop Agent) and merges the result into the known set of remote desktop
+     * agents for the "Open on Desktop Agent" dropdown.
+     *
+     * This is deliberately *cumulative* (a union with whatever was already known) rather than a
+     * replace: the app currently being targeted for `open()` (e.g. `app-1-domain-A`) may not yet have
+     * any instances open anywhere, including on remote agents, so a `findInstances()` call for that
+     * app alone can never discover a remote agent's name. Desktop agents are instead typically
+     * discovered via some *other*, already-open app (e.g. `app-1-root`, open in every container by
+     * default) and should remain available afterwards even once a different, not-yet-open target app
+     * is selected.
+     */
+    private updateDesktopAgentsForSelectedApp(instances: Array<{ desktopAgent?: string }>): void {
+        this.desktopAgentsForSelectedApp = [
+            ...new Set([
+                ...this.desktopAgentsForSelectedApp,
+                ...instances.map(instance => instance.desktopAgent).filter((name): name is string => name != null),
+            ]),
+        ];
+    }
+
+    /**
+     * Re-fetches instances (and, in turn, the available desktop agents) whenever a different target
+     * app is chosen in the app selector, so the "Open on Desktop Agent" dropdown picks up any remote
+     * agents hosting instances of the newly selected app too.
+     */
+    private async onAppSelectorChanged(): Promise<void> {
+        const chosenApp = this.applications.find(app => app.appId === this.appSelector.value);
+        if (chosenApp == null) {
+            return;
+        }
+
+        const agent = await getAgent();
+
+        await agent
+            .findInstances({ appId: chosenApp.appId })
+            .then(instances => this.updateDesktopAgentsForSelectedApp(instances))
+            .catch(() => {
+                // Silently ignore - this is a background refresh triggered by dropdown selection,
+                // not a user-initiated action, so errors here shouldn't be surfaced to the console.
+            });
     }
 
     /**
@@ -975,6 +1244,34 @@ export class DefaultApp extends LitElement {
 
         await agent.addEventListener(eventType, (...args) => this.log('Received Event:', args));
         this.log(`Event listener has been added`);
+    }
+
+    /**
+     * Calls `fdc3.getUserChannels()`, logging the resulting `Channel[]` (the fixed list of
+     * "recommended"/system user channels available to join via `joinUserChannel()`) to the console.
+     */
+    private async getUserChannels(): Promise<void> {
+        const agent = await getAgent();
+
+        await agent
+            .getUserChannels()
+            .then(channels => this.log('User Channels:', channels))
+            .catch(err => this.log('Error getting user channels', err, 'error'));
+    }
+
+    /**
+     * Calls `fdc3.getCurrentChannel()`, logging the currently joined user channel (or `null` if not
+     * currently joined to one) to the console.
+     */
+    private async getCurrentChannel(): Promise<void> {
+        const agent = await getAgent();
+
+        await agent
+            .getCurrentChannel()
+            .then(channel =>
+                this.log('Current Channel:', channel != null ? { id: channel.id, type: channel.type } : null),
+            )
+            .catch(err => this.log('Error getting current channel', err, 'error'));
     }
 
     /**

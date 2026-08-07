@@ -8,8 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes } from '@finos/fdc3';
-import { IRootPublisher } from '../contracts.internal.js';
+import { AppIdentifier, BrowserTypes, ChannelError, Context, PrivateChannelEventTypes } from '@finos/fdc3';
+import { IChannelBridge, IRootPublisher } from '../contracts.internal.js';
 import { EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
 import { convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
 import {
@@ -46,13 +46,40 @@ type ChannelContextHistory = {
     channel: BrowserTypes.Channel;
     contextHistory: ContextHistory;
 };
-type PrivateChannelInfo = ChannelContextHistory & { allowedList: FullyQualifiedAppIdentifier[] };
+//sharedWithAgents tracks which remote Desktop Agents (via bridging) this private channel has been shared with; empty for purely local private channels, which are never forwarded to the bridge
+type PrivateChannelInfo = ChannelContextHistory & {
+    allowedList: FullyQualifiedAppIdentifier[];
+    sharedWithAgents: string[];
+};
+
+/**
+ * Returns the context history of a channel as an array containing one Context per type found on
+ * the channel, most recent first - the shape used by Desktop Agent Bridging's channelsState.
+ */
+function contextHistoryToArray(history: ContextHistory): Context[] {
+    if (history.mostRecent == null) {
+        return [];
+    }
+
+    const rest = Object.values(history.byContext)
+        .filter((context): context is Context => context != null)
+        .filter(context => context.type !== history.mostRecent?.type)
+        .reverse();
+
+    return [history.mostRecent, ...rest];
+}
 
 /**
  * responds to all channel related Request messages
  * stores all state for channels across all agents and proxies
  */
 export class ChannelMessageHandler {
+    /**
+     * Assigned by DesktopAgentImpl.connectBridge when Desktop Agent Bridging is configured. When
+     * unset (the default) every method below behaves exactly as it did before bridging existed.
+     */
+    public bridge?: IChannelBridge;
+
     private currentUserChannels: Partial<Record<string, BrowserTypes.Channel>> = {}; //indexed by instanceId
     private userChannels: Partial<Record<string, ChannelContextHistory>> = {}; //indexed by channelId
     //we have decided to never dispose of appChannels and privateChannels due to inability of knowing when apps have removed all references to channels
@@ -74,6 +101,114 @@ export class ChannelMessageHandler {
             string,
             (source: FullyQualifiedAppIdentifier, contextType: string | null) => void
         >();
+    }
+
+    /**
+     * Returns the current state of this agent's user and app channels for the bridge connection
+     * handshake (and step-6 resync): channelId to an array containing one Context per type found
+     * on the channel, most recent first. Private channels are never included. Empty channels are
+     * omitted.
+     */
+    public getChannelsState(): { [channelId: string]: Context[] } {
+        return Object.fromEntries(
+            [...Object.entries(this.userChannels), ...Object.entries(this.appChannels)]
+                .filter((entry): entry is [string, ChannelContextHistory] => entry[1] != null)
+                .map(([channelId, info]) => [channelId, contextHistoryToArray(info.contextHistory)] as const)
+                .filter(([, contexts]) => contexts.length > 0),
+        );
+    }
+
+    /**
+     * Adopts the merged channel state supplied by the bridge in ConnectionStep6ConnectedAgentsUpdate.
+     * Contexts are applied oldest-first so that the first entry for each channel becomes the
+     * channel's most recent context. Existing local contexts for types absent from the merged state
+     * are retained (merge, not replace). No broadcastEvents are published - adoption updates state
+     * only, it does not replay history to local apps.
+     */
+    public applyChannelsState(state: { [channelId: string]: Context[] }): void {
+        for (const [channelId, contexts] of Object.entries(state)) {
+            this.ensureChannelExists(channelId);
+            [...contexts].reverse().forEach(context => this.addContextToChannelHistory(channelId, context));
+        }
+    }
+
+    /**
+     * Ensures a channelId referenced by adopted bridge channel state is known locally, registering
+     * it as an app channel if it is neither a recommended user channel nor an already-known private
+     * channel.
+     */
+    private ensureChannelExists(channelId: string): void {
+        const isUserChannel = recommendedChannels.some(channel => channel.id === channelId);
+
+        if (isUserChannel || this.privateChannels[channelId] != null || this.appChannels[channelId] != null) {
+            return;
+        }
+
+        this.appChannels[channelId] = {
+            channel: { id: channelId, type: 'app' },
+            contextHistory: { byContext: {} },
+        };
+    }
+
+    /**
+     * Marks a private channel as shared with a remote agent - called when a raiseIntent result (in
+     * either direction) hands over a PrivateChannel - so that subsequent local activity on the
+     * channel is forwarded to that agent. Adopts the channel if it was created by the remote agent
+     * and is not yet known locally.
+     */
+    public markPrivateChannelShared(channel: BrowserTypes.Channel, desktopAgent: string): void {
+        const info =
+            this.privateChannels[channel.id] ??
+            (this.privateChannels[channel.id] = {
+                channel,
+                contextHistory: { byContext: {} },
+                allowedList: [],
+                sharedWithAgents: [],
+            });
+
+        if (!info.sharedWithAgents.includes(desktopAgent)) {
+            info.sharedWithAgents.push(desktopAgent);
+        }
+    }
+
+    /**
+     * Cleans up channel state for a Desktop Agent that has left the bridge (removeAgent in
+     * ConnectionStep6ConnectedAgentsUpdate). Local apps sharing a private channel with the departed
+     * agent are notified via privateChannelOnDisconnectEvent. Unlike cleanupDisconnectedProxy, user
+     * and app channel context history is not purged (the bridge's merged state remains
+     * authoritative), and there is no currentUserChannels/contextListeners cleanup, since no remote
+     * entries exist in those maps in this design.
+     */
+    public cleanupDisconnectedAgent(desktopAgent: string): void {
+        for (const [channelId, info] of Object.entries(this.privateChannels)) {
+            if (info == null || !info.sharedWithAgents.includes(desktopAgent)) {
+                continue;
+            }
+
+            info.sharedWithAgents = info.sharedWithAgents.filter(agent => agent !== desktopAgent);
+
+            const appIdentifiers = [
+                ...this.getAppsListeningForPrivateChannelEvent('disconnect', this.getListenersByChannelId(channelId)),
+                ...this.getAppsListeningForPrivateChannelEvent('allEvents', this.getListenersByChannelId(channelId)),
+            ];
+
+            if (isNonEmptyArray(appIdentifiers)) {
+                this.messagingProvider.publishEvent(
+                    createEvent<BrowserTypes.PrivateChannelOnDisconnectEvent>('privateChannelOnDisconnectEvent', {
+                        privateChannelId: channelId,
+                    }),
+                    appIdentifiers,
+                );
+            }
+        }
+    }
+
+    /**
+     * Names of the Desktop Agents this private channel is shared with, or an empty array for a
+     * purely local (or unknown) channel.
+     */
+    private sharedAgents(channelId: string): string[] {
+        return this.privateChannels[channelId]?.sharedWithAgents ?? [];
     }
 
     public async addListenerCallback(
@@ -253,12 +388,27 @@ export class ChannelMessageHandler {
 
         if (eventType === 'addContextListener') {
             //publish PrivateChannelOnAddContextListenerEvents for all contextListeners already added to the channel
+            //this is a replay for the newly-added event listener, so it is never forwarded to the bridge
             this.contextListeners[requestMessage.payload.privateChannelId]?.forEach(listener =>
                 this.publishPrivateChannelOnAddContextListenerEvent(
                     requestMessage.payload.privateChannelId,
                     listener.contextType,
                     [source],
                 ),
+            );
+        }
+
+        //forward to any Desktop Agent this private channel is shared with, unless listenerType is null (listening
+        //for all event types), which has no equivalent single-type representation on the bridge wire format
+        if (
+            requestMessage.payload.listenerType != null &&
+            isNonEmptyArray(this.sharedAgents(requestMessage.payload.privateChannelId))
+        ) {
+            this.bridge?.privateChannelEventListenerAdded(
+                requestMessage.payload.privateChannelId,
+                convertToPrivateChannelEventTypes(requestMessage.payload.listenerType),
+                source,
+                this.sharedAgents(requestMessage.payload.privateChannelId),
             );
         }
 
@@ -283,13 +433,34 @@ export class ChannelMessageHandler {
             listeners.some(listener => listener.listenerUUID === requestMessage.payload.listenerUUID),
         )?.[0] as PrivateChannelEventListenerKey | undefined;
 
+        let removedListener: PrivateChannelEventListener | undefined;
+
         if (eventType != null) {
             //remove listener from array of eventListeners for that PrivateChannelEventType
             const listeners = this.privateChannelEventListeners[eventType];
+            removedListener = listeners?.find(
+                listener => listener.listenerUUID === requestMessage.payload.listenerUUID,
+            );
             const newListeners = listeners?.filter(
                 listener => listener.listenerUUID != requestMessage.payload.listenerUUID,
             );
             this.privateChannelEventListeners[eventType] = newListeners;
+        }
+
+        //forward to any Desktop Agent this private channel is shared with; 'allEvents' has no equivalent
+        //single-type representation on the bridge wire format
+        if (
+            eventType != null &&
+            eventType !== 'allEvents' &&
+            removedListener != null &&
+            isNonEmptyArray(this.sharedAgents(removedListener.channelId))
+        ) {
+            this.bridge?.privateChannelEventListenerRemoved(
+                removedListener.channelId,
+                eventType,
+                source,
+                this.sharedAgents(removedListener.channelId),
+            );
         }
 
         this.messagingProvider.publishResponseMessage(
@@ -315,6 +486,7 @@ export class ChannelMessageHandler {
             contextHistory: { byContext: {} },
             //add creator of private channel to private channel's allowedList
             allowedList: [source],
+            sharedWithAgents: [],
         };
 
         this.messagingProvider.publishResponseMessage(
@@ -440,6 +612,15 @@ export class ChannelMessageHandler {
                 requestMessage.payload.contextType,
                 appIdentifiers,
             );
+
+            if (isNonEmptyArray(this.sharedAgents(requestMessage.payload.channelId))) {
+                this.bridge?.privateChannelOnAddContextListener(
+                    requestMessage.payload.channelId,
+                    requestMessage.payload.contextType,
+                    source,
+                    this.sharedAgents(requestMessage.payload.channelId),
+                );
+            }
         }
 
         this.messagingProvider.publishResponseMessage(
@@ -511,20 +692,26 @@ export class ChannelMessageHandler {
         if (channelId != null) {
             //remove contextListener from array of contextListeners for that channelId
             const listeners = this.contextListeners[channelId];
-            let removedContextListener: ChannelContextListener | null = null;
-            const newListeners = listeners?.filter(listener => {
-                if (listener.listenerUUID != requestMessage.payload.listenerUUID) {
-                    return true;
-                }
-                //this should only be assigned once since listenerUUIDs are unique
-                removedContextListener = listener;
-                return false;
-            });
+            //this should only ever match once since listenerUUIDs are unique
+            const removedListener =
+                listeners?.find(listener => listener.listenerUUID === requestMessage.payload.listenerUUID) ?? null;
+            const newListeners = listeners?.filter(
+                listener => listener.listenerUUID != requestMessage.payload.listenerUUID,
+            );
             this.contextListeners[channelId] = newListeners;
 
             //if channel is private channel, publish privateChannelOnUnsubscribeEvent to all apps listening for them on channel
-            if (this.privateChannels[channelId] != null && removedContextListener != null) {
-                this.publishPrivateChannelOnUnsubscribeEvent(channelId, removedContextListener);
+            if (this.privateChannels[channelId] != null && removedListener != null) {
+                this.publishPrivateChannelOnUnsubscribeEvent(channelId, removedListener);
+
+                if (isNonEmptyArray(this.sharedAgents(channelId))) {
+                    this.bridge?.privateChannelOnUnsubscribe(
+                        channelId,
+                        removedListener.contextType,
+                        source,
+                        this.sharedAgents(channelId),
+                    );
+                }
             }
         }
 
@@ -617,10 +804,12 @@ export class ChannelMessageHandler {
             return;
         }
 
-        this.publishBroadcastEvent(requestMessage, source);
+        this.publishBroadcastEvent(requestMessage.payload.channelId, requestMessage.payload.context, source);
 
         //add context to channel context history
         this.addContextToChannelHistory(requestMessage.payload.channelId, requestMessage.payload.context);
+
+        this.forwardBroadcastToBridge(requestMessage.payload.channelId, requestMessage.payload.context, source);
 
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.BroadcastResponse>(
@@ -634,22 +823,50 @@ export class ChannelMessageHandler {
     }
 
     /**
+     * Applies a broadcast forwarded from another Desktop Agent via the bridge: fans it out to local
+     * listeners exactly as a local broadcastRequest would, and updates channel history. Never
+     * forwarded back out to the bridge (loop prevention).
+     */
+    public applyRemoteBroadcast(channelId: string, context: Context, source: AppIdentifier): void {
+        this.publishBroadcastEvent(channelId, context, source);
+        this.addContextToChannelHistory(channelId, context);
+    }
+
+    /**
+     * Forwards a locally-originated broadcast to the bridge: unconditionally for user/app channels
+     * (bridging broadcasts them to all agents, untargeted), and only for a private channel that has
+     * been shared with at least one remote agent.
+     */
+    private forwardBroadcastToBridge(channelId: string, context: Context, source: FullyQualifiedAppIdentifier): void {
+        if (this.bridge == null) {
+            return;
+        }
+
+        if (this.privateChannels[channelId] != null) {
+            const agents = this.sharedAgents(channelId);
+            if (isNonEmptyArray(agents)) {
+                this.bridge.privateChannelBroadcast(channelId, context, source, agents);
+            }
+            return;
+        }
+
+        this.bridge.broadcast(channelId, context, source);
+    }
+
+    /**
      * Publishes a broadcastEvent to all apps which are listening for broadcastEvents of the correct contextType on the given channel
      */
-    private publishBroadcastEvent(
-        requestMessage: BrowserTypes.BroadcastRequest,
-        source: FullyQualifiedAppIdentifier,
-    ): void {
+    private publishBroadcastEvent(channelId: string, context: Context, source: AppIdentifier): void {
         //get all appIdentifiers for apps which are listening for broadcastEvents on given channel
-        const appIdentifiers = this.getBroadcastAppIdentifiers(requestMessage, source);
+        const appIdentifiers = this.getBroadcastAppIdentifiers(channelId, context, source);
 
         //if there are no listening apps, do nothing
         if (isNonEmptyArray(appIdentifiers)) {
             //publish broadcastEvent to all apps listening for broadcastEvents on given channel
             this.messagingProvider.publishEvent(
                 createEvent<BrowserTypes.BroadcastEvent>('broadcastEvent', {
-                    channelId: requestMessage.payload.channelId,
-                    context: requestMessage.payload.context,
+                    channelId,
+                    context,
                     originatingApp: source,
                 }),
                 appIdentifiers,
@@ -659,29 +876,27 @@ export class ChannelMessageHandler {
 
     /**
      * Returns all appIdentifiers for apps which are listening for broadcastEvents of the correct contextType on given channel, excluding origin app
-     * @param requestMessage is broadcastRequest message containing context to be broadcast and channelId of channel to broadcast it on
+     * @param channelId is the channel the context was broadcast on
+     * @param context is the context being broadcast
      * @param source is appIdentifier of origin app
      */
     private getBroadcastAppIdentifiers(
-        requestMessage: BrowserTypes.BroadcastRequest,
-        source: FullyQualifiedAppIdentifier,
+        channelId: string,
+        context: Context,
+        source: AppIdentifier,
     ): FullyQualifiedAppIdentifier[] {
         const contextListeners = [
             //get all contextListeners for the given channel
-            ...(this.contextListeners[requestMessage.payload.channelId] ?? []),
+            ...(this.contextListeners[channelId] ?? []),
             //get all contextListeners listening to the current channel of their app when that app is joined to the given channel
             ...(this.contextListeners['currentChannel']?.filter(
-                contextListener =>
-                    this.currentUserChannels[contextListener.source.instanceId]?.id ===
-                    requestMessage.payload.channelId,
+                contextListener => this.currentUserChannels[contextListener.source.instanceId]?.id === channelId,
             ) ?? []),
         ];
 
         //get all appIdentifiers for contextListeners of correct context type, excluding any for origin app
         return contextListeners
-            .filter(contextListener =>
-                this.isListenerValidBroadcastTarget(contextListener, requestMessage.payload.context.type, source),
-            )
+            .filter(contextListener => this.isListenerValidBroadcastTarget(contextListener, context.type, source))
             .map(contextListener => contextListener.source);
     }
 
@@ -694,7 +909,7 @@ export class ChannelMessageHandler {
     private isListenerValidBroadcastTarget(
         contextListener: ChannelContextListener,
         contextType: string,
-        source: FullyQualifiedAppIdentifier,
+        source: AppIdentifier,
     ): boolean {
         return (
             (contextListener.contextType === contextType || contextListener.contextType == null) &&
@@ -807,6 +1022,10 @@ export class ChannelMessageHandler {
         //publish privateChannelOnDisconnectEvent to all apps listening for them on given private channel
         this.publishPrivateChannelOnDisconnectEvent(requestMessage, source);
 
+        if (isNonEmptyArray(this.sharedAgents(channelId))) {
+            this.bridge?.privateChannelOnDisconnect(channelId, source, this.sharedAgents(channelId));
+        }
+
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.PrivateChannelDisconnectResponse>(
                 'privateChannelDisconnectResponse',
@@ -864,6 +1083,85 @@ export class ChannelMessageHandler {
     }
 
     /**
+     * Applies a PrivateChannel.onAddContextListener event forwarded from another Desktop Agent via
+     * the bridge: fans it out to local listeners exactly as a local addContextListener on a shared
+     * private channel would. Never forwarded back out to the bridge (loop prevention).
+     */
+    public applyRemotePrivateChannelOnAddContextListener(channelId: string, contextType: string | null): void {
+        const appIdentifiers = [
+            ...this.getAppsListeningForPrivateChannelEvent(
+                'addContextListener',
+                this.getListenersByChannelId(channelId),
+            ),
+            ...this.getAppsListeningForPrivateChannelEvent('allEvents', this.getListenersByChannelId(channelId)),
+        ];
+
+        this.publishPrivateChannelOnAddContextListenerEvent(channelId, contextType, appIdentifiers);
+    }
+
+    /**
+     * Applies a PrivateChannel.onUnsubscribe event forwarded from another Desktop Agent via the
+     * bridge. Never forwarded back out to the bridge (loop prevention).
+     */
+    public applyRemotePrivateChannelOnUnsubscribe(channelId: string, contextType: string | null): void {
+        const appIdentifiers = [
+            ...this.getAppsListeningForPrivateChannelEvent('unsubscribe', this.getListenersByChannelId(channelId)),
+            ...this.getAppsListeningForPrivateChannelEvent('allEvents', this.getListenersByChannelId(channelId)),
+        ];
+
+        if (isNonEmptyArray(appIdentifiers)) {
+            this.messagingProvider.publishEvent(
+                createEvent<BrowserTypes.PrivateChannelOnUnsubscribeEvent>('privateChannelOnUnsubscribeEvent', {
+                    contextType,
+                    privateChannelId: channelId,
+                }),
+                appIdentifiers,
+            );
+        }
+    }
+
+    /**
+     * Applies a PrivateChannel.onDisconnect event forwarded from another Desktop Agent via the
+     * bridge. Never forwarded back out to the bridge (loop prevention).
+     */
+    public applyRemotePrivateChannelOnDisconnect(channelId: string): void {
+        const appIdentifiers = [
+            ...this.getAppsListeningForPrivateChannelEvent('disconnect', this.getListenersByChannelId(channelId)),
+            ...this.getAppsListeningForPrivateChannelEvent('allEvents', this.getListenersByChannelId(channelId)),
+        ];
+
+        if (isNonEmptyArray(appIdentifiers)) {
+            this.messagingProvider.publishEvent(
+                createEvent<BrowserTypes.PrivateChannelOnDisconnectEvent>('privateChannelOnDisconnectEvent', {
+                    privateChannelId: channelId,
+                }),
+                appIdentifiers,
+            );
+        }
+    }
+
+    /**
+     * Applies a PrivateChannel.eventListenerAdded notification forwarded from another Desktop Agent
+     * via the bridge. This produces no local fan-out - its sole effect is recording that the channel
+     * is shared with that agent (idempotent).
+     */
+    public applyRemotePrivateChannelEventListenerAdded(channelId: string, desktopAgent: string): void {
+        const info = this.privateChannels[channelId];
+
+        if (info != null && !info.sharedWithAgents.includes(desktopAgent)) {
+            info.sharedWithAgents.push(desktopAgent);
+        }
+    }
+
+    /**
+     * Applies a PrivateChannel.eventListenerRemoved notification forwarded from another Desktop
+     * Agent via the bridge. This produces no local fan-out and does not affect channel sharing -
+     * removing one listener type does not mean the remote agent has disconnected from the channel
+     * (that is signalled separately by PrivateChannel.onDisconnect / a bridge agent departure).
+     */
+    public applyRemotePrivateChannelEventListenerRemoved(_channelId: string, _desktopAgent: string): void {}
+
+    /**
      * Clean up all channel subscriptions for a disconnected proxy
      * @param appId The app ID of the disconnected proxy
      */
@@ -914,6 +1212,15 @@ export class ChannelMessageHandler {
                 if (this.privateChannels[channelId]) {
                     for (const listener of removedListeners) {
                         this.publishPrivateChannelOnUnsubscribeEvent(channelId, listener);
+
+                        if (isNonEmptyArray(this.sharedAgents(channelId))) {
+                            this.bridge?.privateChannelOnUnsubscribe(
+                                channelId,
+                                listener.contextType,
+                                listener.source,
+                                this.sharedAgents(channelId),
+                            );
+                        }
                     }
                 }
             }

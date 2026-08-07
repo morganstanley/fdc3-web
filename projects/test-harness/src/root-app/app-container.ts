@@ -23,14 +23,36 @@ export class AppContainer extends LitElement {
     public details: WebAppDetails | undefined;
 
     /**
+     * The appId of the application hosted by this container, when known. Exposed as `data-app-id` so
+     * automation can locate the container/iframe for a specific app.
+     */
+    @property({ attribute: 'app-id' })
+    public appId: string | undefined;
+
+    /**
+     * The instanceId of the application hosted by this container, when known. Exposed as
+     * `data-instance-id` so automation can locate the container/iframe for a specific app instance.
+     */
+    @property({ attribute: 'instance-id' })
+    public instanceId: string | undefined;
+
+    /**
      * Renders the container's HTML structure, including the iframe that will contain the application.
      * @returns A TemplateResult that represents the component's HTML structure.
      */
     protected override render(): TemplateResult {
         return html`
-            <div class="border border-3 h-100 position-relative ${this.getOriginClass()}">
+            <div
+                class="border border-3 h-100 position-relative ${this.getOriginClass()}"
+                automation-id="fth-app-container"
+                data-app-id=${this.appId ?? ''}
+                data-instance-id=${this.instanceId ?? ''}
+            >
                 <iframe
                     ${ref(element => this.handleIframe(element as HTMLIFrameElement))}
+                    automation-id="fth-app-iframe"
+                    data-app-id=${this.appId ?? ''}
+                    data-instance-id=${this.instanceId ?? ''}
                     src=${this.details?.url}
                     class="w-100 h-100 border-0"
                 ></iframe>

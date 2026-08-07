@@ -437,7 +437,7 @@ export function isWCPSuccessResponse(
     );
 }
 
-function neverCheck(_value: never): false {
+export function neverCheck(_value: never): false {
     return false;
 }
 export function isWCPValidateAppIdentity(value: any): value is BrowserTypes.WebConnectionProtocol4ValidateAppIdentity {

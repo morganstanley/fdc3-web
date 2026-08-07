@@ -47,3 +47,34 @@ export const defaultBackoffRetry: Required<BackoffRetryParams> = {
     maxAttempts: 3,
     baseDelay: 250,
 };
+
+/**
+ * Constants for Desktop Agent Bridging (https://fdc3.finos.org/docs/agent-bridging/spec)
+ */
+export const BRIDGE = {
+    DEFAULT_HOST: '127.0.0.1',
+    DEFAULT_PORT_RANGE: [4475, 4575] as [number, number],
+    /**
+     * The spec requires pausing at least 5s after exhausting the port range before scanning again.
+     */
+    RETRY_PAUSE_MS: 5000,
+    PORT_CONNECT_TIMEOUT_MS: 750,
+    /**
+     * Aligned with the existing intent-listener timeout in DesktopAgentImpl.
+     */
+    RESPONSE_TIMEOUT_MS: 15000,
+    /**
+     * A generous safety net only - a real intent handler may legitimately take minutes of user
+     * interaction. The bridge connection rejects immediately on disconnect regardless.
+     */
+    INTENT_RESULT_TIMEOUT_MS: 300000,
+    /**
+     * Bound on how long DesktopAgentImpl.raiseIntentFromRemote waits for a local intent listener to
+     * register, deliberately shorter than the default RESPONSE_TIMEOUT_MS (15000): a bridge server
+     * relaying a raiseIntentRequest must itself answer the originating agent within its own
+     * per-family timeout (recommended default 12000ms), so a slow-but-eventual local listener must
+     * time out here first and produce a meaningful IntentDeliveryFailed, rather than the bridge
+     * timing the whole request out with a generic error while the intent is still in flight locally.
+     */
+    REMOTE_INTENT_LISTENER_TIMEOUT_MS: 10000,
+} as const;

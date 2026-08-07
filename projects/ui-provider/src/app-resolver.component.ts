@@ -119,6 +119,14 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
             padding-right: var(--ms-app-resolver-app-icon-padding-right, 4px);
         }
 
+        .ms-app-resolver-app-remote-agent-icon {
+            width: var(--ms-app-resolver-app-remote-agent-icon-width, 14px);
+            height: var(--ms-app-resolver-app-remote-agent-icon-height, 14px);
+            margin-left: var(--ms-app-resolver-app-remote-agent-icon-margin-left, 6px);
+            color: var(--ms-app-resolver-app-remote-agent-icon-color, #6c757d);
+            flex-shrink: 0;
+        }
+
         .ms-app-resolver-popup-intent-title-btn {
             border-style: var(--ms-app-resolver-popup-intent-title-btn-border-style, none);
             width: var(--ms-app-resolver-popup-intent-title-btn-width, 100%);
@@ -287,10 +295,11 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                 this.resetPopup();
                 resolve({
                     intent,
-                    app:
-                        app.instanceId != null
-                            ? { appId: app.appId, instanceId: app.instanceId }
-                            : { appId: app.appId },
+                    app: {
+                        appId: app.appId,
+                        ...(app.instanceId != null ? { instanceId: app.instanceId } : {}),
+                        ...(app.desktopAgent != null ? { desktopAgent: app.desktopAgent } : {}),
+                    },
                 });
             };
         });
@@ -480,17 +489,39 @@ function renderApp(app: AppMetadata, intent: Intent, component: AppResolverCompo
             data-app-id="${app.appId}"
             data-app-instance-id="${ifDefined(app.instanceId)}"
             data-intent="${ifDefined(intent !== '' ? intent : undefined)}"
+            data-desktop-agent="${ifDefined(app.desktopAgent)}"
             @click=${() => component.selectApp(app, intent)}
         >
             <span class="ms-app-resolver-app-icon-container"
                 >${renderAppIcon(app.icons?.find(icon => icon != null))}</span
             >
             <span class="ms-app-resolver-app-display-app-title">${app.title ?? app.name ?? app.appId}</span>
+            ${when(app.desktopAgent != null, () => renderRemoteAgentIcon(app.desktopAgent as string))}
             ${when(app.instanceId != null, () =>
                 Object.values(app.instanceMetadata ?? {}).map((metadata: unknown) => renderInstanceMetadata(metadata)),
             )}
         </button>
     </div>`;
+}
+
+/**
+ * Marks an app or app instance sourced from another Desktop Agent via Bridging
+ * (https://fdc3.finos.org/docs/agent-bridging/spec) - hovering shows which agent it came from.
+ */
+function renderRemoteAgentIcon(desktopAgent: string): TemplateResult {
+    return html`<svg
+        class="ms-app-resolver-app-remote-agent-icon"
+        viewBox="0 0 20 20"
+        role="img"
+        aria-label="Hosted by Desktop Agent: ${desktopAgent}"
+        title="Hosted by Desktop Agent: ${desktopAgent}"
+    >
+        <circle cx="10" cy="10" r="8" style="fill:none;stroke:currentColor;stroke-width:1.5" />
+        <path
+            d="M2 10 H18 M10 2 C13 2 15 6 15 10 C15 14 13 18 10 18 C7 18 5 14 5 10 C5 6 7 2 10 2 Z"
+            style="fill:none;stroke:currentColor;stroke-width:1"
+        />
+    </svg>`;
 }
 
 function renderInstanceMetadata(metadata: any): TemplateResult {

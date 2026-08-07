@@ -7,6 +7,7 @@
         "src/",
     ],
     "exclude": [
-        "**/*.spec.ts"
+        "**/*.spec.ts",
+        "**/*.fake.ts"
     ]
 }

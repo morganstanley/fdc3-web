@@ -8,8 +8,23 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { type AppIdentifier, type AppIntent, type Contact, type Context, type Intent, ResolveError } from '@finos/fdc3';
-import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
+import {
+    type AppIdentifier,
+    type AppIntent,
+    type AppMetadata,
+    type Contact,
+    type Context,
+    type Intent,
+    ResolveError,
+} from '@finos/fdc3';
+import {
+    IMocked,
+    Mock,
+    proxyModule,
+    registerMock,
+    setupFunction,
+    setupProperty,
+} from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     AppDirectoryApplication,
@@ -17,6 +32,7 @@ import {
     LocalAppDirectory,
     WebAppDetails,
 } from '../app-directory.contracts.js';
+import { IRemoteAppSource } from '../contracts.internal.js';
 import {
     BackoffRetryParams,
     FORCE_NEW_INSTANCE,
@@ -1248,7 +1264,8 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it('should add app when iterator emits app after initial load', async () => {
             let emitFunction:
-                ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>) | undefined;
+                | ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>)
+                | undefined;
 
             const updates: AsyncIterator<AppDirectoryApplication> = {
                 next: async () => {
@@ -1296,7 +1313,8 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it(`should not clear app instances when an existing local app directory entry is updated`, async () => {
             let emitFunction:
-                ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>) | undefined;
+                | ((value: AppDirectoryApplication) => Promise<IteratorResult<AppDirectoryApplication>>)
+                | undefined;
 
             const updates: AsyncIterator<AppDirectoryApplication> = {
                 next: async () => {
@@ -1381,7 +1399,8 @@ describe(`${AppDirectory.name} (directory)`, () => {
 
         it('should add multiple apps when iterator emits apps after initial load', async () => {
             let emitFunction:
-                ((value: AppDirectoryApplication[]) => Promise<IteratorResult<AppDirectoryApplication[]>>) | undefined;
+                | ((value: AppDirectoryApplication[]) => Promise<IteratorResult<AppDirectoryApplication[]>>)
+                | undefined;
 
             const updates: AsyncIterator<AppDirectoryApplication[]> = {
                 next: async () => {
@@ -1797,6 +1816,216 @@ describe(`${AppDirectory.name} (directory)`, () => {
             expect(mockResolver.withFunction('resolveAppForContext')).wasCalledOnce();
             expect(mockResolver.functionCallLookup['resolveAppForContext']?.[0][0].appManifests).toEqual({
                 'app-id-with-manifest@mock-app-directory': { singleton: true },
+            });
+        });
+    });
+
+    describe(`bridging`, () => {
+        let mockRemoteAppSource: IMocked<IRemoteAppSource>;
+
+        const remoteAppMetadata: AppMetadata = { appId: 'remote-app@remote-directory', desktopAgent: 'agent-b' };
+
+        beforeEach(() => {
+            mockRemoteAppSource = Mock.create<IRemoteAppSource>().setup(
+                setupProperty('agentName', 'agent-a'),
+                setupFunction('findIntent', () => Promise.resolve([remoteAppMetadata])),
+                setupFunction('findIntentsByContext', () => Promise.resolve([])),
+                setupFunction('findInstances', () => Promise.resolve([remoteAppMetadata])),
+                setupFunction('getAppMetadata', () => Promise.resolve(remoteAppMetadata)),
+            );
+        });
+
+        describe(`getAppIntent`, () => {
+            it(`should append remote apps after local apps, preserving desktopAgent`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                await registerApp(instance, mockedApplicationTwo, 'ViewChart', [{ type: 'fdc3.chart' }]);
+
+                const result = await instance.getAppIntent('ViewChart', { type: 'fdc3.chart' });
+
+                expect(result.apps.at(-1)).toEqual(remoteAppMetadata);
+                expect(result.apps.length).toBeGreaterThan(1);
+            });
+
+            it(`should degrade to local-only results when the remote source rejects`, async () => {
+                mockRemoteAppSource.setupFunction('findIntent', () => Promise.reject(new Error('bridge down')));
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                await registerApp(instance, mockedApplicationTwo, 'ViewChart', [{ type: 'fdc3.chart' }]);
+
+                const result = await instance.getAppIntent('ViewChart', { type: 'fdc3.chart' });
+
+                expect(result.apps).not.toContainEqual(remoteAppMetadata);
+            });
+
+            it(`should return local-only results when no remote source is assigned`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+
+                await registerApp(instance, mockedApplicationTwo, 'ViewChart', [{ type: 'fdc3.chart' }]);
+
+                const result = await instance.getAppIntent('ViewChart', { type: 'fdc3.chart' });
+
+                expect(result.apps).not.toContainEqual(remoteAppMetadata);
+            });
+        });
+
+        describe(`getAppIntentsForContext`, () => {
+            it(`should include an intent handled only remotely`, async () => {
+                const remoteOnlyAppIntent: AppIntent = {
+                    intent: { name: 'RemoteOnlyIntent' },
+                    apps: [remoteAppMetadata],
+                };
+                mockRemoteAppSource.setupFunction('findIntentsByContext', () => Promise.resolve([remoteOnlyAppIntent]));
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const result = await instance.getAppIntentsForContext(contact);
+
+                expect(result).toContainEqual(remoteOnlyAppIntent);
+            });
+
+            it(`should append remote apps after local apps for an intent handled by both, keeping the local intent object`, async () => {
+                const sharedAppIntent: AppIntent = {
+                    intent: { name: 'ViewChart', displayName: 'Remote View Chart' },
+                    apps: [remoteAppMetadata],
+                };
+                mockRemoteAppSource.setupFunction('findIntentsByContext', () => Promise.resolve([sharedAppIntent]));
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                await registerApp(instance, mockedApplicationTwo, 'ViewChart', [{ type: 'fdc3.chart' }]);
+
+                const result = await instance.getAppIntentsForContext({ type: 'fdc3.chart' });
+                const viewChart = result.find(appIntent => appIntent.intent.name === 'ViewChart');
+
+                expect(viewChart?.intent.displayName).toEqual('View Chart');
+                expect(viewChart?.apps.at(-1)).toEqual(remoteAppMetadata);
+            });
+        });
+
+        describe(`getAppInstances`, () => {
+            it(`should concatenate local and remote instances`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+                await registerApp(instance, mockedApplicationOne);
+
+                const result = await instance.getAppInstances('app-id-one');
+
+                expect(result).toContainEqual(remoteAppMetadata);
+                expect(result?.length).toBeGreaterThan(1);
+            });
+
+            it(`should return remote-only instances when the appId is unknown locally`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const result = await instance.getAppInstances('unknown-app-id');
+
+                expect(result).toEqual([remoteAppMetadata]);
+            });
+
+            it(`should return undefined when both local and remote are empty`, async () => {
+                mockRemoteAppSource.setupFunction('findInstances', () => Promise.resolve([]));
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const result = await instance.getAppInstances('unknown-app-id');
+
+                expect(result).toBeUndefined();
+            });
+
+            it(`should pass desktopAgent through to findInstances`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                await instance.getAppInstances('unknown-app-id', 'agent-b');
+
+                expect(mockRemoteAppSource.functionCallLookup.findInstances?.[0][0]).toEqual({
+                    appId: 'unknown-app-id',
+                    desktopAgent: 'agent-b',
+                });
+            });
+        });
+
+        describe(`getAppMetadata`, () => {
+            it(`should consult the remote source only when the appId names a foreign desktopAgent`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const result = await instance.getAppMetadata({ appId: 'remote-app', desktopAgent: 'agent-b' });
+
+                expect(result).toEqual(remoteAppMetadata);
+            });
+
+            it(`should consult the remote source on a local miss`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const result = await instance.getAppMetadata({ appId: 'unknown-app-id' });
+
+                expect(result).toEqual(remoteAppMetadata);
+            });
+
+            it(`should not consult the remote source when the app is known locally`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+                await registerApp(instance, mockedApplicationOne);
+
+                const result = await instance.getAppMetadata({ appId: 'app-id-one' });
+
+                expect(result).not.toBeUndefined();
+                expect(mockRemoteAppSource.withFunction('getAppMetadata')).wasNotCalled();
+            });
+        });
+
+        it(`getLocalAppIntentsForContext should never consult the remote source`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            instance.remoteAppSource = mockRemoteAppSource.mock;
+
+            await instance.getLocalAppIntentsForContext(contact);
+
+            expect(mockRemoteAppSource.withFunction('findIntentsByContext')).wasNotCalled();
+        });
+
+        it(`getLocalAppIntent should never consult the remote source`, async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+            instance.remoteAppSource = mockRemoteAppSource.mock;
+
+            await instance.getLocalAppIntent('ViewChart', contact);
+
+            expect(mockRemoteAppSource.withFunction('findIntent')).wasNotCalled();
+        });
+
+        describe(`resolveAppForIntent`, () => {
+            it(`should return a remote-targeted app identifier without consulting the resolver`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const remoteApp: AppIdentifier = { appId: 'remote-app@remote-directory', desktopAgent: 'agent-b' };
+
+                const result = await instance.resolveAppForIntent('SomeIntent', contact, remoteApp);
+
+                expect(result).toEqual(remoteApp);
+                expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
+            });
+        });
+
+        describe(`resolveAppForContext`, () => {
+            it(`should reach the resolver for a remote-targeted app rather than rejecting TargetAppUnavailable`, async () => {
+                const instance = createInstance([mockedAppDirectoryUrl]);
+                instance.remoteAppSource = mockRemoteAppSource.mock;
+
+                const remoteApp: AppIdentifier = { appId: 'remote-app@remote-directory', desktopAgent: 'agent-b' };
+                mockResolver.setupFunction('resolveAppForContext', () =>
+                    Promise.resolve({ intent: 'SomeIntent', app: remoteApp }),
+                );
+
+                const result = await instance.resolveAppForContext(contact, remoteApp);
+
+                expect(result).toEqual({ intent: 'SomeIntent', app: remoteApp });
+                expect(mockResolver.withFunction('resolveAppForContext')).wasCalledOnce();
             });
         });
     });

@@ -23,10 +23,12 @@ import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
-import { HEARTBEAT } from '../constants.js';
+import { BRIDGE, HEARTBEAT } from '../constants.js';
 import {
     AddIntentListenerWithContextRequest,
+    IDesktopAgentBridge,
     IRootPublisher,
+    RemoteAppIdentifier,
     UpdateInstanceMetadataRequest,
     UpdateInstanceMetadataResponse,
 } from '../contracts.internal.js';
@@ -65,6 +67,7 @@ import {
     isNewInstanceStrategy,
     isOpenApplicationStrategy,
     isOpenError,
+    isRemoteAppIdentifier,
     isResponsePayloadError,
     isSelectApplicationStrategy,
     isWCPGoodbye,
@@ -104,9 +107,15 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private readonly eventListeners: EventListenerLookup = {};
 
     public readonly directory: AppDirectory;
-    private channelMessageHandler: ChannelMessageHandler;
+    public readonly channelMessageHandler: ChannelMessageHandler;
     private applicationStrategies: DesktopAgentStrategies[];
     private rootMessagePublisher: IRootPublisher;
+
+    /**
+     * Assigned by connectBridge when Desktop Agent Bridging is configured. When unset (the default)
+     * every bridging-related branch below is unreachable and behaviour is unchanged.
+     */
+    private bridge: IDesktopAgentBridge | undefined;
 
     // Heartbeat tracking
     private readonly heartbeatTimers: Map<FullyQualifiedAppIdentifier, ReturnType<typeof setInterval>> = new Map();
@@ -134,6 +143,24 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         //if no other strategy works, desktop agent will try the fallback strategy
         this.applicationStrategies = [...(params.applicationStrategies ?? []), new FallbackOpenStrategy(params.window)];
+    }
+
+    /**
+     * Wires a Desktop Agent Bridge into this agent, its app directory and its channel state. Called
+     * by DesktopAgentFactory.createRoot when the `bridge` factory param is supplied.
+     */
+    public connectBridge(bridge: IDesktopAgentBridge): void {
+        this.bridge = bridge;
+        this.directory.remoteAppSource = bridge;
+        this.channelMessageHandler.bridge = bridge;
+    }
+
+    /**
+     * True when a bridge is connected and the given app identifier names a Desktop Agent other than
+     * this one - i.e. delegation to the bridge is both possible and required.
+     */
+    private isRemoteApp(app?: AppIdentifier): app is RemoteAppIdentifier {
+        return this.bridge != null && isRemoteAppIdentifier(app, this.bridge.agentName);
     }
 
     private async onRequestMessage(
@@ -272,6 +299,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             });
 
         const payload: BrowserTypes.RaiseIntentResponsePayload = {};
+
+        if (this.isRemoteApp(appIdentifier)) {
+            return this.delegateRaiseIntent(requestMessage, requestMessage.payload.intent, appIdentifier, source);
+        }
 
         if (appIdentifier != null) {
             // If the selected app doesn't have an instanceId, open a new instance
@@ -415,6 +446,15 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 return;
             }
 
+            if (this.isRemoteApp(resolutionResponse.app)) {
+                return this.delegateRaiseIntent(
+                    requestMessage,
+                    resolutionResponse.intent,
+                    resolutionResponse.app,
+                    source,
+                );
+            }
+
             // If the selected app doesn't have an instanceId, open a new instance
             const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
                 resolutionResponse.app,
@@ -485,6 +525,114 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         }
     }
 
+    /**
+     * Delegates a raiseIntent to the Desktop Agent hosting the chosen app and relays its response,
+     * and later its result, back to the originating local app.
+     */
+    private async delegateRaiseIntent(
+        requestMessage: BrowserTypes.RaiseIntentRequest | BrowserTypes.RaiseIntentForContextRequest,
+        intent: Intent,
+        app: RemoteAppIdentifier,
+        source: FullyQualifiedAppIdentifier,
+    ): Promise<void> {
+        try {
+            const { intentResolution, result } = await this.bridge!.raiseIntent({
+                intent,
+                context: requestMessage.payload.context,
+                app,
+                source,
+            });
+
+            this.publishRaiseIntentPayload(requestMessage, { intentResolution }, source);
+            this.relayRemoteIntentResult(result, requestMessage.meta.requestUuid, source, app.desktopAgent);
+        } catch (error) {
+            this.publishRaiseIntentPayload(
+                requestMessage,
+                { error: isFindInstancesErrors(error) ? error : ResolveError.IntentDeliveryFailed },
+                source,
+            );
+        }
+    }
+
+    /**
+     * Publishes a raiseIntentResponse or raiseIntentForContextResponse (matching the type of
+     * requestMessage) - the two payload shapes are structurally compatible for the fields used here.
+     */
+    private publishRaiseIntentPayload(
+        requestMessage: BrowserTypes.RaiseIntentRequest | BrowserTypes.RaiseIntentForContextRequest,
+        payload: { intentResolution?: BrowserTypes.IntentResolution; error?: BrowserTypes.FindInstancesErrors },
+        source: FullyQualifiedAppIdentifier,
+    ): void {
+        if (requestMessage.type === 'raiseIntentRequest') {
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.RaiseIntentResponse>(
+                    'raiseIntentResponse',
+                    payload,
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+        } else {
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.RaiseIntentForContextResponse>(
+                    'raiseIntentForContextResponse',
+                    payload,
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+        }
+    }
+
+    /**
+     * Relays the result produced by a remote app back to the local app that raised the intent. The
+     * originating app and its requestUuid are captured in this closure, so no correlation state is
+     * required - the local app's proxy is already awaiting a raiseIntentResultResponse for this
+     * requestUuid.
+     */
+    private relayRemoteIntentResult(
+        result: Promise<BrowserTypes.IntentResult>,
+        requestUuid: string,
+        source: FullyQualifiedAppIdentifier,
+        desktopAgent: string,
+    ): void {
+        result.then(
+            intentResult => {
+                if (intentResult.channel != null) {
+                    this.channelMessageHandler.markPrivateChannelShared(intentResult.channel, desktopAgent);
+                    if (intentResult.channel.type === 'private') {
+                        // the local app receiving this result must itself be allowed to listen/publish
+                        // on the private channel handed to it from the remote agent
+                        this.channelMessageHandler.addToPrivateChannelAllowedList(intentResult.channel.id, source);
+                    }
+                }
+
+                this.rootMessagePublisher.publishResponseMessage(
+                    createResponseMessage<BrowserTypes.RaiseIntentResultResponse>(
+                        'raiseIntentResultResponse',
+                        { intentResult },
+                        requestUuid,
+                        source,
+                    ),
+                    source,
+                );
+            },
+            error => {
+                this.rootMessagePublisher.publishResponseMessage(
+                    createResponseMessage<BrowserTypes.RaiseIntentResultResponse>(
+                        'raiseIntentResultResponse',
+                        { error: isResponsePayloadError(error) ? error : ResolveError.IntentDeliveryFailed },
+                        requestUuid,
+                        source,
+                    ),
+                    source,
+                );
+            },
+        );
+    }
+
     // https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#addintentlistener
     private async onIntentResultRequest(
         requestMessage: BrowserTypes.IntentResultRequest,
@@ -502,11 +650,34 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         // We do not want to store the original app that raised the intent so we encode it in the raiseIntentRequestUuid
         // here we decode the string to to obtain the source app and the original raiseIntentRequestUuid to send back to the source app.
-        const raiseIntentSource = decodeUUUrl<FullyQualifiedAppIdentifier>(
+        const raiseIntentSource = decodeUUUrl<FullyQualifiedAppIdentifier & { desktopAgent: string }>(
             requestMessage.payload.raiseIntentRequestUuid,
         );
 
-        if (raiseIntentSource?.payload != null && isFullyQualifiedAppIdentifier(raiseIntentSource.payload)) {
+        if (raiseIntentSource?.payload == null) {
+            return;
+        }
+
+        const remoteOriginatingApp = raiseIntentSource.payload as AppIdentifier;
+
+        if (isRemoteAppIdentifier(remoteOriginatingApp, this.bridge?.agentName)) {
+            // the intent was originally raised by a remote agent - relay the result back over the bridge instead
+            if (requestMessage.payload.intentResult.channel != null) {
+                this.channelMessageHandler.markPrivateChannelShared(
+                    requestMessage.payload.intentResult.channel,
+                    remoteOriginatingApp.desktopAgent,
+                );
+            }
+
+            this.bridge?.publishIntentResult(
+                raiseIntentSource.uuid,
+                remoteOriginatingApp,
+                requestMessage.payload.intentResult,
+            );
+            return;
+        }
+
+        if (isFullyQualifiedAppIdentifier(raiseIntentSource.payload)) {
             if (requestMessage.payload.intentResult.channel != null) {
                 //if intentResult is PrivateChannel, add receiving app to channel's allowedList
                 this.channelMessageHandler.addToPrivateChannelAllowedList(
@@ -524,6 +695,50 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
             this.rootMessagePublisher.publishResponseMessage(raiseIntentResultResponse, raiseIntentSource.payload);
         }
+    }
+
+    /**
+     * Raises an intent on a local app on behalf of an app hosted by another Desktop Agent. The
+     * target app is always fully specified by the caller (per the bridging schema, where the target
+     * of a raiseIntent is a required, fully-addressed identifier), so no app resolution is performed
+     * and no re-fan-out to the bridge is possible. Rejects with ResolveError.IntentDeliveryFailed or
+     * OpenError.AppNotFound. The result produced by the local app is delivered asynchronously via
+     * IDesktopAgentBridge.publishIntentResult, correlated by the supplied requestUuid - see
+     * onIntentResultRequest.
+     */
+    public async raiseIntentFromRemote(params: {
+        requestUuid: string;
+        intent: Intent;
+        context: Context;
+        app: AppIdentifier;
+        originatingApp: RemoteAppIdentifier;
+    }): Promise<BrowserTypes.IntentResolution> {
+        const app = await this.returnOrLaunchAppInstance(params.app, params.context);
+
+        await this.awaitIntentListener(app, params.intent, BRIDGE.REMOTE_INTENT_LISTENER_TIMEOUT_MS);
+
+        this.rootMessagePublisher.publishEvent(
+            createEvent<BrowserTypes.IntentEvent>('intentEvent', {
+                intent: params.intent,
+                context: params.context,
+                // encodes the remote originator and the bridging requestUuid so the result can be routed
+                // back over the bridge when the local app replies - see onIntentResultRequest
+                raiseIntentRequestUuid: generateUUUrl(
+                    {
+                        appId: params.originatingApp.appId,
+                        desktopAgent: params.originatingApp.desktopAgent,
+                        ...(params.originatingApp.instanceId != null
+                            ? { instanceId: params.originatingApp.instanceId }
+                            : {}),
+                    },
+                    params.requestUuid,
+                ),
+                originatingApp: params.originatingApp,
+            }),
+            [app],
+        );
+
+        return { intent: params.intent, source: app };
     }
 
     /**
@@ -664,6 +879,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             const implementationMetadata: ImplementationMetadata = getImplementationMetadata(
                 source,
                 applicationMetadata,
+                { DesktopAgentBridging: this.bridge != null },
             );
 
             this.rootMessagePublisher.publishResponseMessage(
@@ -956,6 +1172,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return;
         }
 
+        if (this.isRemoteApp(requestMessage.payload.app)) {
+            return this.delegateOpen(requestMessage, requestMessage.payload.app, source);
+        }
+
         const application = await this.directory.getAppDirectoryApplication(requestMessage.payload.app.appId);
 
         if (application == null) {
@@ -1008,6 +1228,37 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 source,
             );
         }
+    }
+
+    /**
+     * Delegates an open() call to the Desktop Agent hosting the target app. The local app receives
+     * an openResponse carrying the remote appIdentifier. Deliberately skips passContextToOpenedApp -
+     * the context was sent to the bridge in the request payload, and the remote agent is responsible
+     * for delivering it to the app it opened; waiting here for a context listener that will never
+     * register locally would hang forever.
+     */
+    private async delegateOpen(
+        requestMessage: BrowserTypes.OpenRequest,
+        app: RemoteAppIdentifier,
+        source: FullyQualifiedAppIdentifier,
+    ): Promise<void> {
+        const payload: BrowserTypes.OpenResponsePayload = await this.bridge!.open({
+            app,
+            context: requestMessage.payload.context,
+            source,
+        })
+            .then(appIdentifier => ({ appIdentifier }))
+            .catch(error => ({ error: isOpenError(error) ? error : OpenError.ErrorOnLaunch }));
+
+        this.rootMessagePublisher.publishResponseMessage(
+            createResponseMessage<BrowserTypes.OpenResponse>(
+                'openResponse',
+                payload,
+                requestMessage.meta.requestUuid,
+                source,
+            ),
+            source,
+        );
     }
 
     private async openAppWithStrategy(

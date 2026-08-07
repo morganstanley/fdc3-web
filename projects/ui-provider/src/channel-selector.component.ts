@@ -264,6 +264,7 @@ export class ChannelSelectorComponent extends LitElement {
                 </div>
                 <div class="ms-channel-indicator-container">
                     <button
+                        automation-id="fth-channel-selector-toggle-btn"
                         type="button"
                         @click=${this.toggleChannelSelector}
                         class="ms-channel-indicator ${classMap(this.getChannelIndicatorClasses())}"
@@ -278,6 +279,8 @@ export class ChannelSelectorComponent extends LitElement {
 function renderChannelBtn(channel: Channel, component: ChannelSelectorComponent): TemplateResult {
     return html`<div class="ms-channel-btn-container">
         <button
+            automation-id="fth-channel-selector-btn"
+            data-channel-id="${channel.id}"
             class="ms-channel-btn"
             type="button"
             style="background-color: ${channel.displayMetadata?.color}; border-color: ${
