@@ -570,6 +570,7 @@ export class DefaultApp extends LitElement {
             <div class="hstack gap-2">
                 <select-component
                     id="private-channel-selector"
+                    automation-id="fth-private-channel-selector"
                     .items=${[
                         ...Object.entries(this.currentChannels)
                             .filter(([_, channel]) => channel.type === 'private')
@@ -581,6 +582,7 @@ export class DefaultApp extends LitElement {
             </div>
             <div class="hstack gap-2">
                 <button
+                    automation-id="fth-create-private-channel-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     @click="${this.createPrivateChannel}"
                     title="Create private channel"
@@ -588,6 +590,7 @@ export class DefaultApp extends LitElement {
                     Private Channel
                 </button>
                 <button
+                    automation-id="fth-disconnect-private-channel-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     @click="${this.disconnect}"
                     title="Disconnect from private channel"
@@ -600,11 +603,13 @@ export class DefaultApp extends LitElement {
                 <div class="flex-grow-1">
                     <select-component
                         id="private-channel-event-type-selector"
+                        automation-id="fth-private-channel-event-type-selector"
                         .items=${this.privateChannelEventTypes}
                         aria-label="Select Event Type for Private Channel Event Listener"
                     ></select-component>
                 </div>
                 <button
+                    automation-id="fth-add-private-channel-event-listener-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     title="add private channel eventListener for selected event"
                     @click="${this.addPrivateChannelEventListener}"

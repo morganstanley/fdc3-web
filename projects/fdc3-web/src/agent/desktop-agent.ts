@@ -602,6 +602,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             intentResult => {
                 if (intentResult.channel != null) {
                     this.channelMessageHandler.markPrivateChannelShared(intentResult.channel, desktopAgent);
+                    if (intentResult.channel.type === 'private') {
+                        // the local app receiving this result must itself be allowed to listen/publish
+                        // on the private channel handed to it from the remote agent
+                        this.channelMessageHandler.addToPrivateChannelAllowedList(intentResult.channel.id, source);
+                    }
                 }
 
                 this.rootMessagePublisher.publishResponseMessage(

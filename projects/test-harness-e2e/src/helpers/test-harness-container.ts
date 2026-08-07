@@ -42,6 +42,11 @@ const AUTOMATION_ID = {
     appChannelId: 'fth-app-channel-id',
     getAppChannelBtn: 'fth-get-app-channel-btn',
     getInfoBtn: 'fth-get-info-btn',
+    privateChannelSelector: 'fth-private-channel-selector',
+    createPrivateChannelBtn: 'fth-create-private-channel-btn',
+    disconnectPrivateChannelBtn: 'fth-disconnect-private-channel-btn',
+    privateChannelEventTypeSelector: 'fth-private-channel-event-type-selector',
+    addPrivateChannelEventListenerBtn: 'fth-add-private-channel-event-listener-btn',
 } as const;
 
 /**
@@ -273,6 +278,70 @@ export class TestHarnessContainer {
         const frame = this.frame(appId);
 
         await frame.locator(`[automation-id="${AUTOMATION_ID.getInfoBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.createPrivateChannel()` (via the "Private Channel" button, inside the collapsible
+     * Channels section) from the given app, logging the resulting private channel's id to the
+     * calling app's console (see {@link verifyConsoleContains} with `'Private channel has been
+     * received with id:'`). The new channel becomes selectable both in the "Private Channels"
+     * dropdown ({@link selectPrivateChannel}) and in the broadcast/context-listener channel dropdown
+     * (usable via {@link broadcast}/{@link addContextListener}'s `options.channel`).
+     * @param appId The appId of the app that should call `createPrivateChannel()`.
+     */
+    public async createPrivateChannel(appId: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.createPrivateChannelBtn}"]`).click();
+    }
+
+    /**
+     * Selects `channelId` (a private channel previously created via {@link createPrivateChannel} or
+     * received as an intent/raiseIntent result) in the given app's "Private Channels" dropdown - this
+     * is required before {@link disconnectPrivateChannel}/`addPrivateChannelEventListener()` act on
+     * the correct channel.
+     * @param appId The appId of the app whose private channel dropdown should be set.
+     * @param channelId The id of the private channel to select.
+     */
+    public async selectPrivateChannel(appId: string, channelId: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.privateChannelSelector}"] select`).selectOption(channelId);
+    }
+
+    /**
+     * Calls `PrivateChannel.disconnect()` (via the "Disconnect" button) on whichever private channel
+     * is currently selected in the given app's "Private Channels" dropdown - select the desired
+     * channel first via {@link selectPrivateChannel} if more than one is available.
+     * @param appId The appId of the app that should disconnect from the selected private channel.
+     */
+    public async disconnectPrivateChannel(appId: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.disconnectPrivateChannelBtn}"]`).click();
+    }
+
+    /**
+     * Calls `PrivateChannel.addEventListener()` (via the "Add" button next to the private channel
+     * event type dropdown) on whichever private channel is currently selected in the given app's
+     * "Private Channels" dropdown - select the desired channel first via {@link selectPrivateChannel}
+     * if more than one is available. Once registered, the app will log `Received Event::` whenever a
+     * matching `PrivateChannel` event occurs (e.g. `addContextListener`/`unsubscribe`/`disconnect`
+     * from the other end of the channel).
+     * @param appId The appId of the app that should add the private channel event listener.
+     * @param eventType The event type to listen for, e.g. `"addContextListener"`, `"unsubscribe"`, `"disconnect"`, or `"all events"` (passes `null` to `addEventListener()`).
+     */
+    public async addPrivateChannelEventListener(appId: string, eventType: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        await frame
+            .locator(`[automation-id="${AUTOMATION_ID.privateChannelEventTypeSelector}"] select`)
+            .selectOption(eventType);
+        await frame.locator(`[automation-id="${AUTOMATION_ID.addPrivateChannelEventListenerBtn}"]`).click();
     }
 
     /**
