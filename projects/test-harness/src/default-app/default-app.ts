@@ -326,6 +326,13 @@ export class DefaultApp extends LitElement {
                 >
                     Find Intent
                 </button>
+                <button
+                    automation-id="fth-find-intents-by-context-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.findIntentsByContext}"
+                >
+                    Find Intents By Context
+                </button>
             </div>
         `;
     }
@@ -929,6 +936,24 @@ export class DefaultApp extends LitElement {
             .findIntent(this.intentSelector.value, { type: context })
             .then(appIntent => this.log(`AppIntent for ${this.intentSelector.value}:`, appIntent))
             .catch(err => this.log(`Error finding intent '${this.intentSelector.value}'`, err, 'error'));
+    }
+
+    /**
+     * Calls `fdc3.findIntentsByContext()` for the context currently entered in the context input,
+     * logging the resulting `AppIntent[]` (every intent registered against that context type, plus
+     * the apps/app instances registered to handle each - local and, when bridged and remote instances
+     * exist, remote) to the console.
+     * @returns {Promise<void>} A promise that resolves when the intents have been found and logged.
+     */
+    private async findIntentsByContext(): Promise<void> {
+        const context = this.broadcastContext.value;
+        this.log(`Finding intents by context: '${context}'`);
+        const agent = await getAgent();
+
+        await agent
+            .findIntentsByContext({ type: context })
+            .then(appIntents => this.log(`AppIntents for context '${context}':`, appIntents))
+            .catch(err => this.log(`Error finding intents by context '${context}'`, err, 'error'));
     }
 
     /**
