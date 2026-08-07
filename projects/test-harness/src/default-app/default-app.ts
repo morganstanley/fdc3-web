@@ -213,6 +213,7 @@ export class DefaultApp extends LitElement {
                 <div class="vstack gap-2 flex-grow-1">
                     <div
                         class="btn btn-secondary bg-primary-subtle"
+                        automation-id="fth-channels-toggle-btn"
                         style="display: flex; justify-content: space-between;"
                         @click="${this.toggleChannelCollapsibleBody}"
                     >
@@ -372,6 +373,7 @@ export class DefaultApp extends LitElement {
                 <div class="vstack gap-1">
                     <select-component
                         id="broadcast-channel-selector"
+                        automation-id="fth-broadcast-channel-selector"
                         .items=${['current user channel', ...Object.keys(this.currentChannels)]}
                         aria-label="Select channel to interact with"
                     ></select-component>
@@ -379,19 +381,25 @@ export class DefaultApp extends LitElement {
                 <div class="vstack gap-1">
                     <div class="hstack gap-2 justify-content-end">
                         <button
+                            automation-id="fth-add-context-listener-btn"
                             class="btn btn-secondary bg-primary-subtle"
                             @click="${() => this.setupContextListener(this.broadcastContext.value)}"
                             title="Add a context listener for this app for the context type specified. Leave input empty to add listener for all contexts"
                         >
                             Add Context Listener
                         </button>
-                        <button class="btn btn-secondary bg-primary-subtle" @click="${this.broadcast}">
+                        <button
+                            automation-id="fth-broadcast-btn"
+                            class="btn btn-secondary bg-primary-subtle"
+                            @click="${this.broadcast}"
+                        >
                             Broadcast
                         </button>
                     </div>
 
                     <div class="hstack gap-2 justify-content-end">
                         <button
+                            automation-id="fth-get-context-btn"
                             class="btn btn-secondary bg-primary-subtle"
                             @click="${this.getCurrentContext}"
                             title="Get current context of inputted type on selected channel"
@@ -508,9 +516,16 @@ export class DefaultApp extends LitElement {
         return html`
             <div class="hstack gap-2">
                 <div class="flex-grow-1">
-                    <input id="app-channel-id" class="w-100" type="text" value="default-app-channel-id" />
+                    <input
+                        id="app-channel-id"
+                        automation-id="fth-app-channel-id"
+                        class="w-100"
+                        type="text"
+                        value="default-app-channel-id"
+                    />
                 </div>
                 <button
+                    automation-id="fth-get-app-channel-btn"
                     class="btn btn-secondary bg-primary-subtle"
                     @click="${this.getOrCreateAppChannel}"
                     title="Get an app channel by id if it exists, or create one with that id if it doesn't"

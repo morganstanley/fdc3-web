@@ -18,6 +18,12 @@ const AUTOMATION_ID = {
     raiseIntentBtn: 'fth-raise-intent-btn',
     findIntentBtn: 'fth-find-intent-btn',
     findIntentsByContextBtn: 'fth-find-intents-by-context-btn',
+    addContextListenerBtn: 'fth-add-context-listener-btn',
+    broadcastBtn: 'fth-broadcast-btn',
+    broadcastChannelSelector: 'fth-broadcast-channel-selector',
+    channelsToggleBtn: 'fth-channels-toggle-btn',
+    channelSelectorToggleBtn: 'fth-channel-selector-toggle-btn',
+    channelSelectorBtn: 'fth-channel-selector-btn',
     consoleClearBtn: 'fth-console-clear-btn',
     console: 'fth-console',
     resolverAppSelector: 'fdc3-app-resolver_app-selector',
@@ -198,6 +204,97 @@ export class TestHarnessContainer {
         }
 
         await frame.locator(`[automation-id="${AUTOMATION_ID.findIntentsByContextBtn}"]`).click();
+    }
+
+    /**
+     * Expands the given app's collapsible "Channels" panel (containing the broadcast/context
+     * listener/private-channel controls), if it isn't already expanded. The panel starts collapsed
+     * (`display: none`) - see `renderChannelsSection`/`toggleChannelCollapsibleBody` in
+     * `default-app.ts` - so any interaction with its contents must expand it first.
+     */
+    private async expandChannelsSection(appId: string): Promise<void> {
+        const frame = this.frame(appId);
+        const body = frame.locator('#channel-collapsible-body');
+
+        if (!(await body.isVisible())) {
+            await frame.locator(`[automation-id="${AUTOMATION_ID.channelsToggleBtn}"]`).click();
+            await expect(body).toBeVisible();
+        }
+    }
+
+    /**
+     * Joins the given app to a user channel via the `<ms-channel-selector>` widget: clicks the
+     * channel indicator to reveal the channel buttons (if not already revealed), then clicks the
+     * button for the given channel id.
+     * @param appId The appId of the app that should join the channel.
+     * @param channelId The id of the user channel to join, e.g. `"fdc3.channel.1"`.
+     */
+    public async joinUserChannel(appId: string, channelId: string): Promise<void> {
+        const frame = this.frame(appId);
+        const channelBtn = frame.locator(
+            `[automation-id="${AUTOMATION_ID.channelSelectorBtn}"][data-channel-id="${channelId}"]`,
+        );
+
+        if (!(await channelBtn.isVisible())) {
+            await frame.locator(`[automation-id="${AUTOMATION_ID.channelSelectorToggleBtn}"]`).click();
+            await expect(channelBtn).toBeVisible();
+        }
+
+        await channelBtn.click();
+    }
+
+    /**
+     * Calls `fdc3.addContextListener()` (via the "Add Context Listener" button) from the given app,
+     * optionally first selecting a specific channel to listen on and/or setting the context type to
+     * listen for. Passing no context type (or an empty string, the UI default) adds a listener for
+     * all context types.
+     * @param appId The appId of the app that should add the context listener.
+     * @param options.channel The channel to add the listener to - `"current user channel"` (default, the UI's own default selection) or the id of a previously created/joined app channel/private channel.
+     * @param options.context The context type to listen for. Omit (or pass an empty string) to listen for all context types.
+     */
+    public async addContextListener(
+        appId: string,
+        options: { channel?: string; context?: string } = {},
+    ): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        if (options.channel != null) {
+            await frame
+                .locator(`[automation-id="${AUTOMATION_ID.broadcastChannelSelector}"] select`)
+                .selectOption(options.channel);
+        }
+
+        if (options.context != null) {
+            await frame.locator('#context-input').fill(options.context);
+        }
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.addContextListenerBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.broadcast()` (via the "Broadcast" button) from the given app, optionally first
+     * selecting a specific channel to broadcast on and/or setting the context type/value to
+     * broadcast.
+     * @param appId The appId of the app that should broadcast.
+     * @param options.channel The channel to broadcast on - `"current user channel"` (default, the UI's own default selection) or the id of a previously created/joined app channel/private channel.
+     * @param options.context The context type to broadcast. Defaults to whatever is currently entered in the UI.
+     */
+    public async broadcast(appId: string, options: { channel?: string; context?: string } = {}): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        if (options.channel != null) {
+            await frame
+                .locator(`[automation-id="${AUTOMATION_ID.broadcastChannelSelector}"] select`)
+                .selectOption(options.channel);
+        }
+
+        if (options.context != null) {
+            await frame.locator('#context-input').fill(options.context);
+        }
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.broadcastBtn}"]`).click();
     }
 
     /**

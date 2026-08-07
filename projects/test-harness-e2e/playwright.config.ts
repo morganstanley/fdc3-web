@@ -60,7 +60,7 @@ export default defineConfig({
         // hardcoding them again - see `src/helpers/dual-container-fixtures.ts`.
         video: 'on',
         screenshot: 'on',
-        viewport: { width: 1920, height: 1080 },
+        viewport: { width: 1920, height: 1920 },
     },
     webServer: [
         {
