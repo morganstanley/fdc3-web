@@ -697,10 +697,7 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         it('should render a remote agent icon with the desktop agent name for an app sourced from another agent', async () => {
             const instance = createInstance();
 
-            const payload = createIntentPayload(true, [
-                create(1),
-                { appId: '2', desktopAgent: 'agent-b' },
-            ]);
+            const payload = createIntentPayload(true, [create(1), { appId: '2', desktopAgent: 'agent-b' }]);
             instance.resolveAppForIntent(payload);
 
             await wait();

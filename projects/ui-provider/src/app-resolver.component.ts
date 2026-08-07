@@ -489,6 +489,7 @@ function renderApp(app: AppMetadata, intent: Intent, component: AppResolverCompo
             data-app-id="${app.appId}"
             data-app-instance-id="${ifDefined(app.instanceId)}"
             data-intent="${ifDefined(intent !== '' ? intent : undefined)}"
+            data-desktop-agent="${ifDefined(app.desktopAgent)}"
             @click=${() => component.selectApp(app, intent)}
         >
             <span class="ms-app-resolver-app-icon-container"

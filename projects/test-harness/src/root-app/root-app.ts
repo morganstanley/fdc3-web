@@ -39,6 +39,7 @@ import {
 import { AppResolverComponent } from '@morgan-stanley/fdc3-web-ui-provider';
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants.js';
 import {
     type AddApp,
@@ -126,6 +127,13 @@ export class RootApp
      * so that the iframe can be removed when the app requests to be closed via fdc3.close().
      */
     private iframeAppLookup: Record<string, WebAppDetails> = {};
+
+    /**
+     * Tracks the resolved appId/instanceId for each rendered WebAppDetails once the app has finished
+     * connecting. Exposed to `app-container` as `app-id`/`instance-id` attributes so automation can
+     * reliably locate a specific app's iframe.
+     */
+    private appIdentities = new Map<WebAppDetails, FullyQualifiedAppIdentifier>();
 
     @state()
     private appDetails: WebAppDetails[] = [];
@@ -270,7 +278,11 @@ export class RootApp
                     this.log('Opening app in iframe', LogLevel.DEBUG, details);
 
                     // track which iframe hosts this app instance so that fdc3.close() can remove it
-                    params.appReadyPromise.then(identity => (this.iframeAppLookup[identity.instanceId] = details));
+                    params.appReadyPromise.then(identity => {
+                        this.iframeAppLookup[identity.instanceId] = details;
+                        this.appIdentities.set(details, identity);
+                        this.requestUpdate();
+                    });
 
                     return new Promise(resolve => {
                         // wait for iframe window to be created
@@ -449,16 +461,19 @@ export class RootApp
      */
     private renderApps(): TemplateResult {
         return html`<div class="root-apps-container hstack flex-grow-1 gap-5 p-4 overflow-auto">
-            ${this.appDetails.map(
-                details => html`
+            ${this.appDetails.map(details => {
+                const identity = this.appIdentities.get(details);
+                return html`
                     <app-container
                         @onIframeCreated="${(event: CustomEvent<{ window: WindowProxy; app: WebAppDetails }>) =>
                             this.handleNewIframe(event)}"
                         class="fth-app h-100"
                         .details=${details}
+                        app-id=${ifDefined(identity?.appId)}
+                        instance-id=${ifDefined(identity?.instanceId)}
                     ></app-container>
-                `,
-            )}
+                `;
+            })}
         </div>`;
     }
 

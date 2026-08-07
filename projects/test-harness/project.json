@@ -31,6 +31,27 @@
                 "port": 4200
             }
         },
+        "serve-e2e": {
+            "executor": "nx:run-commands",
+            "options": {
+                "commands": [
+                    {
+                        "command": "nx serve-node test-harness"
+                    },
+                    {
+                        "command": "nx serve-ui-e2e test-harness"
+                    }
+                ],
+                "parallel": true
+            }
+        },
+        "serve-ui-e2e": {
+            "executor": "@nx/vite:dev-server",
+            "options": {
+                "buildTarget": "build-ui",
+                "port": 4200
+            }
+        },
         "build-ui": {
             "executor": "@nx/vite:build",
             "dependsOn": [

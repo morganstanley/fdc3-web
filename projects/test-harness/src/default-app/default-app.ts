@@ -40,6 +40,7 @@ import {
 } from '@morgan-stanley/fdc3-web';
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, query, state } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants.js';
 import {
     AppOpenedContextType,
@@ -69,6 +70,13 @@ export class DefaultApp extends LitElement {
 
     @state()
     private nestedAppDetails: WebAppDetails[] = [];
+
+    /**
+     * Tracks the appId (and instanceId, once resolved) of each nested WebAppDetails entry. Exposed to
+     * `app-container` as `app-id`/`instance-id` attributes so automation can reliably locate a
+     * specific nested app's iframe.
+     */
+    private nestedAppIdentities = new Map<WebAppDetails, FullyQualifiedAppIdentifier | { appId: string }>();
 
     @state()
     private logs: string[] = [];
@@ -154,15 +162,22 @@ export class DefaultApp extends LitElement {
      */
     protected override render(): TemplateResult<1> | undefined {
         return html`
-            <div class="${this.getSelectedAppClass()}">
+            <div
+                class="${this.getSelectedAppClass()}"
+                automation-id="fth-default-app"
+                data-app-id=${ifDefined(this.appIdentifier?.appId)}
+                data-instance-id=${ifDefined(this.appIdentifier?.instanceId)}
+            >
                 <div class="d-flex bg-body-tertiary">
                     <app-header
+                        automation-id="fth-app-header"
                         .heading="${this.appTitle} (${this.appIdentifier?.appId} / ${this.appIdentifier?.instanceId})"
                         class="d-flex h6 clickable flex-grow-1"
                         @click="${this.selectApp}"
                     ></app-header>
                     <button
                         type="button"
+                        automation-id="fth-close-app-btn"
                         class="btn-close m-2"
                         title="Close this app via fdc3.close()"
                         aria-label="Close"
@@ -259,11 +274,18 @@ export class DefaultApp extends LitElement {
         return html`
             <div class="hstack gap-2">
                 <div class="flex-grow-1">
-                    <input id="context-input" class="w-100" type="text" value="fdc3.contact" />
+                    <input
+                        id="context-input"
+                        automation-id="fth-context-input"
+                        class="w-100"
+                        type="text"
+                        value="fdc3.contact"
+                    />
                 </div>
                 <div class="flex-grow-1">
                     <select-component
                         id="intent-selector"
+                        automation-id="fth-intent-selector"
                         .items=${this.supportedRaiseIntent}
                         aria-label="Select Intent to Raise"
                     ></select-component>
@@ -271,8 +293,18 @@ export class DefaultApp extends LitElement {
             </div>
 
             <div class="hstack gap-2">
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntent}">Raise Intent</button>
-                <button class="btn btn-secondary bg-primary-subtle" @click="${this.raiseIntentForContext}">
+                <button
+                    automation-id="fth-raise-intent-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.raiseIntent}"
+                >
+                    Raise Intent
+                </button>
+                <button
+                    automation-id="fth-raise-intent-for-context-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.raiseIntentForContext}"
+                >
                     Raise Intent for Context
                 </button>
             </div>
@@ -489,9 +521,19 @@ export class DefaultApp extends LitElement {
             <div class="vstack gap-2">
                 <div class="hstack gap-2">
                     <label class="form-label flex-grow-1">Console:</label>
-                    <button class="btn btn-secondary bg-primary-subtle btn-sm" @click="${this.clearLog}">Clear</button>
+                    <button
+                        automation-id="fth-console-clear-btn"
+                        class="btn btn-secondary bg-primary-subtle btn-sm"
+                        @click="${this.clearLog}"
+                    >
+                        Clear
+                    </button>
                 </div>
-                <div class="bg-dark-subtle p-2 text-muted h-auto" style="font-size: 14px; word-wrap: break-word;">
+                <div
+                    automation-id="fth-console"
+                    class="bg-dark-subtle p-2 text-muted h-auto"
+                    style="font-size: 14px; word-wrap: break-word;"
+                >
                     ${this.logs.map(log => html`${log}<br /><br />`)}
                 </div>
             </div>
@@ -505,15 +547,17 @@ export class DefaultApp extends LitElement {
     private renderNestedApps(): TemplateResult {
         return html`
             <div class="nested-apps-container d-flex flex-wrap gap-4">
-                ${this.nestedAppDetails.map(
-                    details =>
-                        html`<app-container
-                            @onIframeCreated="${(event: CustomEvent<{ window: WindowProxy; app: WebAppDetails }>) =>
-                                this.handleNewIframe(event)}"
-                            .details=${details}
-                            style="height: 60vh;min-width: 400px;"
-                        ></app-container>`,
-                )}
+                ${this.nestedAppDetails.map(details => {
+                    const identity = this.nestedAppIdentities.get(details);
+                    return html`<app-container
+                        @onIframeCreated="${(event: CustomEvent<{ window: WindowProxy; app: WebAppDetails }>) =>
+                            this.handleNewIframe(event)}"
+                        .details=${details}
+                        app-id=${ifDefined(identity?.appId)}
+                        instance-id=${ifDefined((identity as FullyQualifiedAppIdentifier | undefined)?.instanceId)}
+                        style="height: 60vh;min-width: 400px;"
+                    ></app-container>`;
+                })}
             </div>
         `;
     }
@@ -667,6 +711,9 @@ export class DefaultApp extends LitElement {
             windowProxy = window.open(openWindowContext.webDetails.url, '_blank', 'popup');
         } else {
             //open app in iframe
+            this.nestedAppIdentities.set(openWindowContext.webDetails, {
+                appId: openWindowContext.appIdentifier.appId,
+            });
             this.nestedAppDetails = [...this.nestedAppDetails, openWindowContext.webDetails];
 
             windowProxy = await new Promise(resolve => {
