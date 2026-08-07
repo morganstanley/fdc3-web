@@ -233,6 +233,13 @@ export class DefaultApp extends LitElement {
                         >
                             Get User Channels
                         </button>
+                        <button
+                            automation-id="fth-get-current-channel-btn"
+                            class="btn btn-secondary bg-primary-subtle"
+                            @click="${this.getCurrentChannel}"
+                        >
+                            Get Current Channel
+                        </button>
                         ${this.renderAppChannelsSection()} ${this.renderPrivateChannelsSection()}
                         ${this.renderContextSection()}
                     </div>
@@ -427,7 +434,13 @@ export class DefaultApp extends LitElement {
      */
     private renderGetInfoSection(): TemplateResult {
         return html`<div class="hstack gap-2">
-            <button class="btn btn-secondary bg-primary-subtle" @click="${this.getInfo}">Get Info</button>
+            <button
+                automation-id="fth-get-info-btn"
+                class="btn btn-secondary bg-primary-subtle"
+                @click="${this.getInfo}"
+            >
+                Get Info
+            </button>
         </div>`;
     }
 
@@ -1065,14 +1078,17 @@ export class DefaultApp extends LitElement {
      * Fetches metadata for app from desktop agent's app directory
      */
     private async getAppMetadata(): Promise<void> {
-        this.log(`Fetching metadata for app: ${this.appSelector.value}`);
+        const desktopAgent = this.selectedDesktopAgent();
+        this.log(
+            `Fetching metadata for app: ${this.appSelector.value}${desktopAgent != null ? ` on desktopAgent '${desktopAgent}'` : ''}`,
+        );
 
         const chosenApp = this.applications.find(app => app.appId === this.appSelector.value);
         if (chosenApp != null) {
             const agent = await getAgent();
 
             await agent
-                .getAppMetadata({ appId: chosenApp.appId })
+                .getAppMetadata({ appId: chosenApp.appId, ...(desktopAgent != null ? { desktopAgent } : {}) })
                 .then(metadata => this.log(`Metadata for ${chosenApp.appId}:`, metadata))
                 .catch(err => this.log(`Error getting appMetadata for '${chosenApp.appId}'`, err, 'error'));
         }
@@ -1223,6 +1239,34 @@ export class DefaultApp extends LitElement {
 
         await agent.addEventListener(eventType, (...args) => this.log('Received Event:', args));
         this.log(`Event listener has been added`);
+    }
+
+    /**
+     * Calls `fdc3.getUserChannels()`, logging the resulting `Channel[]` (the fixed list of
+     * "recommended"/system user channels available to join via `joinUserChannel()`) to the console.
+     */
+    private async getUserChannels(): Promise<void> {
+        const agent = await getAgent();
+
+        await agent
+            .getUserChannels()
+            .then(channels => this.log('User Channels:', channels))
+            .catch(err => this.log('Error getting user channels', err, 'error'));
+    }
+
+    /**
+     * Calls `fdc3.getCurrentChannel()`, logging the currently joined user channel (or `null` if not
+     * currently joined to one) to the console.
+     */
+    private async getCurrentChannel(): Promise<void> {
+        const agent = await getAgent();
+
+        await agent
+            .getCurrentChannel()
+            .then(channel =>
+                this.log('Current Channel:', channel != null ? { id: channel.id, type: channel.type } : null),
+            )
+            .catch(err => this.log('Error getting current channel', err, 'error'));
     }
 
     /**

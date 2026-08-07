@@ -37,6 +37,11 @@ const AUTOMATION_ID = {
     addIntentListenerBtn: 'fth-add-intent-listener-btn',
     eventTypeSelector: 'fth-event-type-selector',
     addEventListenerBtn: 'fth-add-event-listener-btn',
+    getUserChannelsBtn: 'fth-get-user-channels-btn',
+    getCurrentChannelBtn: 'fth-get-current-channel-btn',
+    appChannelId: 'fth-app-channel-id',
+    getAppChannelBtn: 'fth-get-app-channel-btn',
+    getInfoBtn: 'fth-get-info-btn',
 } as const;
 
 /**
@@ -219,6 +224,55 @@ export class TestHarnessContainer {
 
         await frame.locator(`[automation-id="${AUTOMATION_ID.eventTypeSelector}"] select`).selectOption(eventType);
         await frame.locator(`[automation-id="${AUTOMATION_ID.addEventListenerBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.getUserChannels()` (via the "Get User Channels" button, inside the collapsible
+     * "Channels" panel) from the given app, logging the resulting `Channel[]` to the calling app's
+     * console.
+     * @param appId The appId of the app that should call `getUserChannels()`.
+     */
+    public async getUserChannels(appId: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        await this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.getUserChannelsBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.getCurrentChannel()` (via the "Get Current Channel" button, inside the collapsible
+     * "Channels" panel) from the given app, logging the currently joined user channel (or `null`) to
+     * the calling app's console.
+     * @param appId The appId of the app that should call `getCurrentChannel()`.
+     */
+    public async getCurrentChannel(appId: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        await this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.getCurrentChannelBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.getOrCreateChannel()` (via the "App Channel" input/button, inside the collapsible
+     * "Channels" panel) from the given app, for the given channel id. The retrieved app channel then
+     * becomes selectable (by its id) in the broadcast/context-listener channel dropdown - see
+     * {@link broadcast}/{@link addContextListener}.
+     * @param appId The appId of the app that should call `getOrCreateChannel()`.
+     * @param channelId The app channel id to get or create.
+     */
+    public async getOrCreateChannel(appId: string, channelId: string): Promise<void> {
+        await this.expandChannelsSection(appId);
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.appChannelId}"]`).fill(channelId);
+        await frame.locator(`[automation-id="${AUTOMATION_ID.getAppChannelBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.getInfo()` (via the "Get Info" button) from the given app, logging the resulting
+     * `ImplementationMetadata` to the calling app's console.
+     * @param appId The appId of the app that should call `getInfo()`.
+     */
+    public async getInfo(appId: string): Promise<void> {
+        const frame = this.frame(appId);
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.getInfoBtn}"]`).click();
     }
 
     /**
@@ -499,9 +553,15 @@ export class TestHarnessContainer {
      * `targetAppId`, logging the result to the calling app's console.
      * @param appId The appId of the app that should call `getAppMetadata()`.
      * @param targetAppId The appId (from the app directory) to fetch metadata for.
+     * @param options.desktopAgent When given, targets this specific bridged Desktop Agent rather than the local one.
      */
-    public async getAppMetadata(appId: string, targetAppId: string): Promise<void> {
+    public async getAppMetadata(
+        appId: string,
+        targetAppId: string,
+        options: { desktopAgent?: string } = {},
+    ): Promise<void> {
         await this.selectTargetApp(appId, targetAppId);
+        await this.selectDesktopAgent(appId, options.desktopAgent);
         await this.frame(appId).locator(`[automation-id="${AUTOMATION_ID.getAppMetadataBtn}"]`).click();
     }
 
