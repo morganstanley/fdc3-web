@@ -16,6 +16,7 @@ const AUTOMATION_ID = {
     appContainer: 'fth-app-container',
     appIframe: 'fth-app-iframe',
     raiseIntentBtn: 'fth-raise-intent-btn',
+    findIntentBtn: 'fth-find-intent-btn',
     consoleClearBtn: 'fth-console-clear-btn',
     console: 'fth-console',
     resolverAppSelector: 'fdc3-app-resolver_app-selector',
@@ -158,6 +159,27 @@ export class TestHarnessContainer {
         }
 
         await frame.locator(`[automation-id="${AUTOMATION_ID.raiseIntentBtn}"]`).click();
+    }
+
+    /**
+     * Calls `fdc3.findIntent()` (via the "Find Intent" button) from the given app, optionally first
+     * selecting a specific intent and/or setting the context to find it with, logging the resulting
+     * `AppIntent` to the calling app's console.
+     * @param appId The appId of the app that should call `findIntent()`.
+     * @param options Optional intent/context overrides. When omitted, whatever is currently selected/entered in the UI is used.
+     */
+    public async findIntent(appId: string, options: RaiseIntentOptions = {}): Promise<void> {
+        const frame = this.frame(appId);
+
+        if (options.context != null) {
+            await frame.locator('#context-input').fill(options.context);
+        }
+
+        if (options.intent != null) {
+            await frame.locator('#intent-selector select').selectOption(options.intent);
+        }
+
+        await frame.locator(`[automation-id="${AUTOMATION_ID.findIntentBtn}"]`).click();
     }
 
     /**

@@ -319,6 +319,13 @@ export class DefaultApp extends LitElement {
                 >
                     Raise Intent for Context
                 </button>
+                <button
+                    automation-id="fth-find-intent-btn"
+                    class="btn btn-secondary bg-primary-subtle"
+                    @click="${this.findIntent}"
+                >
+                    Find Intent
+                </button>
             </div>
         `;
     }
@@ -904,6 +911,24 @@ export class DefaultApp extends LitElement {
         } catch (err) {
             this.log(String(err));
         }
+    }
+
+    /**
+     * Calls `fdc3.findIntent()` for whichever intent is currently selected in the intent dropdown,
+     * with the context currently entered in the context input, logging the resulting `AppIntent`
+     * (intent metadata plus the apps/app instances registered to handle it, local and - when bridged
+     * and remote instances exist - remote) to the console.
+     * @returns {Promise<void>} A promise that resolves when the intent has been found and logged.
+     */
+    private async findIntent(): Promise<void> {
+        const context = this.broadcastContext.value;
+        this.log(`Finding intent: ${this.intentSelector.value} (context: '${context}')`);
+        const agent = await getAgent();
+
+        await agent
+            .findIntent(this.intentSelector.value, { type: context })
+            .then(appIntent => this.log(`AppIntent for ${this.intentSelector.value}:`, appIntent))
+            .catch(err => this.log(`Error finding intent '${this.intentSelector.value}'`, err, 'error'));
     }
 
     /**
