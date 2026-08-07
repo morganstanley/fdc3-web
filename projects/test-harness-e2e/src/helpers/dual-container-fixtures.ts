@@ -11,50 +11,62 @@
 import { type BrowserContext, type Page, test as base } from '@playwright/test';
 
 /**
- * Tests in this suite need two independent contexts (each acting like a separate browser/machine
- * connecting to its own Desktop Agent), so a single test can't rely solely on Playwright's default
- * `context`/`page` fixtures - those only ever provide one context per test.
+ * Tests in this suite sometimes need a second, independent context (acting like a separate
+ * browser/machine connecting to its own Desktop Agent) - e.g. bridged-mode tests need a "container B"
+ * that is distinct from container A. Non-bridged tests, on the other hand, never need one (there's no
+ * bridge for a second container's Desktop Agent to connect to), so that second context shouldn't be
+ * created/wasted at all in that mode.
  *
- * Container A uses Playwright's own default `context`/`page` fixtures unchanged, which already read
+ * Playwright decides whether a fixture is "used" by a test purely from the fixture names destructured
+ * in that test's parameter list - it does not look at conditionals inside the test body. So exposing
+ * an actual `pageB`/`contextB` *value* fixture (as earlier revisions of this file did) would mean
+ * Playwright spins up the second context/video recorder for *every* test that destructures it, even
+ * if the test's own logic never ends up needing it (e.g. because it's running in non-bridged mode).
+ *
+ * `openPageB` below instead exposes a *factory function* fixture - the second context/page is only
+ * actually created the first time (and only if) a test calls `await openPageB()`. Container A keeps
+ * using Playwright's own default `context`/`page` fixtures unchanged, which already read
  * `viewport`/`video`/`screenshot` etc. from the project's `use` config and handle attaching
- * video/screenshots to the HTML report automatically.
- *
- * `contextB`/`pageB` below provide an equivalent *second* context/page, mirroring that same
- * automatic behaviour (viewport, video recording) by reading the same `use` config, rather than
- * duplicating hardcoded values in individual spec files. Screenshots are intentionally *not*
- * duplicated here - Playwright's built-in `screenshot: 'on'` already captures one screenshot per page
- * (both A and B) automatically, so attaching another one for `pageB` would just add a confusing
- * third/fourth image to the report.
+ * video/screenshots to the HTML report automatically; `openPageB` mirrors that same automatic
+ * behaviour (viewport, video recording) for the page(s) it creates. Screenshots are intentionally
+ * *not* duplicated here - Playwright's built-in `screenshot: 'on'` already captures one screenshot per
+ * page automatically, so attaching another one for pageB would just add a confusing extra image to
+ * the report.
  */
-export const test = base.extend<{ contextB: BrowserContext; pageB: Page }>({
-    contextB: async ({ browser }, use, testInfo) => {
-        const { viewport, video } = testInfo.project.use;
-        const recordVideo =
-            video != null && video !== 'off'
-                ? { dir: testInfo.outputPath('video-b'), size: viewport ?? undefined }
-                : undefined;
+export const test = base.extend<{ openPageB: () => Promise<Page> }>({
+    openPageB: async ({ browser }, use, testInfo) => {
+        let context: BrowserContext | undefined;
 
-        const context = await browser.newContext({ viewport, recordVideo });
-        await use(context);
+        await use(async () => {
+            const { viewport, video } = testInfo.project.use;
+            const recordVideo =
+                video != null && video !== 'off'
+                    ? { dir: testInfo.outputPath('video-b'), size: viewport ?? undefined }
+                    : undefined;
 
-        // Capture page references *before* closing the context - `context.pages()` returns an empty
-        // array once the context is closed, and video recording is only fully flushed to disk once
-        // the context (not just its pages) closes, so `page.video().path()` must be read afterwards.
-        const pages = context.pages();
-        await context.close();
+            context = await browser.newContext({ viewport, recordVideo });
+            return context.newPage();
+        });
 
-        if (video != null && video !== 'off') {
-            for (const page of pages) {
-                const videoPath = await page.video()?.path();
-                if (videoPath != null) {
-                    await testInfo.attach('pageB.webm', { path: videoPath, contentType: 'video/webm' });
+        if (context != null) {
+            const { video } = testInfo.project.use;
+
+            // Capture page references *before* closing the context - `context.pages()` returns an
+            // empty array once the context is closed, and video recording is only fully flushed to
+            // disk once the context (not just its pages) closes, so `page.video().path()` must be
+            // read afterwards.
+            const pages = context.pages();
+            await context.close();
+
+            if (video != null && video !== 'off') {
+                for (const page of pages) {
+                    const videoPath = await page.video()?.path();
+                    if (videoPath != null) {
+                        await testInfo.attach('pageB.webm', { path: videoPath, contentType: 'video/webm' });
+                    }
                 }
             }
         }
-    },
-    pageB: async ({ contextB }, use) => {
-        const page = await contextB.newPage();
-        await use(page);
     },
 });
 

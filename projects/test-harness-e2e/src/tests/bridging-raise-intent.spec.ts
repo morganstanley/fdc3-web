@@ -10,53 +10,80 @@
 
 import { expect, test } from '../helpers/dual-container-fixtures.js';
 import { TestHarnessContainer } from '../helpers/test-harness-container.js';
+import { TEST_MODES } from '../helpers/test-modes.js';
 
 /**
- * Exercises FDC3 Desktop Agent Bridging (https://fdc3.finos.org/docs/agent-bridging/spec) end to end:
+ * Exercises raising an intent to a specific target app, run once per {@link TEST_MODES}:
  *
- * 1. Starts two independent "containers" (browser tabs), both opted in to bridging via `?bridge=true`,
- *    each connecting to the same bridging server and each hosting their own two default apps
- *    (`app-1-root`, `app-2-root`). Container A uses Playwright's default `page` fixture; container B
- *    uses the equivalent `pageB` fixture (see `dual-container-fixtures.ts`) since a single test can
- *    only get one context/page from the defaults.
- * 2. Raises an intent from `app-1-root` in container A.
- * 3. Because multiple apps across both bridged Desktop Agents can handle the intent, the FDC3 App
- *    Resolver pops up in container A - the "App-1-domain-A.com" entry belonging to container B
- *    (identified by its remote `data-desktop-agent` attribute) is selected.
- * 4. Verifies that container B - not container A - opens a new iframe for `app-1-domain-A` and that
- *    the newly opened app's console shows it received the intent (with a `source` identifying the
- *    raising app from the *other* Desktop Agent).
+ * - `bridged`: two independent "containers" (browser tabs) both opt in to Desktop Agent Bridging via
+ *   `?bridge=true` and connect to the same bridging server. Container A uses Playwright's default
+ *   `page` fixture; container B is created on demand via the `openPageB` factory fixture (see
+ *   `dual-container-fixtures.ts`), which only actually creates a second browser context/page in
+ *   bridged mode.
+ *   The resolver's *remote* "App-1-domain-A.com" entry (identified by its `data-desktop-agent`
+ *   attribute) is selected, and the app is expected to open in container B - not container A - with a
+ *   `source.desktopAgent` identifying the bridge that relayed the intent.
+ * - `non-bridged`: there is only ever one container, since with bridging disabled a container's
+ *   Desktop Agent cannot resolve/open apps hosted by another, independent container - so "container B"
+ *   is simply an alias for container A. The resolver's *local* entry is selected instead, and the
+ *   app is expected to open in the same container, with no `desktopAgent` in the intent's `source` at
+ *   all (that property is only ever added by the bridging layer - see `bridge-inbound.ts`).
+ *
+ * In both modes, raising the intent from `app-1-root` causes the FDC3 App Resolver to pop up (since
+ * more than one app can handle it), and the newly opened target app's console is checked for a
+ * `Received Intent::` log confirming it got the intent, with a `source` identifying the raising app -
+ * without pinning the exact instanceId/desktopAgent values, since both are generated at runtime.
  */
-test.describe('Desktop Agent Bridging - raise intent to a specific app on another container', () => {
-    test('raises an intent from container A and opens/receives it on the target app in container B', async ({
-        page,
-        pageB,
-    }) => {
-        const containerA = await TestHarnessContainer.open(page, { bridge: true });
-        const containerB = await TestHarnessContainer.open(pageB, { bridge: true });
+TEST_MODES.forEach(mode => {
+    const bridged = mode === 'bridged';
 
-        // Start from a clean slate in every default app in both containers.
-        await containerA.clearConsoles(['app-1-root', 'app-2-root']);
-        await containerB.clearConsoles(['app-1-root', 'app-2-root']);
+    test.describe(`Raise intent to a specific target app (${mode})`, () => {
+        test('raises an intent from container A and opens/receives it on the target app', async ({
+            page,
+            openPageB,
+        }) => {
+            const containerA = await TestHarnessContainer.open(page, { bridge: bridged });
 
-        // Raise the (default) intent/context from app-1-root in container A. Multiple candidate
-        // apps (local and, via the bridge, remote) will cause the resolver popup to appear.
-        await containerA.raiseIntent('app-1-root');
+            // Only bridged mode needs (or can make use of) a second, independent container - in
+            // non-bridged mode container A can never resolve to a different container's apps, so
+            // reuse containerA as "containerB" rather than opening/wasting a second browser context.
+            const containerB = bridged
+                ? await TestHarnessContainer.open(await openPageB(), { bridge: bridged })
+                : containerA;
 
-        // Select the "App-1-domain-A.com" entry that is hosted by container B's Desktop Agent
-        // (rather than the equivalent, not-yet-opened local entry in container A itself).
-        await containerA.selectAppInResolver('app-1-domain-A', { remote: true });
+            // Start from a clean slate in every default app in both containers.
+            await containerA.clearConsoles(['app-1-root', 'app-2-root']);
+            if (containerB !== containerA) {
+                await containerB.clearConsoles(['app-1-root', 'app-2-root']);
+            }
 
-        // The new app should open in container B, not container A.
-        await containerB.verifyAppOpen('app-1-domain-A');
-        await expect(page.locator('app-container[data-app-id="app-1-domain-A"]')).toHaveCount(0);
+            // Raise the (default) intent/context from app-1-root in container A. Multiple candidate
+            // apps (local, and in bridged mode also remote) will cause the resolver popup to appear.
+            await containerA.raiseIntent('app-1-root');
 
-        // It should have received the raised intent, with a `source` describing app-1-root from
-        // container A's (different) Desktop Agent/instance - without pinning the exact instanceId
-        // or desktopAgent name, since both are generated at runtime.
-        await containerB.verifyConsoleContains(
-            'app-1-domain-A',
-            /Received Intent:: \[\{"type":"fdc3\.contact"[\s\S]*"source":\{"appId":"app-1-root@localhost","instanceId":"[0-9a-f-]+","desktopAgent":"test-harness-root-app(-\d+)?"\}\}\]/,
-        );
+            // In bridged mode, select the "App-1-domain-A.com" entry hosted by container B's Desktop
+            // Agent. In non-bridged mode, select the equivalent local entry instead (the only one
+            // available), which will open within container A itself.
+            await containerA.selectAppInResolver('app-1-domain-A', { remote: bridged });
+
+            // The new app should open in container B (which, in non-bridged mode, is container A).
+            await containerB.verifyAppOpen('app-1-domain-A');
+            if (containerB !== containerA) {
+                await expect(page.locator('app-container[data-app-id="app-1-domain-A"]')).toHaveCount(0);
+            }
+
+            // It should have received the raised intent, with a `source` describing app-1-root.
+            // Bridged mode additionally expects a `desktopAgent` identifying the bridge that relayed
+            // the intent; non-bridged mode must NOT have a `desktopAgent` key at all, since that
+            // property is only ever attached by the bridging layer.
+            const sourcePattern = bridged
+                ? /"source":\{"appId":"app-1-root@localhost","instanceId":"[0-9a-f-]+","desktopAgent":"test-harness-root-app(-\d+)?"\}/
+                : /"source":\{"appId":"app-1-root@localhost","instanceId":"[0-9a-f-]+"\}/;
+
+            await containerB.verifyConsoleContains(
+                'app-1-domain-A',
+                new RegExp(`Received Intent:: \\[\\{"type":"fdc3\\.contact"[\\s\\S]*${sourcePattern.source}\\}\\]`),
+            );
+        });
     });
 });
