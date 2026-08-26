@@ -93,6 +93,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
     let currentDate: Date;
     let contact: Contact;
 
+    // Tracks every DesktopAgentImpl created by createInstance() so we can tear down any
+    // real timers (e.g. heartbeat setInterval/setTimeout) it started. Without this, timers
+    // from one test can fire during/after later tests and trigger unhandled rejections
+    // (e.g. proxy-disconnect cleanup running against a later test's mock state).
+    const createdInstances: DesktopAgentImpl[] = [];
+
     let mockedApplication: AppDirectoryApplication;
 
     let mockWindow: IMocked<Window>;
@@ -281,10 +287,27 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         source = { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId };
         unknownSource = { appId: mockedUnqualifiedAppId, instanceId: mockedTargetInstanceId };
         currentDate = mockedDate;
+        createdInstances.length = 0;
+    });
+
+    afterEach(() => {
+        // Clear any real heartbeat timers/timeouts started by instances created in this test so
+        // they don't fire (and run proxy-disconnect cleanup) against a later test's mock state.
+        for (const instance of createdInstances) {
+            const instanceAny = instance as unknown as {
+                heartbeatTimers?: Map<unknown, ReturnType<typeof setInterval>>;
+                heartbeatTimeouts?: Map<unknown, ReturnType<typeof setTimeout>>;
+            };
+            instanceAny.heartbeatTimers?.forEach(timer => clearInterval(timer));
+            instanceAny.heartbeatTimeouts?.forEach(timer => clearTimeout(timer));
+            instanceAny.heartbeatTimers?.clear();
+            instanceAny.heartbeatTimeouts?.clear();
+        }
+        createdInstances.length = 0;
     });
 
     function createInstance(applicationStrategies?: DesktopAgentStrategies[]): DesktopAgentNext {
-        return new DesktopAgentImpl({
+        const instance = new DesktopAgentImpl({
             appIdentifier,
             rootMessagePublisher: mockRootPublisher.mock,
             directory: mockAppDirectory.mock,
@@ -296,6 +319,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             applicationStrategies,
             window: mockWindow.mock,
         });
+        createdInstances.push(instance);
+        return instance;
     }
 
     it(`should create`, async () => {
@@ -422,7 +447,16 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
                 mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(unqualifiedApp));
 
-                createInstance();
+                const mockOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canOpen', () => Promise.resolve(true)),
+                    setupFunction('open', () => Promise.resolve(`mock-connection-attempt-uuid`)),
+                );
+                mockRootPublisher.setupFunction('awaitAppIdentity', () =>
+                    Promise.resolve({ appId: mockedTargetAppId, instanceId: mockedGeneratedUuid }),
+                );
+
+                createInstance([mockOpenStrategy.mock]);
 
                 const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
                     meta: {
@@ -457,26 +491,17 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 await postRequestMessage(raiseIntentRequest, source);
 
-                expect(
-                    mockRootPublisher.withFunction('sendMessage').withParametersEqualTo({
-                        payload: {
-                            type: 'openRequest',
-                            payload: {
-                                app: unqualifiedApp,
-                                context: contact,
-                                metadata: {},
-                            },
-                            meta: {
-                                requestUuid: mockedRequestUuid,
-                                timestamp: currentDate,
-                                source: appIdentifier,
-                            },
-                        },
-                    }),
-                ).wasCalledOnce();
+                //the app instance is now launched directly via the resolved IOpenApplicationStrategy rather than
+                //by round-tripping an `openRequest` message through the messaging layer
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
+
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+                expect(openParams?.appDirectoryRecord.appId).toBe(unqualifiedApp.appId);
+                expect(openParams?.context).toEqual(contact);
 
                 expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
+
 
             it(`should publish RaiseIntentResponse`, async () => {
                 createInstance();
@@ -853,7 +878,17 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 mockAppDirectory.setupFunction('resolveAppForContext', () =>
                     Promise.resolve({ intent: 'StartChat', app: unqualifiedApp }),
                 );
-                createInstance();
+
+                const mockOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canOpen', () => Promise.resolve(true)),
+                    setupFunction('open', () => Promise.resolve(`mock-connection-attempt-uuid`)),
+                );
+                mockRootPublisher.setupFunction('awaitAppIdentity', () =>
+                    Promise.resolve({ appId: mockedTargetAppId, instanceId: mockedGeneratedUuid }),
+                );
+
+                createInstance([mockOpenStrategy.mock]);
 
                 const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
                     meta: {
@@ -887,23 +922,13 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 await postRequestMessage(raiseIntentForContextRequest, source);
 
-                expect(
-                    mockRootPublisher.withFunction('sendMessage').withParametersEqualTo({
-                        payload: {
-                            type: 'openRequest',
-                            payload: {
-                                app: unqualifiedApp,
-                                context: contact,
-                                metadata: {},
-                            },
-                            meta: {
-                                requestUuid: mockedRequestUuid,
-                                timestamp: currentDate,
-                                source: appIdentifier,
-                            },
-                        },
-                    }),
-                ).wasCalledOnce();
+                //the app instance is now launched directly via the resolved IOpenApplicationStrategy rather than
+                //by round-tripping an `openRequest` message through the messaging layer
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
+
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+                expect(openParams?.appDirectoryRecord.appId).toBe(unqualifiedApp.appId);
+                expect(openParams?.context).toEqual(contact);
 
                 expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
