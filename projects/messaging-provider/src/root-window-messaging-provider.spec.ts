@@ -240,6 +240,7 @@ describe('RootWindowMessagingProvider', () => {
                     },
                     intent: 'mocked-intent',
                     app: sourceAppIdentifier,
+                    metadata: {},
                 },
                 meta: {
                     requestUuid: 'mocked-request-uuid',
@@ -320,6 +321,7 @@ describe('RootWindowMessagingProvider', () => {
                     },
                     intent: 'mocked-intent',
                     app: sourceAppIdentifier,
+                    metadata: {},
                 },
                 meta: {
                     requestUuid: 'mocked-request-uuid',

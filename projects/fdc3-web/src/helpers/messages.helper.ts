@@ -88,6 +88,24 @@ export function createEvent<T extends BrowserTypes.AgentEventMessage>(
     return event as T;
 }
 
+/**
+ * Builds the `ContextMetadata` that a Desktop Agent attaches to a broadcast or intent event
+ * delivered to a receiving app. Any metadata provided by the originating app (`traceId`,
+ * `signature`, `antiReplay`, `custom`) is forwarded, while the Desktop Agent always sets the
+ * `source` and `timestamp` itself and generates a `traceId` when the app did not supply one.
+ */
+export function createContextMetadata(
+    source: FullyQualifiedAppIdentifier,
+    appMetadata?: BrowserTypes.AppProvidableContextMetadata,
+): BrowserTypes.ContextMetadata {
+    return {
+        ...appMetadata,
+        source,
+        timestamp: getTimestamp(),
+        traceId: appMetadata?.traceId ?? generateUUID(),
+    };
+}
+
 export function generateHelloMessage(identityUrl?: string): BrowserTypes.WebConnectionProtocol1Hello {
     const helloMessage: BrowserTypes.WebConnectionProtocol1Hello = {
         meta: { timestamp: getTimestamp(), connectionAttemptUuid: generateUUID() },

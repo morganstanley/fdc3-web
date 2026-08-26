@@ -175,6 +175,7 @@ testPrivate.forEach(isPrivateImpl => {
                     payload: {
                         channelId: mockedChannelId,
                         context: contact,
+                        metadata: {},
                     },
                     type: 'broadcastRequest',
                 };
@@ -252,6 +253,7 @@ testPrivate.forEach(isPrivateImpl => {
                     payload: {
                         channelId: mockedChannelId,
                         context: contact,
+                        metadata: {},
                     },
                     type: 'broadcastRequest',
                 };

@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes, Context } from '@finos/fdc3';
+import { BrowserTypes, Context, ContextWithMetadata } from '@finos/fdc3';
 import { IMSHostManifest, WebAppDetails } from '../app-directory.contracts.js';
 import {
     FullyQualifiedAppId,
@@ -46,6 +46,16 @@ export function isContext(value?: BrowserTypes.Channel | Context | void): value 
         context != null &&
         typeof context.type === 'string' &&
         (typeof context.id === 'object' || typeof context.id === 'undefined')
+    );
+}
+
+export function isContextWithMetadata(value?: unknown): value is ContextWithMetadata {
+    const contextWithMetadata = value as ContextWithMetadata;
+    return (
+        contextWithMetadata != null &&
+        isContext(contextWithMetadata.context) &&
+        typeof contextWithMetadata.metadata === 'object' &&
+        contextWithMetadata.metadata != null
     );
 }
 

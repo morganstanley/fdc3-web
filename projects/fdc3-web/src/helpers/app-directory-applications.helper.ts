@@ -109,7 +109,6 @@ export function getImplementationMetadata(
         fdc3Version: FDC3_VERSION,
         provider: FDC3_PROVIDER,
         optionalFeatures: {
-            OriginatingAppMetadata: true,
             UserChannelMembershipAPIs: true,
             DesktopAgentBridging: false,
         },

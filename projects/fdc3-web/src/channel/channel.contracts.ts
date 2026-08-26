@@ -28,5 +28,8 @@ export interface IChannelFactory {
     ): PrivateChannel;
 }
 
-export type ContextListener = Pick<Channel, 'addContextListener' | 'getCurrentContext'> &
+export type ContextListener = Pick<
+    Channel,
+    'addContextListener' | 'getCurrentContext' | 'getCurrentContextWithMetadata'
+> &
     Pick<DesktopAgent, 'getCurrentChannel'>;
