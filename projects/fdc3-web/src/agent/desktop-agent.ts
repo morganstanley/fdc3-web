@@ -11,6 +11,7 @@
 import {
     type AppIdentifier,
     BrowserTypes,
+    CloseError,
     type Context,
     GetAgentLogLevels,
     ImplementationMetadata,
@@ -25,7 +26,6 @@ import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
 import {
-    AddIntentListenerWithContextRequest,
     IRootPublisher,
     UpdateInstanceMetadataRequest,
     UpdateInstanceMetadataResponse,
@@ -44,11 +44,10 @@ import {
     NewInstanceStrategyParams,
     RequestMessage,
 } from '../contracts.js';
-// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
-import { CloseError, CloseRequest, CloseResponsePayload, createCloseResponseMessage } from '../fdc3-next/index.js';
 import {
     appInstanceEquals,
     convertToEventListenerIndex,
+    createContextMetadata,
     createEvent,
     createLogger,
     createResponseMessage,
@@ -181,7 +180,6 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 return this.onIntentListenerUnsubscribeRequest(requestMessage, sourceApp);
             case 'openRequest':
                 return this.onOpenRequest(requestMessage, sourceApp);
-            // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
             case 'closeRequest':
                 return this.onCloseRequest(requestMessage, sourceApp);
             case 'getUserChannelsRequest':
@@ -212,6 +210,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 return this.channelMessageHandler.onBroadcastRequest(requestMessage, sourceApp);
             case 'getCurrentContextRequest':
                 return this.channelMessageHandler.onGetCurrentContextRequest(requestMessage, sourceApp);
+            case 'clearContextRequest':
+                return this.channelMessageHandler.onClearContextRequest(requestMessage, sourceApp);
             case 'privateChannelAddEventListenerRequest':
                 return this.channelMessageHandler.onPrivateChannelAddEventListenerRequest(requestMessage, sourceApp);
             case 'privateChannelUnsubscribeEventListenerRequest':
@@ -517,7 +517,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
             const raiseIntentResultResponse = createResponseMessage<BrowserTypes.RaiseIntentResultResponse>(
                 'raiseIntentResultResponse',
-                { intentResult: requestMessage.payload.intentResult },
+                {
+                    intentResult: requestMessage.payload.intentResult,
+                    resultMetadata: createContextMetadata(source, requestMessage.payload.metadata),
+                },
                 raiseIntentSource.uuid,
                 raiseIntentSource.payload,
             );
@@ -548,7 +551,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 intent,
                 context: requestMessage.payload.context,
                 raiseIntentRequestUuid,
-                originatingApp,
+                metadata: createContextMetadata(originatingApp, requestMessage.payload.metadata),
             }),
             [fullyQualifiedApp],
         );
@@ -559,7 +562,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      * Registers an app as an intent listener and publishes an AddIntentListenerResponse message
      */
     private async onAddIntentListenerRequest(
-        requestMessage: AddIntentListenerWithContextRequest,
+        requestMessage: BrowserTypes.AddIntentListenerRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         const listeners =
@@ -1162,7 +1165,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 });
             });
             //publish broadcastEvent with provided context to opened app
-            this.publishOpenAppContextBroadcast(context, source, openedApp);
+            this.publishOpenAppContextBroadcast(context, source, openedApp, requestMessage.payload.metadata);
         }
     }
 
@@ -1170,33 +1173,41 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         context: BrowserTypes.Context,
         source: FullyQualifiedAppIdentifier,
         fullyQualifiedAppIdentifier: FullyQualifiedAppIdentifier,
+        metadata?: BrowserTypes.AppProvidableContextMetadata,
     ): void {
         this.rootMessagePublisher.publishEvent(
             createEvent<BrowserTypes.BroadcastEvent>('broadcastEvent', {
                 channelId: null,
                 context,
-                originatingApp: source,
+                metadata: createContextMetadata(source, metadata),
             }),
             [fullyQualifiedAppIdentifier],
         );
     }
 
     /**
-     * TEMPORARY (FDC3 3.0): handles a `closeRequest` from an app that wishes to close its own
-     * window or frame. See ../fdc3-next/close.ts
+     * Handles a `closeRequest` from an app that wishes to close its own window or frame.
      *
      * The actual closing of the window/frame is delegated to a registered
      * {@link ICloseApplicationStrategy} (a default one that closes windows opened by the agent is
      * always provided). If no strategy can close the app, or the chosen strategy throws, the app is
      * sent a `closeResponse` carrying `CloseError.ErrorOnClose`.
      */
-    private async onCloseRequest(requestMessage: CloseRequest, source: FullyQualifiedAppIdentifier): Promise<void> {
+    private async onCloseRequest(
+        requestMessage: BrowserTypes.CloseRequest,
+        source: FullyQualifiedAppIdentifier,
+    ): Promise<void> {
         this.proxyLog('CloseRequest', LogLevel.DEBUG, { requestMessage, source });
 
         const payload = await this.tryToCloseApp(source);
 
         this.rootMessagePublisher.publishResponseMessage(
-            createCloseResponseMessage(payload, requestMessage.meta.requestUuid, source),
+            createResponseMessage<BrowserTypes.CloseResponse>(
+                'closeResponse',
+                payload,
+                requestMessage.meta.requestUuid,
+                source,
+            ),
             source,
         );
     }
@@ -1207,7 +1218,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      * @returns the payload to send back to the requesting app: an empty payload on success or one
      * containing a `CloseError` if the app could not be closed.
      */
-    private async tryToCloseApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<CloseResponsePayload> {
+    private async tryToCloseApp(
+        appIdentifier: FullyQualifiedAppIdentifier,
+    ): Promise<BrowserTypes.CloseResponsePayload> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
         const closeStrategies = (
@@ -1223,7 +1236,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         if (closeStrategies.length === 0) {
             this.proxyLog('CloseRequest no closing strategies found', LogLevel.ERROR, { appIdentifier });
-            return { error: CloseError.ErrorOnClose };
+            return errorOnCloseResponsePayload();
         }
 
         try {
@@ -1231,7 +1244,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return {};
         } catch (err) {
             this.proxyLog('CloseRequest error closing application', LogLevel.ERROR, { appIdentifier, err });
-            return { error: CloseError.ErrorOnClose };
+            return errorOnCloseResponsePayload();
         }
     }
 
@@ -1558,4 +1571,16 @@ function removeHostManifests(
     const { hostManifests, ...partialAppDirectory } = application;
 
     return partialAppDirectory;
+}
+
+/**
+ * Builds a closeResponse payload carrying `CloseError.ErrorOnClose`.
+ *
+ * The @finos/fdc3-schema 3.0-alpha types `CloseResponsePayload.error` as only `'ApiTimeout'`, but
+ * the FDC3 `CloseError` enum (and the `close()` contract) also defines `ErrorOnClose`, which is the
+ * correct error to report when the Desktop Agent cannot close the app. The cast can be removed once
+ * the generated schema widens the error type.
+ */
+function errorOnCloseResponsePayload(): BrowserTypes.CloseResponsePayload {
+    return { error: CloseError.ErrorOnClose } as unknown as BrowserTypes.CloseResponsePayload;
 }

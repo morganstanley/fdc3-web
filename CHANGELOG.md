@@ -1,18 +1,13 @@
 ## 0.17.0 (2026-07-24)
 
+### Changed
+
+ * Upgraded to `@finos/fdc3` 3.0. FDC3 3.0 message types, enums and APIs (`close`, `clearContext`, `getCurrentContextWithMetadata`, context `metadata`, `addIntentListenerWithContext` context types, etc.) are now consumed directly from `@finos/fdc3`, and the temporary `projects/fdc3-web/src/fdc3-next` staging folder has been removed.
+ * Context and intent events now carry a `ContextMetadata` object (`metadata`) in place of the previous `originatingApp` field, and `broadcast`/`open`/`raiseIntent`/`raiseIntentForContext` accept optional `AppProvidableContextMetadata`.
+
 ### Added
 
- * Added a `close()` implementation allowing an app to request that its own window or frame be closed (`fdc3.close()`). This feature is planned for FDC3 3.0 but is not yet available from `@finos/fdc3`, so the supporting `closeRequest`/`closeResponse` DACP message types and the `CloseError` enumeration are temporarily maintained in this library under `projects/fdc3-web/src/fdc3-next` and will be removed once FDC3 3.0 can be installed. To call `close()` the agent must be typed as `DesktopAgentNext`:
-
- ```ts
-import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
-
- const agent = await getAgent();
-
- await (agent as DesktopAgentNext).close();
-```
-
- Closing of the app's window or frame is delegated to an `ICloseApplicationStrategy`, following the same pattern as the existing open and select strategies. A default strategy is always provided that tracks and closes windows opened by the agent itself; consumers that open apps in their own windows or iframes should provide a matching `ICloseApplicationStrategy`.
+ * Added a `close()` implementation allowing an app to request that its own window or frame be closed (`fdc3.close()`). `close()` is now part of the base FDC3 `DesktopAgent` interface. Closing of the app's window or frame is delegated to an `ICloseApplicationStrategy`, following the same pattern as the existing open and select strategies. A default strategy is always provided that tracks and closes windows opened by the agent itself; consumers that open apps in their own windows or iframes should provide a matching `ICloseApplicationStrategy`.
 
  Feature issue: https://github.com/finos/FDC3/issues/1809
 

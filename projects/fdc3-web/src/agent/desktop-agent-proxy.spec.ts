@@ -25,7 +25,7 @@ import type {
     Listener,
     PrivateChannel,
 } from '@finos/fdc3';
-import { OpenError, ResolveError } from '@finos/fdc3';
+import { CloseError, OpenError, ResolveError } from '@finos/fdc3';
 import {
     IMocked,
     Mock,
@@ -46,8 +46,6 @@ import {
     IProxyOutgoingMessageEnvelope,
     ResponseMessage,
 } from '../contracts.js';
-// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
-import { CloseError, CloseRequest, CloseResponse } from '../fdc3-next/index.js';
 import * as helpersImport from '../helpers/index.js';
 import { RootMessagePublisher } from '../messaging/index.js';
 import { DesktopAgentImpl } from './desktop-agent.js';
@@ -606,6 +604,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -645,6 +644,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -706,6 +706,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -764,6 +765,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -875,6 +877,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -1137,6 +1140,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -1178,6 +1182,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -1186,9 +1191,14 @@ tests.forEach(({ proxy }) => {
                 expect(mockHandler.withFunction('handler')).wasCalledOnce();
             });
 
-            it('should pass originatingApp as source metadata to handler when present', async () => {
+            it('should pass metadata to handler when present', async () => {
                 const mockedListenerUuid: string = `mocked-listener-uuid`;
                 const originatingApp: AppIdentifier = { appId: 'originating-app', instanceId: 'originating-instance' };
+                const metadata: BrowserTypes.ContextMetadata = {
+                    source: originatingApp,
+                    timestamp: currentDate,
+                    traceId: 'mocked-trace-id',
+                };
 
                 const instance = await createInstance();
 
@@ -1220,16 +1230,14 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
-                        originatingApp,
+                        metadata,
                     },
                     type: 'intentEvent',
                 };
 
                 postMessage(intentEvent);
                 expect(mockHandler.withFunction('handler')).wasCalledOnce();
-                expect(
-                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: originatingApp }),
-                ).wasCalledOnce();
+                expect(mockHandler.withFunction('handler').withParametersEqualTo(contact, metadata)).wasCalledOnce();
             });
 
             it('should pass undefined metadata to handler when originatingApp is not present', async () => {
@@ -1265,13 +1273,18 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
-                    },
+                        // metadata intentionally omitted to verify the handler still receives the context
+                    } as BrowserTypes.IntentEventPayload,
                     type: 'intentEvent',
                 };
 
                 postMessage(intentEvent);
                 expect(mockHandler.withFunction('handler')).wasCalledOnce();
-                expect(mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined)).wasCalledOnce();
+                expect(
+                    mockHandler
+                        .withFunction('handler')
+                        .withParametersEqualTo(contact, undefined as unknown as BrowserTypes.ContextMetadata),
+                ).wasCalledOnce();
             });
 
             it('should not call intent handler when IntentEvent context type does not match', async () => {
@@ -1307,6 +1320,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -1348,6 +1362,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -1389,6 +1404,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace-id' },
                     },
                     type: 'intentEvent',
                 };
@@ -1414,7 +1430,9 @@ tests.forEach(({ proxy }) => {
 
                 const result = instance.broadcast(context);
 
-                expect(mockChannels.withFunction('broadcast').withParameters(context)).wasCalledOnce();
+                expect(
+                    mockChannels.withFunction('broadcast').withParametersEqualTo(context, undefined),
+                ).wasCalledOnce();
                 expect(result).toBe(returnedPromise);
             });
         });
@@ -2095,7 +2113,6 @@ tests.forEach(({ proxy }) => {
                     },
                     optionalFeatures: {
                         DesktopAgentBridging: false,
-                        OriginatingAppMetadata: false,
                         UserChannelMembershipAPIs: false,
                     },
                     provider: 'Morgan Stanley',
@@ -2132,7 +2149,6 @@ tests.forEach(({ proxy }) => {
                     },
                     optionalFeatures: {
                         DesktopAgentBridging: false,
-                        OriginatingAppMetadata: false,
                         UserChannelMembershipAPIs: false,
                     },
                     provider: 'Morgan Stanley',
@@ -2271,6 +2287,7 @@ tests.forEach(({ proxy }) => {
                     payload: {
                         app: appIdentifier,
                         context: undefined,
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2359,15 +2376,14 @@ tests.forEach(({ proxy }) => {
             });
         });
 
-        //https://fdc3.finos.org/docs/api/ref/DesktopAgent#raiseintent
-        // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
+        //https://fdc3.finos.org/docs/api/ref/DesktopAgent#close
         describe('close', () => {
             it('should send a closeRequest to the Desktop Agent', async () => {
                 const instance = await createInstance();
 
                 instance.close();
 
-                const expectedMessage: CloseRequest = {
+                const expectedMessage: BrowserTypes.CloseRequest = {
                     meta: createExpectedRequestMeta(),
                     payload: {},
                     type: 'closeRequest',
@@ -2387,7 +2403,7 @@ tests.forEach(({ proxy }) => {
 
                 const closePromise = instance.close();
 
-                const responseMessage: CloseResponse = {
+                const responseMessage: BrowserTypes.CloseResponse = {
                     meta: {
                         requestUuid: requestUuIdentifier,
                         timestamp: currentDate,
@@ -2406,14 +2422,16 @@ tests.forEach(({ proxy }) => {
 
                 const closePromise = instance.close();
 
-                const responseMessage: CloseResponse = {
+                const responseMessage: BrowserTypes.CloseResponse = {
                     meta: {
                         requestUuid: requestUuIdentifier,
                         timestamp: currentDate,
                         responseUuid: mockedResponseUuid,
                     },
                     payload: {
-                        error: CloseError.ErrorOnClose,
+                        // fdc3-schema 3.0-alpha types CloseResponsePayload.error as only 'ApiTimeout';
+                        // ErrorOnClose is a valid CloseError per the spec, so cast until the schema widens.
+                        error: CloseError.ErrorOnClose as unknown as BrowserTypes.CloseResponsePayload['error'],
                     },
                     type: 'closeResponse',
                 };
@@ -2433,7 +2451,7 @@ tests.forEach(({ proxy }) => {
                     .then(() => (resolved = true))
                     .catch(() => (rejected = true));
 
-                const responseMessage: CloseResponse = {
+                const responseMessage: BrowserTypes.CloseResponse = {
                     meta: {
                         requestUuid: requestUuIdentifier2,
                         timestamp: currentDate,
@@ -2463,6 +2481,7 @@ tests.forEach(({ proxy }) => {
                         app: undefined,
                         context: contact,
                         intent: 'StartChat',
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -2487,6 +2506,7 @@ tests.forEach(({ proxy }) => {
                         app: appIdentifier,
                         context: contact,
                         intent: 'StartChat',
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -2525,6 +2545,7 @@ tests.forEach(({ proxy }) => {
                     source: appIdentifier,
                     intent: 'StartChat',
                     getResult: intent.getResult,
+                    getResultMetadata: intent.getResultMetadata,
                 };
 
                 expect(intent).toEqual(expectedResponse);
@@ -2587,6 +2608,7 @@ tests.forEach(({ proxy }) => {
                     source: appIdentifier,
                     intent: 'StartChat',
                     getResult: intent.getResult,
+                    getResultMetadata: intent.getResultMetadata,
                 };
 
                 const intentResultMessage: BrowserTypes.RaiseIntentResultResponse = {
@@ -2681,6 +2703,7 @@ tests.forEach(({ proxy }) => {
                     payload: {
                         app: undefined,
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -2704,6 +2727,7 @@ tests.forEach(({ proxy }) => {
                     payload: {
                         app: appIdentifier,
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -2742,6 +2766,7 @@ tests.forEach(({ proxy }) => {
                     source: appIdentifier,
                     intent: 'StartChat',
                     getResult: intent.getResult,
+                    getResultMetadata: intent.getResultMetadata,
                 };
 
                 expect(intent).toEqual(expectedResponse);
@@ -2803,6 +2828,7 @@ tests.forEach(({ proxy }) => {
                     source: appIdentifier,
                     intent: 'StartChat',
                     getResult: intent.getResult,
+                    getResultMetadata: intent.getResultMetadata,
                 };
 
                 const intentResultMessage: BrowserTypes.RaiseIntentResultResponse = {

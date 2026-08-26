@@ -9,6 +9,7 @@
  * and limitations under the License. */
 
 import type {
+    AppProvidableContextMetadata,
     BrowserTypes,
     Channel,
     Context,
@@ -147,10 +148,10 @@ export class Channels extends MessagingBase implements AgentChannels {
         return Promise.resolve();
     }
 
-    public async broadcast(context: Context): Promise<void> {
+    public async broadcast(context: Context, metadata?: AppProvidableContextMetadata): Promise<void> {
         const currentChannel = await this.getCurrentChannel();
 
-        currentChannel?.broadcast(context);
+        currentChannel?.broadcast(context, metadata);
     }
 
     public async addContextListener(

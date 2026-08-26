@@ -20,14 +20,10 @@ import type {
     FDC3EventTypes,
     GetAgentLogLevels,
     Intent,
-    IntentHandler,
-    Listener,
     PrivateChannelEvent,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
 import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from './contracts.internal.js';
-// TEMPORARY (FDC3 3.0): remove this import and use BrowserTypes.CloseRequest / BrowserTypes.CloseResponse once @finos/fdc3 3.0 is installed. See ./fdc3-next/close.ts
-import type { CloseRequest, CloseResponse } from './fdc3-next/index.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -57,9 +53,9 @@ export type RequestMessage =
     | BrowserTypes.IntentResultRequest
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerRequest
     | BrowserTypes.PrivateChannelAddEventListenerRequest
-    | UpdateInstanceMetadataRequest
-    // TEMPORARY (FDC3 3.0): replace with BrowserTypes.CloseRequest once @finos/fdc3 3.0 is installed
-    | CloseRequest;
+    | BrowserTypes.ClearContextRequest
+    | BrowserTypes.CloseRequest
+    | UpdateInstanceMetadataRequest;
 
 export type ResponseMessage =
     | BrowserTypes.AddContextListenerResponse
@@ -91,9 +87,9 @@ export type ResponseMessage =
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerResponse
     | BrowserTypes.PrivateChannelAddEventListenerResponse
     | BrowserTypes.PrivateChannelDisconnectResponse
-    | UpdateInstanceMetadataResponse
-    // TEMPORARY (FDC3 3.0): replace with BrowserTypes.CloseResponse once @finos/fdc3 3.0 is installed
-    | CloseResponse;
+    | BrowserTypes.ClearContextResponse
+    | BrowserTypes.CloseResponse
+    | UpdateInstanceMetadataResponse;
 
 export type EventMessage =
     | BrowserTypes.PrivateChannelOnAddContextListenerEvent
@@ -204,19 +200,6 @@ export interface IProxyMessagingProvider {
  */
 export interface DesktopAgentNext extends FinosDesktopAgent {
     /**
-     * Allows the registration of an intent handler that only triggers when a specific context type or set of context types is passed with the intent
-     * This matches the behavior of intent handlers registered through the app directory
-     * @param intent
-     * @param contextType
-     * @param handler
-     */
-    addIntentListenerWithContext(
-        intent: Intent,
-        contextType: string | string[],
-        handler: IntentHandler,
-    ): Promise<Listener>;
-
-    /**
      * Updates the instance metadata for the calling app instance.
      * Instance metadata can be used to disambiguate instances of the same app,
      * such as displaying a window title or other identifying information in resolver UIs.
@@ -229,21 +212,6 @@ export interface DesktopAgentNext extends FinosDesktopAgent {
      * Overrides the base DesktopAgent.findInstances to return enriched metadata.
      */
     findInstances(app: AppIdentifier): Promise<AppMetadata[]>;
-
-    /**
-     * TEMPORARY (FDC3 3.0): remove this declaration once @finos/fdc3 3.0 is installed — `close()`
-     * will then be part of the base `DesktopAgent` interface. See ./fdc3-next/close.ts
-     *
-     * Requests that the Desktop Agent close the calling application's own window or frame.
-     *
-     * This API is limited to self-close only — it cannot be used to close another application.
-     *
-     * On a successful close the app is destroyed. The promise rejects with a value from
-     * `CloseError` if the Desktop Agent cannot close the app.
-     *
-     * Feature issue: https://github.com/finos/FDC3/issues/1809
-     */
-    close(): Promise<void>;
 }
 
 export type AppIdentifierListenerPair = {

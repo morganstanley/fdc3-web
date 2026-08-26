@@ -605,7 +605,7 @@ describe(`${Channels.name} (channels)`, () => {
 
             await instance.broadcast(contact);
 
-            expect(mockedChannel.withFunction('broadcast').withParameters(contact)).wasCalledOnce();
+            expect(mockedChannel.withFunction('broadcast').withParametersEqualTo(contact, undefined)).wasCalledOnce();
         });
 
         it(`should not do anything if no user channel is currently selected`, async () => {

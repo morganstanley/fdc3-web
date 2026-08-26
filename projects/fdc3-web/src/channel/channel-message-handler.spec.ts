@@ -111,6 +111,16 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                         meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                     }) as any,
             ),
+            setupFunction(
+                'createContextMetadata',
+                (source, appMetadata) =>
+                    ({
+                        ...appMetadata,
+                        source,
+                        timestamp: mockedDate,
+                        traceId: mockedGeneratedUuid,
+                    }) as any,
+            ),
         );
         registerMock(helpersImport, mockedHelpers.mock);
     });
@@ -1335,6 +1345,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1368,6 +1379,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedGeneratedUuid,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1401,6 +1413,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: `not-a-context` as any,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1437,6 +1450,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1448,7 +1462,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: mockedChannelId,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1477,6 +1491,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: recommendedChannels[1].id,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1488,7 +1503,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: recommendedChannels[1].id,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1516,6 +1531,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1527,7 +1543,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: mockedChannelId,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1553,6 +1569,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1564,7 +1581,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: mockedChannelId,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1604,6 +1621,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -1641,6 +1659,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -1676,6 +1695,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: null,
+                    metadata: null,
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -1713,6 +1733,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: null,
+                    metadata: null,
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -2105,6 +2126,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: testContact,
                     channelId: mockedChannelId,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -2125,6 +2147,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: testContact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -2163,6 +2186,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: testContact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -2214,6 +2238,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -2474,6 +2499,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             payload: {
                 channelId,
                 context,
+                metadata: {},
             },
             type: 'broadcastRequest',
         };

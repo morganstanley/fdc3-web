@@ -8,9 +8,24 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { BrowserTypes, Channel, Context, ContextHandler, DisplayMetadata, Listener } from '@finos/fdc3';
+import type {
+    AppProvidableContextMetadata,
+    BrowserTypes,
+    Channel,
+    Context,
+    ContextHandler,
+    ContextWithMetadata,
+    DisplayMetadata,
+    EventHandler,
+    Listener,
+} from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
-import { createRequestMessage, isBroadcastResponse, resolveContextType } from '../helpers/index.js';
+import {
+    createRequestMessage,
+    isBroadcastResponse,
+    isClearContextResponse,
+    resolveContextType,
+} from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { ContextListener } from './channel.contracts.js';
 
@@ -50,10 +65,11 @@ export class PublicChannel extends MessagingBase implements Channel {
         return this._displayMetadata;
     }
 
-    public async broadcast(context: Context): Promise<void> {
+    public async broadcast(context: Context, metadata?: AppProvidableContextMetadata): Promise<void> {
         const message = createRequestMessage<BrowserTypes.BroadcastRequest>('broadcastRequest', this.appIdentifier, {
             channelId: this.id,
             context: context,
+            metadata: metadata ?? {},
         });
 
         const response = await this.getResponse(message, isBroadcastResponse);
@@ -69,6 +85,26 @@ export class PublicChannel extends MessagingBase implements Channel {
         return this.contextListener.getCurrentContext(contextType);
     }
 
+    public getCurrentContextWithMetadata(contextType?: string | undefined): Promise<ContextWithMetadata | null> {
+        return this.contextListener.getCurrentContextWithMetadata(contextType);
+    }
+
+    public async clearContext(contextType?: string | undefined): Promise<void> {
+        const message = createRequestMessage<BrowserTypes.ClearContextRequest>(
+            'clearContextRequest',
+            this.appIdentifier,
+            { channelId: this.id, contextType: contextType ?? null },
+        );
+
+        const response = await this.getResponse(message, isClearContextResponse);
+
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        } else {
+            return Promise.resolve();
+        }
+    }
+
     public addContextListener(contextType: string | null, handler: ContextHandler): Promise<Listener>;
     public addContextListener(handler: ContextHandler): Promise<Listener>;
     public async addContextListener(
@@ -78,5 +114,12 @@ export class PublicChannel extends MessagingBase implements Channel {
         const { contextType, contextHandler } = resolveContextType(handlerOrContextType, optionalContextHandler);
 
         return this.contextListener.addContextListener(contextType, contextHandler);
+    }
+
+    public addEventListener(_type: string | null, _handler: EventHandler): Promise<Listener> {
+        // TODO(fdc3-3.0): channel-level event listeners (e.g. 'contextCleared') have no
+        // corresponding request message in the @finos/fdc3-schema alpha, so there is no
+        // transport to register them with the Desktop Agent yet.
+        return Promise.reject('Channel.addEventListener is not yet implemented');
     }
 }

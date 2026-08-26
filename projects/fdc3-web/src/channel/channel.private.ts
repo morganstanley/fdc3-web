@@ -116,7 +116,10 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
      * @param handler is the handler the events received will be passed to
      * @returns a listener for the specified PrivateChannelEventTypes
      */
-    public async addEventListener(type: PrivateChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
+    public override async addEventListener(
+        type: PrivateChannelEventTypes | null,
+        handler: EventHandler,
+    ): Promise<Listener> {
         //TODO: Fix PrivateChannelEvents typing conflict between FDC3 spec and Browser Types
         //currently does not accept null in PrivateChannelAddEventListenerRequestPayload
         if (type == null) {
