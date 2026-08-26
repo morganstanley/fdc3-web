@@ -43,6 +43,15 @@ export const HEARTBEAT = {
     TIMEOUT_MS: 500,
 } as const;
 
+/**
+ * How long to wait, after opening an application via `fdc3.open()` with a context, for that
+ * application to add a context listener capable of receiving the context before giving up and
+ * responding with `OpenError.AppTimeout`.
+ * https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#timeouts-for-message-exchanges
+ * The FDC3 spec requires Desktop Agents to allow at least 15 seconds for this.
+ */
+export const APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS = 15000;
+
 export const defaultBackoffRetry: Required<BackoffRetryParams> = {
     maxAttempts: 3,
     baseDelay: 250,
