@@ -8,15 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type {
-    AppIdentifier,
-    BrowserTypes,
-    Channel,
-    ContextHandler,
-    ContextMetadata,
-    ContextType,
-    Listener,
-} from '@finos/fdc3';
+import type { BrowserTypes, Channel, ContextHandler, ContextType, ContextWithMetadata, Listener } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
@@ -90,10 +82,10 @@ export class ContextListener extends MessagingBase implements ContextListener {
             this._id = currentChannel?.id ?? null;
 
             //gets current context for channel
-            const context = await this.getCurrentContext(contextType);
+            const contextWithMetadata = await this.getCurrentContextWithMetadata(contextType);
 
-            if (context != null) {
-                contextHandler(context);
+            if (contextWithMetadata != null) {
+                contextHandler(contextWithMetadata.context, contextWithMetadata.metadata);
             }
         }
 
@@ -145,6 +137,31 @@ export class ContextListener extends MessagingBase implements ContextListener {
             return Promise.resolve(null);
         }
 
+        const response = await this.requestCurrentContext(channelId, contextType);
+
+        return response.context ?? null;
+    }
+
+    public async getCurrentContextWithMetadata(contextType?: string | null): Promise<ContextWithMetadata | null> {
+        const channelId = this._id;
+
+        if (channelId == null) {
+            return Promise.resolve(null);
+        }
+
+        const response = await this.requestCurrentContext(channelId, contextType);
+
+        if (response.context == null || response.metadata == null) {
+            return null;
+        }
+
+        return { context: response.context, metadata: response.metadata };
+    }
+
+    private async requestCurrentContext(
+        channelId: string,
+        contextType?: string | null,
+    ): Promise<BrowserTypes.GetCurrentContextResponsePayload> {
         const message = createRequestMessage<BrowserTypes.GetCurrentContextRequest>(
             'getCurrentContextRequest',
             this.appIdentifier,
@@ -157,7 +174,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
             return Promise.reject(response.payload.error);
         }
 
-        return response.payload.context ?? null;
+        return response.payload;
     }
 
     private getAddContextListenerResponse(
@@ -204,7 +221,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
                 (contextType === null || message.payload.context.type === contextType) &&
                 message.payload.channelId === this._id
             ) {
-                contextHandler(message.payload.context, createContextMetadata(message.payload.originatingApp));
+                contextHandler(message.payload.context, message.payload.metadata);
             }
         });
     }
@@ -220,15 +237,11 @@ export class ContextListener extends MessagingBase implements ContextListener {
             if (isChannelChangedEvent(message)) {
                 this._id = message.payload.newChannelId;
                 //gets current context for channel whenever app joins new user channel
-                const context = await this.getCurrentContext(contextType);
-                if (context != null) {
-                    contextHandler(context);
+                const contextWithMetadata = await this.getCurrentContextWithMetadata(contextType);
+                if (contextWithMetadata != null) {
+                    contextHandler(contextWithMetadata.context, contextWithMetadata.metadata);
                 }
             }
         });
     }
-}
-
-function createContextMetadata(identifier?: AppIdentifier): ContextMetadata | undefined {
-    return identifier != null ? { source: identifier } : undefined;
 }

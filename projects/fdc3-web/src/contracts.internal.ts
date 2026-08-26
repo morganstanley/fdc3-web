@@ -30,18 +30,6 @@ export interface IRootPublisher extends IProxyMessagingProvider {
 }
 
 /**
- * A temporary interface used to extend the AddIntentListenerRequest
- * This will be removed when this feature is added to the FDC3 API and the BrowserTypes.AddIntentListenerRequestPayload is updated to include contextTypes
- */
-export interface AddIntentListenerWithContextRequest extends BrowserTypes.AddIntentListenerRequest {
-    payload: AddIntentListenerWithContextRequestPayload;
-}
-
-export interface AddIntentListenerWithContextRequestPayload extends BrowserTypes.AddIntentListenerRequestPayload {
-    contextTypes?: string[];
-}
-
-/**
  * A request message to update the instance metadata for the calling app instance
  * This is not yet part of the FDC3 standard messaging protocol
  */

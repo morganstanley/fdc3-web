@@ -8,11 +8,13 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes, Context } from '@finos/fdc3';
+import { BrowserTypes, Context, ContextWithMetadata } from '@finos/fdc3';
 import { IMSHostManifest, WebAppDetails } from '../app-directory.contracts.js';
 import {
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
+    ICloseApplicationStrategy,
+    INewInstanceStrategy,
     IOpenApplicationStrategy,
     IRootOutgoingMessageEnvelope,
     ISelectApplicationStrategy,
@@ -44,6 +46,16 @@ export function isContext(value?: BrowserTypes.Channel | Context | void): value 
         context != null &&
         typeof context.type === 'string' &&
         (typeof context.id === 'object' || typeof context.id === 'undefined')
+    );
+}
+
+export function isContextWithMetadata(value?: unknown): value is ContextWithMetadata {
+    const contextWithMetadata = value as ContextWithMetadata;
+    return (
+        contextWithMetadata != null &&
+        isContext(contextWithMetadata.context) &&
+        typeof contextWithMetadata.metadata === 'object' &&
+        contextWithMetadata.metadata != null
     );
 }
 
@@ -89,6 +101,24 @@ export function isSelectApplicationStrategy(value: any): value is ISelectApplica
     const strategy = value as ISelectApplicationStrategy;
 
     return strategy != null && typeof strategy.canSelectApp === 'function' && typeof strategy.selectApp === 'function';
+}
+
+/**
+ * type predicate to determine if a strategy is an INewInstanceStrategy
+ */
+export function isNewInstanceStrategy(value: any): value is INewInstanceStrategy {
+    const strategy = value as INewInstanceStrategy;
+
+    return strategy != null && typeof strategy.onNewInstance === 'function';
+}
+
+/**
+ * type predicate to determine if a strategy is an ICloseApplicationStrategy
+ */
+export function isCloseApplicationStrategy(value: any): value is ICloseApplicationStrategy {
+    const strategy = value as ICloseApplicationStrategy;
+
+    return strategy != null && typeof strategy.canCloseApp === 'function' && typeof strategy.closeApp === 'function';
 }
 
 export function isDefined<T>(value: T | null | undefined): value is T {

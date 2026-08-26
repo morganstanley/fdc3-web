@@ -12,11 +12,14 @@ import {
     AppIdentifier,
     AppIntent,
     AppMetadata,
+    AppProvidableContextMetadata,
     BrowserTypes,
     Channel,
     Context,
     ContextHandler,
+    ContextMetadata,
     ContextType,
+    ContextWithMetadata,
     DesktopAgentDetails,
     EventHandler,
     FDC3EventTypes,
@@ -25,13 +28,12 @@ import {
     Intent,
     IntentHandler,
     IntentResolution,
-    IntentResult,
     Listener,
     LogLevel,
     PrivateChannel,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { AddIntentListenerWithContextRequest, UpdateInstanceMetadataRequest } from '../contracts.internal.js';
+import { UpdateInstanceMetadataRequest } from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
@@ -41,7 +43,9 @@ import {
     isAddIntentListenerResponse,
     isAppEventMessage,
     isChannel,
+    isCloseResponse,
     isContext,
+    isContextWithMetadata,
     isEventListenerUnsubscribeResponse,
     isFindInstancesResponse,
     isFindIntentResponse,
@@ -98,10 +102,17 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     public async addEventListener(type: FDC3EventTypes | null, handler: EventHandler): Promise<Listener> {
+        if (type === 'contextCleared') {
+            // TODO(fdc3-3.0): the 'contextCleared' DesktopAgent event has no representation in the
+            // @finos/fdc3-schema alpha AddEventListenerRequestPayload (which only supports
+            // 'USER_CHANNEL_CHANGED'), so it cannot yet be registered with the Desktop Agent.
+            return Promise.reject("'contextCleared' events are not yet supported");
+        }
+
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
-            { type: type === 'userChannelChanged' ? 'USER_CHANNEL_CHANGED' : type },
+            { type: type === 'userChannelChanged' ? 'USER_CHANNEL_CHANGED' : null },
         );
 
         const response = await this.getResponse(message, isAddEventListenerResponse);
@@ -150,13 +161,28 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         throw new Error('Method not implemented.');
     }
 
-    public open(app: AppIdentifier, context?: Context): Promise<AppIdentifier>;
-    public open(name: string, context?: Context): Promise<AppIdentifier>;
-    public async open(app: AppIdentifier | string, context?: Context): Promise<AppIdentifier> {
+    public open(
+        app: AppIdentifier,
+        context?: Context | null,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<AppIdentifier>;
+
+    public open(
+        name: string,
+        context?: Context | null,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<AppIdentifier>;
+
+    public async open(
+        app: AppIdentifier | string,
+        context?: Context | null,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<AppIdentifier> {
         const appIdentifier = resolveAppIdentifier(app);
         const message = createRequestMessage<BrowserTypes.OpenRequest>('openRequest', this.appIdentifier, {
             app: appIdentifier,
-            context,
+            context: context ?? undefined,
+            metadata: metadata ?? {},
         });
 
         const response = await this.getResponse(message, isOpenResponse);
@@ -168,6 +194,22 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('appIdentifier is null');
         }
         return response.payload.appIdentifier;
+    }
+
+    /**
+     * Requests that the Desktop Agent close this app's own window or frame. On a successful close
+     * the app is destroyed, so the returned promise will typically never resolve (the window hosting
+     * this proxy is torn down before the `closeResponse` can be handled). The promise rejects with a
+     * `CloseError` value if the Desktop Agent reports that it could not close the app.
+     */
+    public async close(): Promise<void> {
+        const message = createRequestMessage<BrowserTypes.CloseRequest>('closeRequest', this.appIdentifier, {});
+
+        const response = await this.getResponse(message, isCloseResponse);
+
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        }
     }
 
     public async findIntent(
@@ -243,18 +285,31 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return response.payload.appIdentifiers as AppMetadata[];
     }
 
-    public raiseIntent(intent: Intent, context: Context, appIdentifier?: AppIdentifier): Promise<IntentResolution>;
-    public raiseIntent(intent: Intent, context: Context, name: string): Promise<IntentResolution>;
+    public raiseIntent(
+        intent: Intent,
+        context: Context,
+        appIdentifier?: AppIdentifier | null,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<IntentResolution>;
+
+    public raiseIntent(
+        intent: Intent,
+        context: Context,
+        name: string,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<IntentResolution>;
+
     public async raiseIntent(
         intent: Intent,
         context: Context,
-        app?: AppIdentifier | string,
+        app?: AppIdentifier | string | null,
+        metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
-        const appIdentifier = typeof app === 'undefined' ? app : resolveAppIdentifier(app);
+        const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
         const message = createRequestMessage<BrowserTypes.RaiseIntentRequest>(
             'raiseIntentRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context, intent: intent },
+            { app: appIdentifier, context: context, intent: intent, metadata: metadata ?? {} },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(
@@ -273,14 +328,28 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return this.createIntentResolution(raiseIntentResultResponsePromise, response.payload.intentResolution);
     }
 
-    public raiseIntentForContext(context: Context, app?: AppIdentifier): Promise<IntentResolution>;
-    public raiseIntentForContext(context: Context, name: string): Promise<IntentResolution>;
-    public async raiseIntentForContext(context: Context, app?: AppIdentifier | string): Promise<IntentResolution> {
-        const appIdentifier = resolveAppIdentifier(app);
+    public raiseIntentForContext(
+        context: Context,
+        app?: AppIdentifier | null,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<IntentResolution>;
+
+    public raiseIntentForContext(
+        context: Context,
+        name: string,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<IntentResolution>;
+
+    public async raiseIntentForContext(
+        context: Context,
+        app?: AppIdentifier | string | null,
+        metadata?: AppProvidableContextMetadata,
+    ): Promise<IntentResolution> {
+        const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
         const message = createRequestMessage<BrowserTypes.RaiseIntentForContextRequest>(
             'raiseIntentForContextRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context },
+            { app: appIdentifier, context: context, metadata: metadata ?? {} },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(
@@ -305,9 +374,8 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     /**
-     * This function is not yet part of the official FDC3 API - it is a temporary solution to allow intent listeners to specify context types that they are interested in, and will be removed once this feature is added to the FDC3 API and the BrowserTypes.AddIntentListenerRequestPayload is updated to include contextTypes
-     * This feature is planned for FDC3 3.0 and this implementation is based on the pull request that is waiting to merged into finos once the last 2.x release is out.
-     * https://github.com/finos/FDC3/pull/1594
+     * Allows the registration of an intent handler that only triggers when a specific context type or set of context types is passed with the intent.
+     * This matches the behavior of intent handlers registered through the app directory.
      * @param intent
      * @param contextType
      * @param handler
@@ -331,7 +399,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         if (contextTypes != null) {
             payload.contextTypes = contextTypes;
         }
-        const requestMessage = createRequestMessage<AddIntentListenerWithContextRequest>(
+        const requestMessage = createRequestMessage<BrowserTypes.AddIntentListenerRequest>(
             'addIntentListenerRequest',
             this.appIdentifier,
             payload,
@@ -353,10 +421,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 message.payload.intent === intent &&
                 (contextTypes == null || contextTypes.includes(message.payload.context.type))
             ) {
-                const intentResultPromise = handler(
-                    message.payload.context,
-                    message.payload.originatingApp != null ? { source: message.payload.originatingApp } : undefined,
-                );
+                const intentResultPromise = handler(message.payload.context, message.payload.metadata);
 
                 const handlerResult = await intentResultPromise;
 
@@ -380,12 +445,17 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     private async publishIntentResultRequest(
-        handlerResult: IntentResult,
+        handlerResult: Context | ContextWithMetadata | Channel | PrivateChannel | void,
         intentEvent: BrowserTypes.IntentEvent,
     ): Promise<void> {
         const intentResult: BrowserTypes.IntentResult = {};
+        let metadata: BrowserTypes.AppProvidableContextMetadata | undefined;
 
-        if (isContext(handlerResult)) {
+        if (isContextWithMetadata(handlerResult)) {
+            //a handler may return a ContextWithMetadata to include app-provided metadata alongside the context result
+            intentResult.context = handlerResult.context;
+            metadata = handlerResult.metadata;
+        } else if (isContext(handlerResult)) {
             intentResult.context = handlerResult;
         } else if (isChannel(handlerResult)) {
             //need to explicitly convert channel fields to avoid DataCloneError
@@ -396,14 +466,19 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             };
         }
 
+        const payload: BrowserTypes.IntentResultRequestPayload = {
+            intentResult,
+            intentEventUuid: intentEvent.meta.eventUuid,
+            raiseIntentRequestUuid: intentEvent.payload.raiseIntentRequestUuid,
+        };
+        if (metadata != null) {
+            payload.metadata = metadata;
+        }
+
         const requestMessage = createRequestMessage<BrowserTypes.IntentResultRequest>(
             'intentResultRequest',
             this.appIdentifier,
-            {
-                intentResult,
-                intentEventUuid: intentEvent.meta.eventUuid,
-                raiseIntentRequestUuid: intentEvent.payload.raiseIntentRequestUuid,
-            },
+            payload,
         );
 
         const response = await this.getResponse(requestMessage, isIntentResultResponse);
@@ -413,8 +488,8 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         }
     }
 
-    public broadcast(context: Context): Promise<void> {
-        return this.channels.broadcast(context);
+    public broadcast(context: Context, metadata?: AppProvidableContextMetadata): Promise<void> {
+        return this.channels.broadcast(context, metadata);
     }
 
     public addContextListener(contextType: ContextType | null, handler: ContextHandler): Promise<Listener>;
@@ -523,6 +598,15 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                     default:
                         return raiseIntentResultResponse.payload.intentResult?.context;
                 }
+            },
+            getResultMetadata: async (): Promise<ContextMetadata> => {
+                const raiseIntentResultResponse = await raiseIntentResultResponsePromise;
+
+                const resultMetadata = raiseIntentResultResponse.payload.resultMetadata;
+                if (resultMetadata == null) {
+                    return Promise.reject('resultMetadata is null');
+                }
+                return resultMetadata;
             },
         };
     }

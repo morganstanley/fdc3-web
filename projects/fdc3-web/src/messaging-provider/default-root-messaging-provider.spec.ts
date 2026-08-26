@@ -129,6 +129,7 @@ describe('DefaultRootMessagingProvider', () => {
                 type: 'getInfoRequest',
             },
             channelId: mockedGeneratedUuid,
+            window: mockProxyWindow.mock,
         };
 
         (

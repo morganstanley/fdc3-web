@@ -20,8 +20,6 @@ import type {
     FDC3EventTypes,
     GetAgentLogLevels,
     Intent,
-    IntentHandler,
-    Listener,
     PrivateChannelEvent,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
@@ -55,6 +53,8 @@ export type RequestMessage =
     | BrowserTypes.IntentResultRequest
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerRequest
     | BrowserTypes.PrivateChannelAddEventListenerRequest
+    | BrowserTypes.ClearContextRequest
+    | BrowserTypes.CloseRequest
     | UpdateInstanceMetadataRequest;
 
 export type ResponseMessage =
@@ -87,6 +87,8 @@ export type ResponseMessage =
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerResponse
     | BrowserTypes.PrivateChannelAddEventListenerResponse
     | BrowserTypes.PrivateChannelDisconnectResponse
+    | BrowserTypes.ClearContextResponse
+    | BrowserTypes.CloseResponse
     | UpdateInstanceMetadataResponse;
 
 export type EventMessage =
@@ -134,6 +136,11 @@ export interface IRootIncomingMessageEnvelope<
      * Indicates which channel (which maps to a given proxy agent) the message was received from
      */
     channelId: string;
+    /**
+     * The window of the app instance the message was received from, if known (e.g. captured from the
+     * WCP1Hello handshake). Used to notify INewInstanceStrategy once an instanceId has been assigned.
+     */
+    window?: Window;
 }
 
 /**
@@ -192,19 +199,6 @@ export interface IProxyMessagingProvider {
  * Extends the FDC3 DesktopAgent interface with features planned for the next version of FDC3.
  */
 export interface DesktopAgentNext extends FinosDesktopAgent {
-    /**
-     * Allows the registration of an intent handler that only triggers when a specific context type or set of context types is passed with the intent
-     * This matches the behavior of intent handlers registered through the app directory
-     * @param intent
-     * @param contextType
-     * @param handler
-     */
-    addIntentListenerWithContext(
-        intent: Intent,
-        contextType: string | string[],
-        handler: IntentHandler,
-    ): Promise<Listener>;
-
     /**
      * Updates the instance metadata for the calling app instance.
      * Instance metadata can be used to disambiguate instances of the same app,
@@ -357,7 +351,29 @@ export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & 
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
 };
 
-export type DesktopAgentStrategies = IOpenApplicationStrategy | ISelectApplicationStrategy;
+export type DesktopAgentStrategies =
+    IOpenApplicationStrategy | ISelectApplicationStrategy | INewInstanceStrategy | ICloseApplicationStrategy;
+
+export type NewInstanceStrategyParams = {
+    /**
+     * The window of the newly registered application instance, if known. This is populated from the window
+     * that completed the WCP1Hello/WCP4ValidateAppIdentity handshake, so it is available regardless of how the
+     * window was created (e.g. via an IOpenApplicationStrategy, `window.open()`, or an iframe that registers itself).
+     * It will be undefined if the app instance is not window-based (e.g. connects via a non-window transport).
+     */
+    window?: Window;
+    fullyQualifiedAppIdentifier: FullyQualifiedAppIdentifier;
+};
+
+/**
+ * Notified by the desktop agent whenever a new instanceId has been assigned to an application instance that has
+ * completed its connection handshake. Unlike IOpenApplicationStrategy/ISelectApplicationStrategy, this is invoked
+ * for every new instance regardless of how it was opened, so it can be used to track or manage windows that were
+ * not opened via an IOpenApplicationStrategy.
+ */
+export interface INewInstanceStrategy {
+    onNewInstance(params: NewInstanceStrategyParams): void;
+}
 
 /**
  * Replaces the default mechanism used to open new applications
@@ -420,6 +436,54 @@ export interface ISelectApplicationStrategy {
      * @param params
      */
     selectApp(params: SelectApplicationStrategyParams): Promise<void>;
+}
+
+export type CloseApplicationStrategyParams = {
+    agent: DesktopAgent;
+    /**
+     * The fully qualified identifier of the application instance that has requested to be closed.
+     */
+    appIdentifier: FullyQualifiedAppIdentifier;
+    /**
+     * The app directory record for the application, if one could be resolved. May be undefined for
+     * apps that are not backed by an app directory entry.
+     */
+    appDirectoryRecord?: Omit<AppDirectoryApplication, 'hostManifests'>;
+    /**
+     * manifest from the app directory record identified by the strategy's manifestKey
+     */
+    manifest?: unknown;
+};
+
+/**
+ * Allows a consumer to provide an implementation for closing applications that were opened by the
+ * desktop agent, following the same pattern as {@link IOpenApplicationStrategy} and
+ * {@link ISelectApplicationStrategy}.
+ *
+ * This is triggered by an app calling `agent.close()` to request that its own window or frame be
+ * closed. A default implementation ({@link FallbackOpenStrategy}) is always provided that tracks
+ * and closes windows opened by the agent itself; consumers that open apps in their own windows or
+ * iframes (e.g. via a custom {@link IOpenApplicationStrategy}) should provide a matching
+ * `ICloseApplicationStrategy`.
+ */
+export interface ICloseApplicationStrategy {
+    /**
+     * Used to identify the manifest key that is used to lookup the specific manifest from the
+     * appDirectory record's hostManifests. The manifest identified through this key will then be
+     * passed to the closeApp() and canCloseApp() functions
+     */
+    manifestKey?: string;
+
+    /**
+     * If the strategy is able to close the given application instance returns true.
+     * If false is returned the strategy will not be used by the desktop agent and the next one will be tried.
+     */
+    canCloseApp(params: CloseApplicationStrategyParams): Promise<boolean>;
+
+    /**
+     * Closes the window or frame that hosts the given application instance.
+     */
+    closeApp(params: CloseApplicationStrategyParams): Promise<void>;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
     isIMSHostManifest,
+    isNewInstanceStrategy,
     isNonEmptyArray,
     isOpenApplicationStrategy,
     isSelectApplicationStrategy,
@@ -95,6 +96,15 @@ describe(`type-predicate.helper`, () => {
             { selectApp: () => Promise.resolve('uuid') },
             { canSelectApp: 'notAFunction', selectApp: () => Promise.resolve('uuid') },
             { canSelectApp: () => Promise.resolve(true), selectApp: 'notAFunction' },
+            { canOpen: () => Promise.resolve(true), open: () => Promise.resolve('uuid') },
+        ],
+    );
+
+    testTypePredicate(
+        isNewInstanceStrategy,
+        [{ onNewInstance: () => {} }],
+        [
+            { onNewInstance: 'notAFunction' },
             { canOpen: () => Promise.resolve(true), open: () => Promise.resolve('uuid') },
         ],
     );

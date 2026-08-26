@@ -125,6 +125,7 @@ describe(`messages.helper`, () => {
             {
                 context: { type: 'fdc3.expectedContext' },
                 intent: 'expectedIntent',
+                metadata: {},
             },
             {
                 type: 'raiseIntentRequest',
@@ -132,6 +133,61 @@ describe(`messages.helper`, () => {
                 payload: {
                     context: { type: 'fdc3.expectedContext' },
                     intent: 'expectedIntent',
+                    metadata: {},
+                },
+            },
+        );
+
+        testRequestMessageCreation<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            {
+                instanceMetadata: { customField: 'customValue', version: '1.0' },
+            },
+            {
+                type: 'updateInstanceMetadataRequest',
+                meta: { source, requestUuid: mockedGeneratedUuid, timestamp: mockedDate },
+                payload: {
+                    instanceMetadata: { customField: 'customValue', version: '1.0' },
+                },
+            },
+        );
+
+        testRequestMessageCreation<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            {
+                instanceMetadata: {},
+            },
+            {
+                type: 'updateInstanceMetadataRequest',
+                meta: { source, requestUuid: mockedGeneratedUuid, timestamp: mockedDate },
+                payload: {
+                    instanceMetadata: {},
+                },
+            },
+        );
+
+        testRequestMessageCreation<UpdateInstanceMetadataRequest>(
+            'updateInstanceMetadataRequest',
+            {
+                instanceMetadata: {
+                    stringField: 'test',
+                    numberField: 42,
+                    booleanField: true,
+                    arrayField: [1, 2, 3],
+                    objectField: { nested: 'value' },
+                },
+            },
+            {
+                type: 'updateInstanceMetadataRequest',
+                meta: { source, requestUuid: mockedGeneratedUuid, timestamp: mockedDate },
+                payload: {
+                    instanceMetadata: {
+                        stringField: 'test',
+                        numberField: 42,
+                        booleanField: true,
+                        arrayField: [1, 2, 3],
+                        objectField: { nested: 'value' },
+                    },
                 },
             },
         );
@@ -293,13 +349,19 @@ describe(`messages.helper`, () => {
             });
         }
 
+        const eventMetadata: BrowserTypes.ContextMetadata = {
+            source,
+            timestamp: mockedDate,
+            traceId: 'mocked-trace-id',
+        };
+
         testEventCreation<BrowserTypes.IntentEvent>(
             'intentEvent',
             {
                 context: { type: 'example.context' },
                 intent: 'startChat',
                 raiseIntentRequestUuid: requestUuid,
-                originatingApp: source,
+                metadata: eventMetadata,
             },
             {
                 type: 'intentEvent',
@@ -308,7 +370,7 @@ describe(`messages.helper`, () => {
                     context: { type: 'example.context' },
                     intent: 'startChat',
                     raiseIntentRequestUuid: requestUuid,
-                    originatingApp: source,
+                    metadata: eventMetadata,
                 },
             },
         );
@@ -318,6 +380,7 @@ describe(`messages.helper`, () => {
             {
                 context: { type: 'fdc3.expectedContext' },
                 channelId: 'channelIdOne',
+                metadata: eventMetadata,
             },
             {
                 type: 'broadcastEvent',
@@ -325,6 +388,7 @@ describe(`messages.helper`, () => {
                 payload: {
                     context: { type: 'fdc3.expectedContext' },
                     channelId: 'channelIdOne',
+                    metadata: eventMetadata,
                 },
             },
         );
@@ -457,8 +521,8 @@ describe(`messages.helper`, () => {
             const mockCallback = vi.fn();
 
             const mockIsWCPHelloMessage:
-                | ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello)
-                | undefined = (() => true) as unknown as typeof mockIsWCPHelloMessage;
+                ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello) | undefined = (() =>
+                true) as unknown as typeof mockIsWCPHelloMessage;
 
             // Setup isWCPHelloMessage mock
             mockedTypePredicateHelper.setup(setupFunction('isWCPHelloMessage', mockIsWCPHelloMessage));
@@ -505,8 +569,8 @@ describe(`messages.helper`, () => {
             const mockCallback = vi.fn();
 
             const mockIsWCPHelloMessage:
-                | ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello)
-                | undefined = (() => true) as unknown as typeof mockIsWCPHelloMessage;
+                ((value: any) => value is BrowserTypes.WebConnectionProtocol1Hello) | undefined = (() =>
+                true) as unknown as typeof mockIsWCPHelloMessage;
 
             // Setup isWCPHelloMessage mock
             mockedTypePredicateHelper.setup(setupFunction('isWCPHelloMessage', mockIsWCPHelloMessage));

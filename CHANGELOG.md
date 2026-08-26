@@ -1,3 +1,39 @@
+## 0.17.0 (2026-07-24)
+
+### Changed
+
+ * Upgraded to `@finos/fdc3` 3.0. FDC3 3.0 message types, enums and APIs (`close`, `clearContext`, `getCurrentContextWithMetadata`, context `metadata`, `addIntentListenerWithContext` context types, etc.) are now consumed directly from `@finos/fdc3`, and the temporary `projects/fdc3-web/src/fdc3-next` staging folder has been removed.
+ * Context and intent events now carry a `ContextMetadata` object (`metadata`) in place of the previous `originatingApp` field, and `broadcast`/`open`/`raiseIntent`/`raiseIntentForContext` accept optional `AppProvidableContextMetadata`.
+
+### Added
+
+ * Added a `close()` implementation allowing an app to request that its own window or frame be closed (`fdc3.close()`). `close()` is now part of the base FDC3 `DesktopAgent` interface. Closing of the app's window or frame is delegated to an `ICloseApplicationStrategy`, following the same pattern as the existing open and select strategies. A default strategy is always provided that tracks and closes windows opened by the agent itself; consumers that open apps in their own windows or iframes should provide a matching `ICloseApplicationStrategy`.
+
+ Feature issue: https://github.com/finos/FDC3/issues/1809
+
+## 0.16.0 (2026-07-22)
+
+### 🚀 Features
+
+- **fdc3-web:** Add `INewInstanceStrategy`, notified whenever a new app instance completes its connection handshake and is assigned an `instanceId`. Unlike `IOpenApplicationStrategy`, this fires for every new instance regardless of how its window was created (via an `IOpenApplicationStrategy`, a plain `window.open()` call, an iframe, etc.), so it can be used to track or manage app windows that were not opened by the desktop agent itself. ([a3642b6](https://github.com/Roaders/fdc3-web/commit/a3642b6))
+
+```js
+const customNewInstanceStrategy = {
+  onNewInstance: (params) => {
+    // params.fullyQualifiedAppIdentifier contains the appId/instanceId of the new app instance
+    // params.window is the window the app instance connected from, if known
+    myWindowRegistry.track(params.fullyQualifiedAppIdentifier, params.window);
+  }
+};
+
+const agent = await getAgent({
+  failover: () =>
+    new DesktopAgentFactory().createRoot({
+      applicationStrategies: [customNewInstanceStrategy],
+    }),
+});
+```
+
 ## 0.15.0 (2026-06-29)
 
 ### 🚀 Features
