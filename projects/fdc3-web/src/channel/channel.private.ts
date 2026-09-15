@@ -17,7 +17,6 @@ import type {
 } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
-    convertToPrivateChannelEventListenerTypes,
     convertToPrivateChannelEventMessageTypes,
     convertToPrivateChannelEventTypes,
 } from '../helpers/event-type.helper.js';
@@ -129,7 +128,7 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
         const requestMessage = createRequestMessage<BrowserTypes.PrivateChannelAddEventListenerRequest>(
             'privateChannelAddEventListenerRequest',
             this.appIdentifier,
-            { listenerType: convertToPrivateChannelEventListenerTypes(type), privateChannelId: this.id },
+            { listenerType: type, privateChannelId: this.id },
         );
 
         const response = await this.getResponse(requestMessage, isPrivateChannelAddEventListenerResponse);
