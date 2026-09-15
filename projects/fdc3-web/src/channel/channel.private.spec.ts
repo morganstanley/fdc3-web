@@ -94,6 +94,38 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
         expect(instance).toBeInstanceOf(PublicChannel);
     });
 
+    it.each(['addContextListener', 'unsubscribe'] as const)(
+        'includes channelId and null contextType in %s events',
+        async type => {
+            const instance = await createInstance();
+            const handler = vi.fn();
+            const registration = instance.addEventListener(type, handler);
+            postMessage({
+                type: 'privateChannelAddEventListenerResponse',
+                meta: { requestUuid: mockedRequestUuid, responseUuid: mockedResponseUuid, timestamp: currentDate },
+                payload: { listenerUUID: 'event-listener' },
+            });
+            await registration;
+            const event:
+                BrowserTypes.PrivateChannelOnAddContextListenerEvent | BrowserTypes.PrivateChannelOnUnsubscribeEvent = {
+                type:
+                    type === 'addContextListener'
+                        ? 'privateChannelOnAddContextListenerEvent'
+                        : 'privateChannelOnUnsubscribeEvent',
+                meta: { eventUuid: mockedEventUuid, timestamp: currentDate },
+                payload: { privateChannelId: 'other-channel', contextType: null },
+            };
+            postMessage(event);
+            expect(handler).not.toHaveBeenCalled();
+            event.payload.privateChannelId = mockedChannelId;
+            postMessage(event);
+            expect(handler).toHaveBeenCalledExactlyOnceWith({
+                type,
+                details: { channelId: mockedChannelId, contextType: null },
+            });
+        },
+    );
+
     //https://fdc3.finos.org/docs/api/ref/PrivateChannel#disconnect
     describe('disconnect', () => {
         it('should send PrivateChannelDisconnectRequest', async () => {
@@ -399,7 +431,7 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
             expect(
                 mockHandler.withFunction('handler').withParametersEqualTo({
                     type: 'disconnect',
-                    details: null,
+                    details: { channelId: mockedChannelId },
                 }),
             ).wasCalledOnce();
         });

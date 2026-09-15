@@ -181,11 +181,17 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
             case 'privateChannelOnUnsubscribeEvent':
                 handler({
                     type: convertToPrivateChannelEventTypes(message.type),
-                    details: { contextType: message.payload.contextType },
+                    details: {
+                        channelId: message.payload.privateChannelId,
+                        contextType: message.payload.contextType ?? null,
+                    },
                 });
                 break;
             case 'privateChannelOnDisconnectEvent':
-                handler({ type: convertToPrivateChannelEventTypes(message.type), details: null });
+                handler({
+                    type: convertToPrivateChannelEventTypes(message.type),
+                    details: { channelId: message.payload.privateChannelId },
+                });
                 break;
         }
     }
