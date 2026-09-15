@@ -22,7 +22,6 @@ import { AppDirectoryApplication, LocalAppDirectory, MS_HOST_MANIFEST_KEY } from
 import {
     AppHostManifestLookup,
     BackoffRetryParams,
-    FORCE_NEW_INSTANCE,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
     IAppResolver,
@@ -119,7 +118,7 @@ export class AppDirectory {
 
     /**
      * Returns an AppIdentifier for the app to handle the intent.
-     * If the passed in app is fully qualified that is returned.
+     * If the passed in app identifies a running instance, that is returned unless a new instance is requested.
      * Otherwise the resolver determines which app to use (usually by launching a UI element).
      * The returned AppIdentifier may or may not have an instanceId - the caller is responsible
      * for opening a new instance if needed.
@@ -128,8 +127,9 @@ export class AppDirectory {
         intent: Intent,
         context: Context,
         app?: AppIdentifier | string,
+        newInstance?: boolean,
     ): Promise<AppIdentifier> {
-        const appIdentifier = this.getValidatedAppIdentifier(app);
+        const appIdentifier = this.getValidatedAppIdentifier(app, newInstance);
 
         if (typeof appIdentifier === 'string') {
             // if we got a resolve error return it.
@@ -137,10 +137,6 @@ export class AppDirectory {
         }
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
-            if (appIdentifier.instanceId === FORCE_NEW_INSTANCE) {
-                return { appId: appIdentifier.appId };
-            }
-
             const contextLookup = this.instanceLookup[appIdentifier.instanceId]?.[intent];
 
             if (
@@ -157,13 +153,17 @@ export class AppDirectory {
 
         const appIntent = await this.getAppIntent(intent, context);
 
-        return (await this.appResolverPromise).resolveAppForIntent({
+        const resolved = await (
+            await this.appResolverPromise
+        ).resolveAppForIntent({
             intent,
             appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
             context,
             appIntent,
+            ...(newInstance == null ? {} : { newInstance }),
             appManifests: this.buildAppHostManifestLookup(),
         });
+        return this.applyInstancePreference(resolved, newInstance);
     }
 
     /**
@@ -175,8 +175,9 @@ export class AppDirectory {
     public async resolveAppForContext(
         context: Context,
         app?: AppIdentifier | string,
+        newInstance?: boolean,
     ): Promise<ResolveForContextResponse | undefined> {
-        const appIdentifier = this.getValidatedAppIdentifier(app);
+        const appIdentifier = this.getValidatedAppIdentifier(app, newInstance);
 
         if (typeof appIdentifier === 'string') {
             return Promise.reject(appIdentifier);
@@ -184,12 +185,35 @@ export class AppDirectory {
 
         const appIntents = await this.getAppIntentsForContext(context);
 
-        return (await this.appResolverPromise).resolveAppForContext({
+        const resolved = await (
+            await this.appResolverPromise
+        ).resolveAppForContext({
             context,
-            appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
+            appIdentifier,
+            ...(newInstance == null ? {} : { newInstance }),
             appIntents,
             appManifests: this.buildAppHostManifestLookup(),
         });
+        return resolved == null
+            ? undefined
+            : { ...resolved, app: this.applyInstancePreference(resolved.app, newInstance) };
+    }
+
+    private applyInstancePreference(app: AppIdentifier, newInstance?: boolean): AppIdentifier {
+        if (newInstance === true) {
+            return { appId: app.appId };
+        }
+        if (newInstance === false) {
+            if (app.instanceId == null) {
+                throw ResolveError.TargetInstanceUnavailable;
+            }
+            const validated = this.getValidatedAppIdentifier(app);
+            if (typeof validated === 'string') {
+                throw validated;
+            }
+            return validated;
+        }
+        return app;
     }
 
     /**
@@ -311,14 +335,17 @@ export class AppDirectory {
      */
     private getValidatedAppIdentifier(
         identifier: AppIdentifier | string,
+        newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | ResolveError; // TODO: sort out this return type in next PR
 
     private getValidatedAppIdentifier(
         identifier?: AppIdentifier | string,
+        newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError;
 
     private getValidatedAppIdentifier(
-        identifier?: AppIdentifier | string,
+        identifier: AppIdentifier | string | undefined,
+        newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError {
         const appIdentifier = resolveAppIdentifier(identifier);
 
@@ -334,13 +361,13 @@ export class AppDirectory {
 
         if (
             appIdentifier.instanceId != null &&
-            appIdentifier.instanceId !== FORCE_NEW_INSTANCE &&
+            newInstance !== true &&
             !this.directory[fullyQualifiedAppId]?.instances.includes(appIdentifier.instanceId)
         ) {
             return ResolveError.TargetInstanceUnavailable;
         }
 
-        return { ...appIdentifier, appId: fullyQualifiedAppId };
+        return newInstance === true ? { appId: fullyQualifiedAppId } : { ...appIdentifier, appId: fullyQualifiedAppId };
     }
 
     /**
