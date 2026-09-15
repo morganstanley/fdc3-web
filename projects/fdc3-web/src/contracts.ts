@@ -236,9 +236,12 @@ export type ResolveForIntentPayload = {
     /**
      * Optional app identifier used to filter the resolved apps. The appId may be either fully
      * qualified (appId@hostname) or unqualified (appId only); the resolver normalizes both forms
-     * before matching against the app directory entries.
+     * before matching against the app directory entries. An instanceId targets a specific running instance
+     * unless newInstance is true.
      */
-    appIdentifier?: UnqualifiedAppIdentifier;
+    appIdentifier?: AppIdentifier;
+    /** True selects a new instance; false permits only a running instance. Omitted uses default resolution. */
+    newInstance?: boolean;
     intent: Intent;
     // used to indicate if an app is a singleton app
     appManifests: AppHostManifestLookup;
@@ -253,9 +256,12 @@ export type ResolveForContextPayload = {
     /**
      * Optional app identifier used to filter the resolved apps. The appId may be either fully
      * qualified (appId@hostname) or unqualified (appId only); the resolver normalizes both forms
-     * before matching against the app directory entries.
+     * before matching against the app directory entries. An instanceId targets a specific running instance
+     * unless newInstance is true.
      */
-    appIdentifier?: UnqualifiedAppIdentifier;
+    appIdentifier?: AppIdentifier;
+    /** True selects a new instance; false permits only a running instance. Omitted uses default resolution. */
+    newInstance?: boolean;
     // used to indicate if an app is a singleton app
     appManifests: AppHostManifestLookup;
     /**
@@ -276,7 +282,10 @@ export type ResolveForContextResponse = {
 /**
  * Provides a mechanism for resolving an app from an unqualified identifier, an intent, a context or a combination.
  *
- * Resolvers are responsible for selecting an app or an existing instance of an app
+ * Resolvers are responsible for selecting an app or an existing instance of an app.
+ * They must honor newInstance: true permits only launching, false permits only running instances,
+ * and undefined uses default selection. Reject with ResolveError.TargetInstanceUnavailable when
+ * false is requested and no suitable running instance exists.
  * They may return:
  * - A FullyQualifiedAppIdentifier (with instanceId) if an existing instance was selected
  * - An AppIdentifier (without instanceId) if a new instance of an app should be opened
@@ -485,16 +494,3 @@ export interface ICloseApplicationStrategy {
      */
     closeApp(params: CloseApplicationStrategyParams): Promise<void>;
 }
-
-/**
- * Used as an instanceId when calling `raiseIntent` or `raiseIntentForContext` to force the desktop agent to create a new instance of the app.
- * There is currently no way to tell the agent to create a new instance of a given app using the current spec.
- * If only an appId is sent as the appIdentifier (e.g. `{ appId: "my-app-id" }`), then the agent will typically show a resolver UI with multiple existing instances and a "create new instance" option.
- * This is a temporary solution until the issue in the FDC3 spec is resolved.
- *
- * Issue raised: https://github.com/finos/FDC3/issues/1940
- *
- * raiseIntent("my-intent", {id: "my-context"}, {appId: "my-app", instanceId: FORCE_NEW_INSTANCE});
- *
- */
-export const FORCE_NEW_INSTANCE = 'ms.fdc3-web.desktop-agent.force-new-app-instance';

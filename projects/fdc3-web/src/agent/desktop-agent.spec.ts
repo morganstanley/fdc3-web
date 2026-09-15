@@ -378,6 +378,38 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`raiseIntentRequest`, () => {
+            it.each([undefined, false, true])(
+                'passes newInstance=%s to the directory and returns resolution errors',
+                async newInstance => {
+                    createInstance();
+                    mockAppDirectory.setupFunction('resolveAppForIntent', () =>
+                        Promise.reject(ResolveError.TargetInstanceUnavailable),
+                    );
+                    const app = { appId: mockedTargetAppId };
+                    const request: BrowserTypes.RaiseIntentRequest = {
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        type: 'raiseIntentRequest',
+                        payload: { intent: 'StartChat', context: contact, app, newInstance, metadata: {} },
+                    };
+                    await postRequestMessage(request, source);
+                    expect(
+                        mockAppDirectory
+                            .withFunction('resolveAppForIntent')
+                            .withParametersEqualTo('StartChat', contact, app, newInstance),
+                    ).wasCalledOnce();
+                    expect(
+                        mockRootPublisher.withFunction('publishResponseMessage').withParametersEqualTo(
+                            {
+                                type: 'raiseIntentResponse',
+                                meta: { ...request.meta, responseUuid: mockedResponseUuid },
+                                payload: { error: ResolveError.TargetInstanceUnavailable },
+                            },
+                            source,
+                        ),
+                    ).wasCalledOnce();
+                },
+            );
+
             it(`should publish IntentEvent to chosen app instance`, async () => {
                 createInstance([mockSelectStrategy.mock]);
 
@@ -502,7 +534,6 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
 
-
             it(`should publish RaiseIntentResponse`, async () => {
                 createInstance();
 
@@ -611,7 +642,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockAppDirectory
                         .withFunction('resolveAppForIntent')
-                        .withParameters('StartChat', contact, undefined),
+                        .withParameters('StartChat', contact, undefined, undefined),
                 ).wasCalledOnce();
 
                 expect(
@@ -809,6 +840,38 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`raiseIntentForContextRequest`, () => {
+            it.each([undefined, false, true])(
+                'passes newInstance=%s to the directory and returns resolution errors',
+                async newInstance => {
+                    createInstance();
+                    mockAppDirectory.setupFunction('resolveAppForContext', () =>
+                        Promise.reject(ResolveError.TargetInstanceUnavailable),
+                    );
+                    const app = { appId: mockedTargetAppId };
+                    const request: BrowserTypes.RaiseIntentForContextRequest = {
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        type: 'raiseIntentForContextRequest',
+                        payload: { context: contact, app, newInstance, metadata: {} },
+                    };
+                    await postRequestMessage(request, source);
+                    expect(
+                        mockAppDirectory
+                            .withFunction('resolveAppForContext')
+                            .withParametersEqualTo(contact, app, newInstance),
+                    ).wasCalledOnce();
+                    expect(
+                        mockRootPublisher.withFunction('publishResponseMessage').withParametersEqualTo(
+                            {
+                                type: 'raiseIntentForContextResponse',
+                                meta: { ...request.meta, responseUuid: mockedResponseUuid },
+                                payload: { error: ResolveError.TargetInstanceUnavailable },
+                            },
+                            source,
+                        ),
+                    ).wasCalledOnce();
+                },
+            );
+
             it(`should publish IntentEvent to chosen app instance`, async () => {
                 createInstance([mockSelectStrategy.mock]);
 
@@ -1396,7 +1459,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockAppDirectory
                         .withFunction('resolveAppForIntent')
-                        .withParameters('StartChat', contact, identifier),
+                        .withParameters('StartChat', contact, identifier, undefined),
                 ).wasCalledOnce();
                 expect(
                     mockAppDirectory

@@ -265,6 +265,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 requestMessage.payload.intent,
                 requestMessage.payload.context,
                 requestMessage.payload.app,
+                requestMessage.payload.newInstance,
             )
             .catch(err => {
                 resolveError = err;
@@ -398,6 +399,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             const resolutionResponse = await this.directory.resolveAppForContext(
                 requestMessage.payload.context,
                 requestMessage.payload.app,
+                requestMessage.payload.newInstance,
             );
 
             if (resolutionResponse == null) {

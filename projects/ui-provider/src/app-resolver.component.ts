@@ -186,11 +186,21 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         let apps: AppMetadata[] = appIntent.apps;
         const requestedAppId = payload.appIdentifier?.appId;
         if (requestedAppId != null) {
-            apps = apps.filter(app => appIdsMatch(app.appId, requestedAppId));
+            apps = apps.filter(
+                app =>
+                    appIdsMatch(app.appId, requestedAppId) &&
+                    (payload.newInstance === true ||
+                        payload.appIdentifier?.instanceId == null ||
+                        app.instanceId === payload.appIdentifier.instanceId),
+            );
         }
 
-        const activeInstances = apps.filter(app => app.instanceId != null);
-        const inactiveApps = apps.filter(app => filterInactiveApps(app, activeInstances, payload.appManifests));
+        const runningInstances = apps.filter(app => app.instanceId != null);
+        const activeInstances = payload.newInstance === true ? [] : runningInstances;
+        const inactiveApps =
+            payload.newInstance === false
+                ? []
+                : apps.filter(app => filterInactiveApps(app, runningInstances, payload.appManifests));
 
         // active and inactive apps. If we only have 1 then we can return it straight away
         const candidates = [...activeInstances, ...inactiveApps];
@@ -200,7 +210,9 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         }
 
         if (candidates.length === 0) {
-            return Promise.reject(ResolveError.NoAppsFound);
+            return Promise.reject(
+                payload.newInstance === false ? ResolveError.TargetInstanceUnavailable : ResolveError.NoAppsFound,
+            );
         }
 
         this._forIntentPopupState = {
@@ -230,7 +242,13 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                     const requestedAppId = payload.appIdentifier?.appId;
                     const apps =
                         requestedAppId != null
-                            ? appIntent.apps.filter(app => appIdsMatch(app.appId, requestedAppId))
+                            ? appIntent.apps.filter(
+                                  app =>
+                                      appIdsMatch(app.appId, requestedAppId) &&
+                                      (payload.newInstance === true ||
+                                          payload.appIdentifier?.instanceId == null ||
+                                          app.instanceId === payload.appIdentifier.instanceId),
+                              )
                             : appIntent.apps;
 
                     return { ...appIntent, apps };
@@ -238,11 +256,14 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                 .filter(appIntent => appIntent.apps.length > 0)
                 .reduce<ContextPopupState>((lookup, appIntent) => {
                     //active app instances that can handle given intent
-                    const activeInstances = appIntent.apps.filter(filterActiveApps);
+                    const activeInstances = payload.newInstance === true ? [] : appIntent.apps.filter(filterActiveApps);
                     //apps that can handle given intent (excluding singletons which already have an active instance)
-                    const inactiveApps = appIntent.apps.filter(app =>
-                        filterInactiveApps(app, globalActiveInstances, payload.appManifests),
-                    );
+                    const inactiveApps =
+                        payload.newInstance === false
+                            ? []
+                            : appIntent.apps.filter(app =>
+                                  filterInactiveApps(app, globalActiveInstances, payload.appManifests),
+                              );
 
                     return {
                         ...lookup,
@@ -264,7 +285,9 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                 app: appCandidates[0].app,
             };
         } else if (appCandidates.length === 0) {
-            return Promise.reject(ResolveError.NoAppsFound);
+            return Promise.reject(
+                payload.newInstance === false ? ResolveError.TargetInstanceUnavailable : ResolveError.NoAppsFound,
+            );
         }
 
         this._passedContext = payload.context;

@@ -285,31 +285,18 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return response.payload.appIdentifiers as AppMetadata[];
     }
 
-    public raiseIntent(
-        intent: Intent,
-        context: Context,
-        appIdentifier?: AppIdentifier | null,
-        metadata?: AppProvidableContextMetadata,
-    ): Promise<IntentResolution>;
-
-    public raiseIntent(
-        intent: Intent,
-        context: Context,
-        name: string,
-        metadata?: AppProvidableContextMetadata,
-    ): Promise<IntentResolution>;
-
     public async raiseIntent(
         intent: Intent,
         context: Context,
         app?: AppIdentifier | string | null,
+        newInstance?: boolean,
         metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
         const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
         const message = createRequestMessage<BrowserTypes.RaiseIntentRequest>(
             'raiseIntentRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context, intent: intent, metadata: metadata ?? {} },
+            { app: appIdentifier, context: context, intent: intent, metadata: metadata ?? {}, newInstance },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(
@@ -328,28 +315,17 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return this.createIntentResolution(raiseIntentResultResponsePromise, response.payload.intentResolution);
     }
 
-    public raiseIntentForContext(
-        context: Context,
-        app?: AppIdentifier | null,
-        metadata?: AppProvidableContextMetadata,
-    ): Promise<IntentResolution>;
-
-    public raiseIntentForContext(
-        context: Context,
-        name: string,
-        metadata?: AppProvidableContextMetadata,
-    ): Promise<IntentResolution>;
-
     public async raiseIntentForContext(
         context: Context,
         app?: AppIdentifier | string | null,
+        newInstance?: boolean,
         metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
         const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
         const message = createRequestMessage<BrowserTypes.RaiseIntentForContextRequest>(
             'raiseIntentForContextRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context, metadata: metadata ?? {} },
+            { app: appIdentifier, context: context, metadata: metadata ?? {}, newInstance },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(

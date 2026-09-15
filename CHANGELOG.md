@@ -1,3 +1,11 @@
+## Unreleased
+
+### Changed
+
+- `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
+- Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.
+- Custom `IAppResolver` implementations receive `newInstance` and must honor it when offering apps and instances for selection.
+
 ## 0.17.0 (2026-07-24)
 
 ### Changed

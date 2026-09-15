@@ -2470,6 +2470,52 @@ tests.forEach(({ proxy }) => {
         });
 
         describe('raiseIntent', () => {
+            it.each([undefined, false, true])(
+                'forwards newInstance=%s and metadata in its new position',
+                async newInstance => {
+                    const instance = await createInstance();
+                    const metadata = { traceId: 'caller-trace-id' };
+                    instance.raiseIntent('StartChat', contact, appIdentifier, newInstance, metadata);
+                    await wait();
+                    expect(
+                        mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
+                            payload: {
+                                meta: createExpectedRequestMeta(),
+                                type: 'raiseIntentRequest',
+                                payload: {
+                                    app: appIdentifier,
+                                    context: contact,
+                                    intent: 'StartChat',
+                                    newInstance,
+                                    metadata,
+                                },
+                            },
+                        }),
+                    ).wasCalledOnce();
+                },
+            );
+
+            it('resolves a string app name when requesting a new instance', async () => {
+                const instance = await createInstance();
+                instance.raiseIntent('StartChat', contact, appIdentifier.appId, true);
+                await wait();
+                expect(
+                    mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
+                        payload: {
+                            meta: createExpectedRequestMeta(),
+                            type: 'raiseIntentRequest',
+                            payload: {
+                                app: { appId: appIdentifier.appId },
+                                context: contact,
+                                intent: 'StartChat',
+                                newInstance: true,
+                                metadata: {},
+                            },
+                        },
+                    }),
+                ).wasCalledOnce();
+            });
+
             it('should raise specific intent for resolution against apps registered with desktop agent', async () => {
                 const instance = await createInstance();
 
@@ -2482,6 +2528,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         metadata: {},
+                        newInstance: undefined,
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -2507,6 +2554,7 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         metadata: {},
+                        newInstance: undefined,
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -2693,6 +2741,45 @@ tests.forEach(({ proxy }) => {
 
         //https://fdc3.finos.org/docs/api/ref/DesktopAgent#raiseintentforcontext
         describe('raiseIntentForContext', () => {
+            it.each([undefined, false, true])(
+                'forwards newInstance=%s and metadata in its new position',
+                async newInstance => {
+                    const instance = await createInstance();
+                    const metadata = { traceId: 'caller-trace-id' };
+                    instance.raiseIntentForContext(contact, appIdentifier, newInstance, metadata);
+                    await wait();
+                    expect(
+                        mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
+                            payload: {
+                                meta: createExpectedRequestMeta(),
+                                type: 'raiseIntentForContextRequest',
+                                payload: { app: appIdentifier, context: contact, newInstance, metadata },
+                            },
+                        }),
+                    ).wasCalledOnce();
+                },
+            );
+
+            it('resolves a string app name when requesting a new instance', async () => {
+                const instance = await createInstance();
+                instance.raiseIntentForContext(contact, appIdentifier.appId, true);
+                await wait();
+                expect(
+                    mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
+                        payload: {
+                            meta: createExpectedRequestMeta(),
+                            type: 'raiseIntentForContextRequest',
+                            payload: {
+                                app: { appId: appIdentifier.appId },
+                                context: contact,
+                                newInstance: true,
+                                metadata: {},
+                            },
+                        },
+                    }),
+                ).wasCalledOnce();
+            });
+
             it('should find and raise intent against apps registered with desktop agent based only on type of context data', async () => {
                 const instance = await createInstance();
 
@@ -2704,6 +2791,7 @@ tests.forEach(({ proxy }) => {
                         app: undefined,
                         context: contact,
                         metadata: {},
+                        newInstance: undefined,
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -2728,6 +2816,7 @@ tests.forEach(({ proxy }) => {
                         app: appIdentifier,
                         context: contact,
                         metadata: {},
+                        newInstance: undefined,
                     },
                     type: 'raiseIntentForContextRequest',
                 };
