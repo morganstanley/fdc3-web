@@ -119,33 +119,38 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
         type: PrivateChannelEventTypes | null,
         handler: EventHandler,
     ): Promise<Listener> {
-        //TODO: Fix PrivateChannelEvents typing conflict between FDC3 spec and Browser Types
-        //currently does not accept null in PrivateChannelAddEventListenerRequestPayload
-        if (type == null) {
-            return Promise.reject('Currently cannot listen for all events');
+        if (type === 'contextCleared') return super.addEventListener(type, handler);
+        const cleared = type == null ? await super.addEventListener(null, handler) : undefined;
+        try {
+            const events = await this.registerPrivateEventListener(type, handler);
+            return {
+                unsubscribe: async () => {
+                    await events.unsubscribe();
+                    await cleared?.unsubscribe();
+                },
+            };
+        } catch (error) {
+            await cleared?.unsubscribe();
+            throw error;
         }
+    }
 
+    private async registerPrivateEventListener(
+        type: Exclude<PrivateChannelEventTypes, 'contextCleared'> | null,
+        handler: EventHandler,
+    ): Promise<Listener> {
         const requestMessage = createRequestMessage<BrowserTypes.PrivateChannelAddEventListenerRequest>(
             'privateChannelAddEventListenerRequest',
             this.appIdentifier,
             { listenerType: type, privateChannelId: this.id },
         );
 
-        const response = await this.getResponse(requestMessage, isPrivateChannelAddEventListenerResponse);
-
-        const listenerUUID = response.payload.listenerUUID;
-        if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
-        } else if (listenerUUID == null) {
-            //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
-            return Promise.reject('listenerUUID is null');
-        }
-
-        this.addMessageCallback(listenerUUID, message => {
+        const callbackUUID = `private-event-${generateUUID()}`;
+        this.addMessageCallback(callbackUUID, message => {
             //convert between EventMessageType and PrivateChannelEventTypes
             if (isPrivateChannelEvent(message)) {
-                const eventType = convertToPrivateChannelEventMessageTypes(type);
-                if (message.type === eventType) {
+                const eventType = type == null ? null : convertToPrivateChannelEventMessageTypes(type);
+                if (type == null || message.type === eventType) {
                     //only passes PrivateChannelEvents to handler if they are on correct Private Channel
                     if (message.payload.privateChannelId === this.id) {
                         this.convertEventPayload(message, handler);
@@ -153,6 +158,18 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
                 }
             }
         });
+
+        const response = await this.getResponse(requestMessage, isPrivateChannelAddEventListenerResponse);
+
+        const listenerUUID = response.payload.listenerUUID;
+        if (response.payload.error != null) {
+            await this.removeMessageCallback(callbackUUID);
+            return Promise.reject(response.payload.error);
+        } else if (listenerUUID == null) {
+            //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
+            await this.removeMessageCallback(callbackUUID);
+            return Promise.reject('listenerUUID is null');
+        }
 
         const unsubscribe: () => Promise<void> = async () => {
             const eventListenerUnsubscribeRequest =
@@ -164,7 +181,7 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
 
             await this.getResponse(eventListenerUnsubscribeRequest, isPrivateChannelUnsubscribeEventListenerResponse);
 
-            this.removeMessageCallback(listenerUUID);
+            this.removeMessageCallback(callbackUUID);
         };
         return { unsubscribe };
     }
