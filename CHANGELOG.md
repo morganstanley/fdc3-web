@@ -2,6 +2,8 @@
 
 ### Changed
 
+- Do not send a success response after closing the calling application (#407).
+
 - `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
 - Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.
 - Custom `IAppResolver` implementations receive `newInstance` and must honor it when offering apps and instances for selection.
@@ -9,6 +11,8 @@
 ## 0.17.0 (2026-07-24)
 
 ### Changed
+
+- Do not send a success response after closing the calling application (#407).
 
  * Upgraded to `@finos/fdc3` 3.0. FDC3 3.0 message types, enums and APIs (`close`, `clearContext`, `getCurrentContextWithMetadata`, context `metadata`, `addIntentListenerWithContext` context types, etc.) are now consumed directly from `@finos/fdc3`, and the temporary `projects/fdc3-web/src/fdc3-next` staging folder has been removed.
  * Context and intent events now carry a `ContextMetadata` object (`metadata`) in place of the previous `originatingApp` field, and `broadcast`/`open`/`raiseIntent`/`raiseIntentForContext` accept optional `AppProvidableContextMetadata`.
@@ -149,6 +153,8 @@ import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
 
 ### Changed
 
+- Do not send a success response after closing the calling application (#407).
+
  * Make `appDirectoryRecord` optional in `ISelectApplicationStrategy` function calls
 
  ### Fixed
@@ -231,6 +237,8 @@ export interface ISelectApplicationStrategy {
  ```
 
  ### Changed
+
+- Do not send a success response after closing the calling application (#407).
 
   * IAppResolver  implementations no longer have to return an `FullyQualifiedAppIdentifier`. Instead they can just return an `AppIdentifier`. If a non-qualified identifier is returned the Desktop Agent will handle the responsibility of opening a new instance of that app.
 
@@ -355,6 +363,8 @@ getAgent({
 ```
 
 ### Changed
+
+- Do not send a success response after closing the calling application (#407).
 
 Implemented a better url comparison function for verifying app identity against app directory. This function now considers all aspects of the url including query params, hash and path segments. This allows apps on the same host to be differentiated:
 
