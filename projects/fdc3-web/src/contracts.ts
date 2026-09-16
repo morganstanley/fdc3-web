@@ -20,14 +20,10 @@ import type {
     FDC3EventTypes,
     GetAgentLogLevels,
     Intent,
-    IntentHandler,
-    Listener,
     PrivateChannelEvent,
 } from '@finos/fdc3';
 import { AppDirectoryApplication, IMSHostManifest, LocalAppDirectory } from './app-directory.contracts.js';
 import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from './contracts.internal.js';
-// TEMPORARY (FDC3 3.0): remove this import and use BrowserTypes.CloseRequest / BrowserTypes.CloseResponse once @finos/fdc3 3.0 is installed. See ./fdc3-next/close.ts
-import type { CloseRequest, CloseResponse } from './fdc3-next/index.js';
 
 export type RequestMessage =
     | BrowserTypes.AddContextListenerRequest
@@ -57,9 +53,9 @@ export type RequestMessage =
     | BrowserTypes.IntentResultRequest
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerRequest
     | BrowserTypes.PrivateChannelAddEventListenerRequest
-    | UpdateInstanceMetadataRequest
-    // TEMPORARY (FDC3 3.0): replace with BrowserTypes.CloseRequest once @finos/fdc3 3.0 is installed
-    | CloseRequest;
+    | BrowserTypes.ClearContextRequest
+    | BrowserTypes.CloseRequest
+    | UpdateInstanceMetadataRequest;
 
 export type ResponseMessage =
     | BrowserTypes.AddContextListenerResponse
@@ -91,9 +87,9 @@ export type ResponseMessage =
     | BrowserTypes.PrivateChannelUnsubscribeEventListenerResponse
     | BrowserTypes.PrivateChannelAddEventListenerResponse
     | BrowserTypes.PrivateChannelDisconnectResponse
-    | UpdateInstanceMetadataResponse
-    // TEMPORARY (FDC3 3.0): replace with BrowserTypes.CloseResponse once @finos/fdc3 3.0 is installed
-    | CloseResponse;
+    | BrowserTypes.ClearContextResponse
+    | BrowserTypes.CloseResponse
+    | UpdateInstanceMetadataResponse;
 
 export type EventMessage =
     | BrowserTypes.PrivateChannelOnAddContextListenerEvent
@@ -204,19 +200,6 @@ export interface IProxyMessagingProvider {
  */
 export interface DesktopAgentNext extends FinosDesktopAgent {
     /**
-     * Allows the registration of an intent handler that only triggers when a specific context type or set of context types is passed with the intent
-     * This matches the behavior of intent handlers registered through the app directory
-     * @param intent
-     * @param contextType
-     * @param handler
-     */
-    addIntentListenerWithContext(
-        intent: Intent,
-        contextType: string | string[],
-        handler: IntentHandler,
-    ): Promise<Listener>;
-
-    /**
      * Updates the instance metadata for the calling app instance.
      * Instance metadata can be used to disambiguate instances of the same app,
      * such as displaying a window title or other identifying information in resolver UIs.
@@ -229,21 +212,6 @@ export interface DesktopAgentNext extends FinosDesktopAgent {
      * Overrides the base DesktopAgent.findInstances to return enriched metadata.
      */
     findInstances(app: AppIdentifier): Promise<AppMetadata[]>;
-
-    /**
-     * TEMPORARY (FDC3 3.0): remove this declaration once @finos/fdc3 3.0 is installed — `close()`
-     * will then be part of the base `DesktopAgent` interface. See ./fdc3-next/close.ts
-     *
-     * Requests that the Desktop Agent close the calling application's own window or frame.
-     *
-     * This API is limited to self-close only — it cannot be used to close another application.
-     *
-     * On a successful close the app is destroyed. The promise rejects with a value from
-     * `CloseError` if the Desktop Agent cannot close the app.
-     *
-     * Feature issue: https://github.com/finos/FDC3/issues/1809
-     */
-    close(): Promise<void>;
 }
 
 export type AppIdentifierListenerPair = {
@@ -268,9 +236,12 @@ export type ResolveForIntentPayload = {
     /**
      * Optional app identifier used to filter the resolved apps. The appId may be either fully
      * qualified (appId@hostname) or unqualified (appId only); the resolver normalizes both forms
-     * before matching against the app directory entries.
+     * before matching against the app directory entries. An instanceId targets a specific running instance
+     * unless newInstance is true.
      */
-    appIdentifier?: UnqualifiedAppIdentifier;
+    appIdentifier?: AppIdentifier;
+    /** True selects a new instance; false permits only a running instance. Omitted uses default resolution. */
+    newInstance?: boolean;
     intent: Intent;
     // used to indicate if an app is a singleton app
     appManifests: AppHostManifestLookup;
@@ -285,9 +256,12 @@ export type ResolveForContextPayload = {
     /**
      * Optional app identifier used to filter the resolved apps. The appId may be either fully
      * qualified (appId@hostname) or unqualified (appId only); the resolver normalizes both forms
-     * before matching against the app directory entries.
+     * before matching against the app directory entries. An instanceId targets a specific running instance
+     * unless newInstance is true.
      */
-    appIdentifier?: UnqualifiedAppIdentifier;
+    appIdentifier?: AppIdentifier;
+    /** True selects a new instance; false permits only a running instance. Omitted uses default resolution. */
+    newInstance?: boolean;
     // used to indicate if an app is a singleton app
     appManifests: AppHostManifestLookup;
     /**
@@ -308,7 +282,10 @@ export type ResolveForContextResponse = {
 /**
  * Provides a mechanism for resolving an app from an unqualified identifier, an intent, a context or a combination.
  *
- * Resolvers are responsible for selecting an app or an existing instance of an app
+ * Resolvers are responsible for selecting an app or an existing instance of an app.
+ * They must honor newInstance: true permits only launching, false permits only running instances,
+ * and undefined uses default selection. Reject with ResolveError.TargetInstanceUnavailable when
+ * false is requested and no suitable running instance exists.
  * They may return:
  * - A FullyQualifiedAppIdentifier (with instanceId) if an existing instance was selected
  * - An AppIdentifier (without instanceId) if a new instance of an app should be opened
@@ -517,16 +494,3 @@ export interface ICloseApplicationStrategy {
      */
     closeApp(params: CloseApplicationStrategyParams): Promise<void>;
 }
-
-/**
- * Used as an instanceId when calling `raiseIntent` or `raiseIntentForContext` to force the desktop agent to create a new instance of the app.
- * There is currently no way to tell the agent to create a new instance of a given app using the current spec.
- * If only an appId is sent as the appIdentifier (e.g. `{ appId: "my-app-id" }`), then the agent will typically show a resolver UI with multiple existing instances and a "create new instance" option.
- * This is a temporary solution until the issue in the FDC3 spec is resolved.
- *
- * Issue raised: https://github.com/finos/FDC3/issues/1940
- *
- * raiseIntent("my-intent", {id: "my-context"}, {appId: "my-app", instanceId: FORCE_NEW_INSTANCE});
- *
- */
-export const FORCE_NEW_INSTANCE = 'ms.fdc3-web.desktop-agent.force-new-app-instance';

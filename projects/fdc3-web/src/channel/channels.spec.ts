@@ -605,7 +605,16 @@ describe(`${Channels.name} (channels)`, () => {
 
             await instance.broadcast(contact);
 
-            expect(mockedChannel.withFunction('broadcast').withParameters(contact)).wasCalledOnce();
+            expect(mockedChannel.withFunction('broadcast').withParametersEqualTo(contact, undefined)).wasCalledOnce();
+        });
+
+        it('should propagate a channel broadcast rejection', async () => {
+            const instance = await createInstance();
+            const channel = createMockChannel(createBrowserTypeChannel('failing-channel', 'user'));
+            channel.setupFunction('broadcast', () => Promise.reject(ChannelError.MalformedContext));
+            mockedContextListener.setupFunction('getCurrentChannel', () => Promise.resolve(channel.mock));
+
+            await expect(instance.broadcast(contact)).rejects.toBe(ChannelError.MalformedContext);
         });
 
         it(`should not do anything if no user channel is currently selected`, async () => {

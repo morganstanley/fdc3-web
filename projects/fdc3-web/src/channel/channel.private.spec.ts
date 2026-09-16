@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { BrowserTypes, EventHandler, Listener, PrivateChannel as FDC3PrivateChannel } from '@finos/fdc3';
+import type { BrowserTypes, EventHandler, Listener } from '@finos/fdc3';
 import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -73,10 +73,16 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
         registerMock(helpersImport, mockedHelpers.mock);
     });
 
-    async function createInstance(channel?: BrowserTypes.Channel): Promise<FDC3PrivateChannel> {
+    async function createInstance(channel?: BrowserTypes.Channel): Promise<PrivateChannel> {
         channel = channel ?? { id: mockedChannelId, type: 'private' };
 
-        const instance = new ChannelFactory().createPrivateChannel(channel, appIdentifier, mockMessagingProvider.mock);
+        // cast to the concrete class so the tests can exercise the deprecated onAddContextListener/
+        // onUnsubscribe/onDisconnect helpers, which are no longer part of the FDC3 PrivateChannel interface
+        const instance = new ChannelFactory().createPrivateChannel(
+            channel,
+            appIdentifier,
+            mockMessagingProvider.mock,
+        ) as PrivateChannel;
 
         await wait();
 

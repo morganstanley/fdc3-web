@@ -19,7 +19,6 @@ import {
 } from '../app-directory.contracts.js';
 import {
     BackoffRetryParams,
-    FORCE_NEW_INSTANCE,
     FullyQualifiedAppIdentifier,
     IAppResolver,
     ResolveForContextPayload,
@@ -230,6 +229,99 @@ describe(`${AppDirectory.name} (directory)`, () => {
         );
     });
 
+    describe.each(['intent', 'context'] as const)('newInstance resolution for %s', mode => {
+        function resolve(directory: AppDirectory, app?: AppIdentifier | string, newInstance?: boolean) {
+            return mode === 'intent'
+                ? directory.resolveAppForIntent('StartChat', contact, app, newInstance)
+                : directory.resolveAppForContext(contact, app, newInstance).then(result => result?.app);
+        }
+
+        function setupResolver(app: AppIdentifier) {
+            mockResolver.setupFunction('resolveAppForIntent', async () => app);
+            mockResolver.setupFunction('resolveAppForContext', async () => ({ intent: 'StartChat', app }));
+        }
+
+        const resolverMethod = mode === 'intent' ? 'resolveAppForIntent' : 'resolveAppForContext';
+
+        it.each([undefined, false, true])('forwards preference %s with an app-only target', async newInstance => {
+            const directory = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(directory, mockedApplicationOne, 'StartChat', [contact]);
+            const running = { appId: mockedAppIdOne, instanceId: 'instanceOne' };
+            setupResolver(running);
+            const result = await resolve(directory, { appId: mockedAppIdOne }, newInstance);
+            expect(result).toEqual(newInstance === true ? { appId: mockedAppIdOne } : running);
+            expect(mockResolver.functionCallLookup[resolverMethod]?.[0][0]).toMatchObject({
+                appIdentifier: { appId: mockedAppIdOne },
+                ...(newInstance == null ? {} : { newInstance }),
+            });
+        });
+
+        it.each([false, true])('honors preference %s after ambiguous application selection', async newInstance => {
+            const directory = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(directory, mockedApplicationOne, 'StartChat', [contact]);
+            setupResolver({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            expect(await resolve(directory, undefined, newInstance)).toEqual(
+                newInstance ? { appId: mockedAppIdOne } : { appId: mockedAppIdOne, instanceId: 'instanceOne' },
+            );
+            expect(mockResolver.functionCallLookup[resolverMethod]?.[0][0].newInstance).toBe(newInstance);
+        });
+
+        it('ignores stale instance IDs when a new instance is requested', async () => {
+            const directory = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(directory, mockedApplicationOne, 'StartChat', [contact]);
+            setupResolver({ appId: mockedAppIdOne, instanceId: 'instanceOne' });
+            expect(await resolve(directory, { appId: mockedAppIdOne, instanceId: 'stale' }, true)).toEqual({
+                appId: mockedAppIdOne,
+            });
+            expect(mockResolver.functionCallLookup[resolverMethod]?.[0][0].appIdentifier).toEqual({
+                appId: mockedAppIdOne,
+            });
+        });
+
+        it('rejects unknown apps even when a new instance is requested', async () => {
+            const directory = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(directory, mockedApplicationOne);
+            await expect(resolve(directory, { appId: 'unknown' }, true)).rejects.toBe(
+                ResolveError.TargetAppUnavailable,
+            );
+            expect(mockResolver.withFunction(resolverMethod)).wasNotCalled();
+        });
+
+        it.each([undefined, false])('rejects stale targeted instances with preference %s', async newInstance => {
+            const directory = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(directory, mockedApplicationOne);
+            await expect(resolve(directory, { appId: mockedAppIdOne, instanceId: 'stale' }, newInstance)).rejects.toBe(
+                ResolveError.TargetInstanceUnavailable,
+            );
+            expect(mockResolver.withFunction(resolverMethod)).wasNotCalled();
+        });
+
+        it.each([undefined, 'stale'])(
+            'rejects resolver selection with instanceId=%s when launching is forbidden',
+            async instanceId => {
+                const directory = createInstance([mockedAppDirectoryUrl]);
+                await registerApp(directory, mockedApplicationOne, 'StartChat', [contact]);
+                setupResolver({ appId: mockedAppIdOne, instanceId });
+                await expect(resolve(directory, { appId: mockedAppIdOne }, false)).rejects.toBe(
+                    ResolveError.TargetInstanceUnavailable,
+                );
+            },
+        );
+
+        it('preserves an explicitly targeted running instance', async () => {
+            const directory = createInstance([mockedAppDirectoryUrl]);
+            await registerApp(directory, mockedApplicationOne, 'StartChat', [contact]);
+            const app = { appId: mockedAppIdOne, instanceId: 'instanceOne' };
+            setupResolver(app);
+            expect(await resolve(directory, app, false)).toEqual(app);
+            if (mode === 'context') {
+                expect(mockResolver.functionCallLookup[resolverMethod]?.[0][0].appIdentifier).toEqual(app);
+            } else {
+                expect(mockResolver.withFunction(resolverMethod)).wasNotCalled();
+            }
+        });
+    });
+
     describe(`resolveAppForIntent`, () => {
         it(`should return passed app identifier if instance id is populated`, async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);
@@ -244,22 +336,6 @@ describe(`${AppDirectory.name} (directory)`, () => {
             const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
 
             expect(result).toStrictEqual(identifier);
-            expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
-        });
-
-        it(`should return only appId and bypass instance validation when instanceId is FORCE_NEW_INSTANCE`, async () => {
-            const instance = createInstance([mockedAppDirectoryUrl]);
-
-            await registerApp(instance, mockedApplicationOne, 'StartChat', []);
-
-            const identifier: FullyQualifiedAppIdentifier = {
-                appId: mockedAppIdOne,
-                instanceId: FORCE_NEW_INSTANCE,
-            };
-
-            const result = await instance.resolveAppForIntent('StartChat', { type: 'contact' }, identifier);
-
-            expect(result).toStrictEqual({ appId: mockedAppIdOne });
             expect(mockResolver.withFunction('resolveAppForIntent')).wasNotCalled();
         });
 

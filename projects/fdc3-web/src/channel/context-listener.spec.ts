@@ -70,11 +70,13 @@ describe(`${ContextListener.name} (context-listener)`, () => {
     let publishCallbacks: ((message: IProxyOutgoingMessageEnvelope) => void)[];
     let currentDate: Date;
     let contact: Contact;
+    let expectedMetadata: BrowserTypes.ContextMetadata;
 
     beforeEach(() => {
         publishCallbacks = [];
         currentDate = new Date(2024, 1, 0, 0, 0, 0);
         appIdentifier = { appId: mockedAppId, instanceId: mockedInstanceId };
+        expectedMetadata = { source: appIdentifier, timestamp: currentDate, traceId: 'mocked-trace-id' };
 
         mockMessagingProvider = Mock.create<IProxyMessagingProvider>().setup(
             setupFunction('sendMessage', message =>
@@ -250,7 +252,9 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                             .withFunction('sendMessage')
                             .withParametersEqualTo({ payload: expectedMessage }),
                     ).wasCalledOnce();
-                    expect(mockHandler.withFunction('handler').withParameters(contact)).wasCalledOnce();
+                    expect(
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
+                    ).wasCalledOnce();
                 });
 
                 it(`should not request latest context for channel if no channel is selected`, async () => {
@@ -374,7 +378,9 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                             .withFunction('sendMessage')
                             .withParametersEqualTo({ payload: expectedMessage }),
                     ).wasCalledOnce();
-                    expect(mockHandler.withFunction('handler').withParameters(contact)).wasCalledOnce();
+                    expect(
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
+                    ).wasCalledOnce();
                 });
             }
 
@@ -426,7 +432,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                 await postBroadcastMessage(mockedChannelId, contact);
 
                 expect(
-                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                 ).wasCalledOnce();
             });
 
@@ -445,7 +451,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                 await postBroadcastMessage(mockedChannelId, contact);
 
                 expect(
-                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                 ).wasCalledOnce();
             });
 
@@ -471,7 +477,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage(mockedChannelId, contact);
 
                     expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                     ).wasCalledOnce();
 
                     //reset function call counts
@@ -487,9 +493,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage('new-channel-id', newContact);
 
                     expect(
-                        mockHandler
-                            .withFunction('handler')
-                            .withParametersEqualTo(newContact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(newContact, expectedMetadata),
                     ).wasCalledOnce();
                 });
 
@@ -506,7 +510,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage(mockedChannelId, contact);
 
                     expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                     ).wasCalledOnce();
 
                     mockChannelSelection(`mocked-channel-id-two`);
@@ -514,12 +518,12 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage(`mocked-channel-id-two`, contact);
 
                     expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                     ).wasCalledOnce();
                 });
             }
 
-            it('should call ContextHandler function when BroadcastEvent is received without originatingApp', async () => {
+            it('should call ContextHandler function when BroadcastEvent is received without metadata', async () => {
                 const instance = await createInstance(details);
 
                 setupContextListenerResponse();
@@ -536,14 +540,19 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     payload: {
                         context: contact,
                         channelId: mockedChannelId,
-                    },
+                        // metadata intentionally omitted to verify the handler still receives the context
+                    } as BrowserTypes.BroadcastEventPayload,
                     type: 'broadcastEvent',
                 };
                 postMessage(broadcastEvent);
 
                 await wait();
 
-                expect(mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined)).wasCalledOnce();
+                expect(
+                    mockHandler
+                        .withFunction('handler')
+                        .withParametersEqualTo(contact, undefined as unknown as BrowserTypes.ContextMetadata),
+                ).wasCalledOnce();
             });
 
             it('should not call ContextHandler function when BroadcastRequest with incorrect channelId is received', async () => {
@@ -939,7 +948,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
             payload: {
                 context,
                 channelId,
-                originatingApp: appIdentifier,
+                metadata: expectedMetadata,
             },
             type: 'broadcastEvent',
         };
@@ -1023,6 +1032,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                 },
                 payload: {
                     context,
+                    metadata: context != null ? expectedMetadata : null,
                 },
                 type: 'getCurrentContextResponse',
             };
