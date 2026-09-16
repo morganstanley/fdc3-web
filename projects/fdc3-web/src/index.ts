@@ -14,5 +14,3 @@ export * from './helpers/index.js';
 export * from './get-agent/index.js';
 export * from './app-directory.contracts.js';
 export * from './app-directory/directory.js';
-// TEMPORARY (FDC3 3.0): remove this export (and the ./fdc3-next folder) once @finos/fdc3 3.0 is installed. See ./fdc3-next/close.ts
-export * from './fdc3-next/index.js';

@@ -335,6 +335,16 @@ Run tests in the UI
 2. Click `Add App` to launch the conformance app instance.
 3. Use the conformance app UI to start individual tests or run the full suite.
 
+#### Manual test: `fdc3.channelChangedEvent`
+
+This test requires selecting a user channel. The conformance test setup has no UI control for changing channels, so when the test prompts you to select a channel, open the browser developer console in the conformance app window and run:
+
+```javascript
+await fdc3.joinUserChannel("fdc3.channel.1")
+```
+
+This joins the user channel and triggers the channel-change event needed by the test.
+
 
 ### Commands
 

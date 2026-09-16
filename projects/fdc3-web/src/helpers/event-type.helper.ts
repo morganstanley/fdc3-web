@@ -13,14 +13,18 @@ import { EventListenerKey } from '../contracts.js';
 
 type PrivateChannelEventMessageTypes = Extract<
     BrowserTypes.EventMessageType,
-    'privateChannelOnAddContextListenerEvent' | 'privateChannelOnDisconnectEvent' | 'privateChannelOnUnsubscribeEvent'
+    | 'privateChannelOnAddContextListenerEvent'
+    | 'privateChannelOnDisconnectEvent'
+    | 'privateChannelOnUnsubscribeEvent'
+    | 'contextClearedEvent'
 >;
 
 export function convertToFDC3EventTypes(type: BrowserTypes.EventMessageType): FDC3EventTypes | null {
-    //only EventMessageType that can be converted to FDC3EventTypes is 'channelChangedEvent' as of fdc3 2.2-beta.3
     switch (type) {
         case 'channelChangedEvent':
             return 'userChannelChanged';
+        case 'contextClearedEvent':
+            return 'contextCleared';
         default:
             return null;
     }
@@ -43,6 +47,9 @@ export function convertToPrivateChannelEventTypes(
         case 'privateChannelOnUnsubscribeEvent':
         case 'unsubscribe':
             return 'unsubscribe';
+        case 'contextClearedEvent':
+        case 'contextCleared':
+            return 'contextCleared';
     }
 }
 
@@ -51,23 +58,15 @@ export function convertToPrivateChannelEventMessageTypes(
 ): PrivateChannelEventMessageTypes {
     switch (type) {
         case 'addContextListener':
+        case 'privateChannelOnAddContextListenerEvent':
             return 'privateChannelOnAddContextListenerEvent';
         case 'disconnect':
+        case 'privateChannelOnDisconnectEvent':
             return 'privateChannelOnDisconnectEvent';
         case 'unsubscribe':
+        case 'privateChannelOnUnsubscribeEvent':
             return 'privateChannelOnUnsubscribeEvent';
-    }
-}
-
-export function convertToPrivateChannelEventListenerTypes(
-    type: PrivateChannelEventTypes,
-): BrowserTypes.PrivateChannelEventType {
-    switch (type) {
-        case 'addContextListener':
-            return 'addContextListener';
-        case 'disconnect':
-            return 'disconnect';
-        case 'unsubscribe':
-            return 'unsubscribe';
+        case 'contextCleared':
+            return 'contextClearedEvent';
     }
 }
