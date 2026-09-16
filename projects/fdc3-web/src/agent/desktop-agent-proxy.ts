@@ -578,11 +578,20 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             getResultMetadata: async (): Promise<ContextMetadata> => {
                 const raiseIntentResultResponse = await raiseIntentResultResponsePromise;
 
-                const resultMetadata = raiseIntentResultResponse.payload.resultMetadata;
-                if (resultMetadata == null) {
-                    return Promise.reject('resultMetadata is null');
+                if (raiseIntentResultResponse.payload.error != null) {
+                    throw raiseIntentResultResponse.payload.error;
                 }
-                return resultMetadata;
+
+                const resultMetadata = raiseIntentResultResponse.payload.resultMetadata;
+                // Match the FINOS proxy's defaults when the agent omits result metadata.
+                return {
+                    source: intentResolution.source,
+                    timestamp: resultMetadata?.timestamp ?? new Date(),
+                    traceId: resultMetadata?.traceId ?? '',
+                    ...(resultMetadata?.signature !== undefined && { signature: resultMetadata.signature }),
+                    ...(resultMetadata?.antiReplay !== undefined && { antiReplay: resultMetadata.antiReplay }),
+                    ...(resultMetadata?.custom !== undefined && { custom: resultMetadata.custom }),
+                };
             },
         };
     }

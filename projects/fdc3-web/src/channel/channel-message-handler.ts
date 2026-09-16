@@ -39,6 +39,7 @@ type ChannelContextListener = {
     source: FullyQualifiedAppIdentifier;
 };
 type ContextHistoryEntry = {
+    sequence: number;
     context: Context;
     metadata: BrowserTypes.ContextMetadata;
 };
@@ -58,6 +59,7 @@ type PrivateChannelInfo = ChannelContextHistory & { allowedList: FullyQualifiedA
  * stores all state for channels across all agents and proxies
  */
 export class ChannelMessageHandler {
+    private contextSequence = 0;
     private currentUserChannels: Partial<Record<string, BrowserTypes.Channel>> = {}; //indexed by instanceId
     private userChannels: Partial<Record<string, ChannelContextHistory>> = {}; //indexed by channelId
     //we have decided to never dispose of appChannels and privateChannels due to inability of knowing when apps have removed all references to channels
@@ -760,7 +762,7 @@ export class ChannelMessageHandler {
         context: Context,
         metadata: BrowserTypes.ContextMetadata,
     ): ChannelContextHistory {
-        const entry: ContextHistoryEntry = { context, metadata };
+        const entry: ContextHistoryEntry = { context, metadata, sequence: ++this.contextSequence };
         channelInfo.contextHistory.byContext[context.type] = entry;
         channelInfo.contextHistory.mostRecent = entry;
         return channelInfo;
@@ -869,8 +871,7 @@ export class ChannelMessageHandler {
         } else {
             delete channelInfo.contextHistory.byContext[contextType];
             if (channelInfo.contextHistory.mostRecent?.context.type === contextType) {
-                const remaining = Object.values(channelInfo.contextHistory.byContext);
-                channelInfo.contextHistory.mostRecent = remaining[remaining.length - 1] || undefined;
+                this.updateMostRecentContext(channelInfo.contextHistory);
             }
         }
     }
@@ -1022,6 +1023,22 @@ export class ChannelMessageHandler {
         }
     }
 
+    private updateMostRecentContext(history: ContextHistory): void {
+        history.mostRecent = Object.values(history.byContext).reduce<ContextHistoryEntry | undefined>(
+            (latest, entry) => (entry != null && (latest == null || entry.sequence > latest.sequence) ? entry : latest),
+            undefined,
+        );
+    }
+
+    private removeAppFromChannelHistory(history: ContextHistory, appId: FullyQualifiedAppIdentifier): void {
+        history.byContext = Object.fromEntries(
+            Object.entries(history.byContext).filter(
+                ([, entry]) => !entry?.metadata.source || !appInstanceEquals(entry.metadata.source, appId),
+            ),
+        );
+        this.updateMostRecentContext(history);
+    }
+
     /**
      * Cleans up private channel context history and allowed list for the disconnected app.
      * @param appId The app ID of the disconnected proxy
@@ -1029,19 +1046,7 @@ export class ChannelMessageHandler {
     private cleanupPrivateChannels(appId: FullyQualifiedAppIdentifier): void {
         for (const [_, channel] of Object.entries(this.privateChannels)) {
             if (channel) {
-                channel.contextHistory.byContext = Object.fromEntries(
-                    Object.entries(channel.contextHistory.byContext).filter(
-                        ([_, entry]) => !entry?.metadata.source || !appInstanceEquals(entry.metadata.source, appId),
-                    ),
-                );
-
-                if (
-                    channel.contextHistory.mostRecent?.metadata.source &&
-                    appInstanceEquals(channel.contextHistory.mostRecent.metadata.source, appId)
-                ) {
-                    const remainingContexts = Object.values(channel.contextHistory.byContext);
-                    channel.contextHistory.mostRecent = remainingContexts[remainingContexts.length - 1] || undefined;
-                }
+                this.removeAppFromChannelHistory(channel.contextHistory, appId);
 
                 channel.allowedList = channel.allowedList.filter(app => !appInstanceEquals(app, appId));
             }
@@ -1055,19 +1060,7 @@ export class ChannelMessageHandler {
     private cleanupUserChannelContexts(appId: FullyQualifiedAppIdentifier): void {
         for (const [_, channel] of Object.entries(this.userChannels)) {
             if (channel) {
-                channel.contextHistory.byContext = Object.fromEntries(
-                    Object.entries(channel.contextHistory.byContext).filter(
-                        ([_, entry]) => !entry?.metadata.source || !appInstanceEquals(entry.metadata.source, appId),
-                    ),
-                );
-
-                if (
-                    channel.contextHistory.mostRecent?.metadata.source &&
-                    appInstanceEquals(channel.contextHistory.mostRecent.metadata.source, appId)
-                ) {
-                    const remainingContexts = Object.values(channel.contextHistory.byContext);
-                    channel.contextHistory.mostRecent = remainingContexts[remainingContexts.length - 1] || undefined;
-                }
+                this.removeAppFromChannelHistory(channel.contextHistory, appId);
             }
         }
     }

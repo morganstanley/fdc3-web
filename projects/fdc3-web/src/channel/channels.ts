@@ -151,7 +151,7 @@ export class Channels extends MessagingBase implements AgentChannels {
     public async broadcast(context: Context, metadata?: AppProvidableContextMetadata): Promise<void> {
         const currentChannel = await this.getCurrentChannel();
 
-        currentChannel?.broadcast(context, metadata);
+        return currentChannel?.broadcast(context, metadata);
     }
 
     public async addContextListener(

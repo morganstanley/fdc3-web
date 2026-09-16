@@ -1633,6 +1633,108 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             ).wasCalledOnce();
         });
 
+        it('should retain broadcast recency after clearing the latest context', async () => {
+            const instance = createInstance();
+
+            mockGetOrCreateChannel(mockedChannelId, instance);
+
+            mockBroadcast(mockedChannelId, contact, instance);
+            mockBroadcast(mockedChannelId, { type: '2' }, instance);
+            mockBroadcast(mockedChannelId, { type: 'other' }, instance);
+            mockBroadcast(mockedChannelId, contact, instance);
+            mockBroadcast(mockedChannelId, { type: 'latest' }, instance);
+            instance.onClearContextRequest(
+                {
+                    type: 'clearContextRequest',
+                    meta: { requestUuid: 'clear', timestamp: mockedDate, source },
+                    payload: { channelId: mockedChannelId, contextType: 'latest' },
+                },
+                source,
+            );
+
+            const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                meta: {
+                    requestUuid: mockedRequestUuid,
+                    timestamp: mockedDate,
+                    source,
+                },
+                payload: {
+                    channelId: mockedChannelId,
+                    contextType: null,
+                },
+                type: 'getCurrentContextRequest',
+            };
+
+            instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+
+            const expectedMessage: BrowserTypes.GetCurrentContextResponse = {
+                meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                payload: {
+                    context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
+                },
+                type: 'getCurrentContextResponse',
+            };
+
+            expect(
+                mockRootMessagingProvider
+                    .withFunction('publishResponseMessage')
+                    .withParametersEqualTo(expectedMessage, source),
+            ).wasCalledOnce();
+        });
+
+        it('should retain broadcast recency after its latest broadcaster disconnects', async () => {
+            const otherSource = { appId: 'other-app', instanceId: 'other-instance' };
+            const instance = createInstance();
+
+            mockJoinChannel({ id: 'fdc3.channel.1', type: 'user' }, instance, source);
+            mockJoinChannel({ id: 'fdc3.channel.1', type: 'user' }, instance, otherSource);
+
+            mockBroadcast('fdc3.channel.1', contact, instance);
+            mockBroadcast('fdc3.channel.1', { type: '2' }, instance);
+            mockBroadcast('fdc3.channel.1', { type: 'other' }, instance);
+            mockBroadcast('fdc3.channel.1', contact, instance);
+            instance.onBroadcastRequest(
+                {
+                    type: 'broadcastRequest',
+                    meta: { requestUuid: 'last', timestamp: mockedDate, source: otherSource },
+                    payload: { channelId: 'fdc3.channel.1', context: { type: 'latest' }, metadata: {} },
+                },
+                otherSource,
+            );
+            instance.cleanupDisconnectedProxy(otherSource);
+
+            const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                meta: {
+                    requestUuid: mockedRequestUuid,
+                    timestamp: mockedDate,
+                    source,
+                },
+                payload: {
+                    channelId: 'fdc3.channel.1',
+                    contextType: null,
+                },
+                type: 'getCurrentContextRequest',
+            };
+
+            instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+
+            const expectedMessage: BrowserTypes.GetCurrentContextResponse = {
+                meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                payload: {
+                    context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
+                },
+                type: 'getCurrentContextResponse',
+            };
+
+            expect(
+                mockRootMessagingProvider
+                    .withFunction('publishResponseMessage')
+                    .withParametersEqualTo(expectedMessage, source),
+            ).wasCalledOnce();
+        });
+
         it(`should publish getCurrentContextResponse containing most recent context of correct context type broadcast on channel if contextType is specified`, async () => {
             const instance = createInstance();
 

@@ -25,7 +25,7 @@ import type {
     Listener,
     PrivateChannel,
 } from '@finos/fdc3';
-import { CloseError, OpenError, ResolveError } from '@finos/fdc3';
+import { CloseError, OpenError, ResolveError, ResultError } from '@finos/fdc3';
 import {
     IMocked,
     Mock,
@@ -2696,6 +2696,91 @@ tests.forEach(({ proxy }) => {
                 postMessage(responseMessage);
 
                 await expect(intentPromise).rejects.toStrictEqual(ResolveError.TargetAppUnavailable);
+            });
+
+            it.each([ResultError.IntentHandlerRejected])(
+                'should reject missing result metadata with the FDC3 error (%s)',
+                async error => {
+                    const instance = await createInstance();
+                    const pending = instance.raiseIntent('StartChat', contact, appIdentifier);
+                    const meta = {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    };
+                    postMessage({
+                        type: 'raiseIntentResponse',
+                        meta,
+                        payload: {
+                            intentResolution: { source: appIdentifier, intent: 'StartChat' },
+                        },
+                    });
+                    const resolution = await pending;
+                    postMessage({ type: 'raiseIntentResultResponse', meta, payload: { error } });
+                    await expect(resolution.getResultMetadata()).rejects.toBe(error);
+                },
+            );
+
+            it.each([undefined, null, {}])(
+                'should supply FINOS defaults for missing metadata (%s)',
+                async resultMetadata => {
+                    const instance = await createInstance();
+                    const pending = instance.raiseIntent('StartChat', contact, appIdentifier);
+                    const meta = {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    };
+                    postMessage({
+                        type: 'raiseIntentResponse',
+                        meta,
+                        payload: {
+                            intentResolution: { source: appIdentifier, intent: 'StartChat' },
+                        },
+                    });
+                    const resolution = await pending;
+                    // Exercise malformed wire responses as well as an omitted optional field.
+                    postMessage({
+                        type: 'raiseIntentResultResponse',
+                        meta,
+                        payload: {
+                            resultMetadata: resultMetadata as BrowserTypes.ContextMetadata | undefined,
+                        },
+                    });
+                    const before = Date.now();
+                    const metadata = await resolution.getResultMetadata();
+                    expect(metadata).toEqual({ source: appIdentifier, timestamp: expect.any(Date), traceId: '' });
+                    expect(new Date(metadata.timestamp).getTime()).toBeGreaterThanOrEqual(before);
+                    expect(new Date(metadata.timestamp).getTime()).toBeLessThanOrEqual(Date.now());
+                },
+            );
+
+            it('should return metadata supplied by the agent', async () => {
+                const instance = await createInstance();
+                const pending = instance.raiseIntent('StartChat', contact, appIdentifier);
+                const meta = {
+                    requestUuid: requestUuIdentifier,
+                    timestamp: currentDate,
+                    responseUuid: mockedResponseUuid,
+                };
+                const resultMetadata = {
+                    source: appIdentifier,
+                    timestamp: currentDate,
+                    traceId: 'trace',
+                    signature: { protected: 'header', signature: 'signature' },
+                    antiReplay: { exp: 200, iat: 100, jti: 'nonce' },
+                    custom: { test: true },
+                };
+                postMessage({
+                    type: 'raiseIntentResponse',
+                    meta,
+                    payload: {
+                        intentResolution: { source: appIdentifier, intent: 'StartChat' },
+                    },
+                });
+                const resolution = await pending;
+                postMessage({ type: 'raiseIntentResultResponse', meta, payload: { resultMetadata } });
+                await expect(resolution.getResultMetadata()).resolves.toEqual(resultMetadata);
             });
 
             it('should resolve getResult() when raiseIntentResultResponse arrives before raiseIntentResponse (loopback race)', async () => {

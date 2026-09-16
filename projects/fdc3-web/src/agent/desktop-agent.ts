@@ -979,26 +979,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         }
         this.proxyLog('OpenRequest application resolved', LogLevel.DEBUG, { application, source });
 
-        const strategyCanOpenResults = await Promise.all(
-            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => {
-                // if canOpen fails, do not use this strategy
-                const canOpen = await this.canStrategyOpenApp(
-                    application,
-                    strategy,
-                    requestMessage.payload.context,
-                ).catch(() => false);
+        const strategy = await this.resolveOpenStrategy(application, requestMessage.payload.context);
 
-                return { canOpen, strategy };
-            }),
-        );
-
-        const validStrategies: IOpenApplicationStrategy[] = strategyCanOpenResults
-            .filter(({ canOpen }) => canOpen)
-            .map(({ strategy }) => strategy);
-
-        if (validStrategies.length > 0) {
-            const strategy = validStrategies[0];
-
+        if (strategy != null) {
             this.openAppWithStrategy(strategy, application, requestMessage, source, requestMessage.payload.context);
         } else {
             this.proxyLog('OpenRequest no opening strategies found', LogLevel.ERROR, { source });
@@ -1082,6 +1065,19 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         }
     }
 
+    private async resolveOpenStrategy(
+        application: AppDirectoryApplication,
+        context?: BrowserTypes.Context,
+    ): Promise<IOpenApplicationStrategy | undefined> {
+        const candidates = await Promise.all(
+            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => ({
+                strategy,
+                canOpen: await this.canStrategyOpenApp(application, strategy, context).catch(() => false),
+            })),
+        );
+        return candidates.find(candidate => candidate.canOpen)?.strategy;
+    }
+
     /**
      * Launches (or connects to) an application instance using the given strategy, resolving once the
      * handshake with the new instance completes and its {@link FullyQualifiedAppIdentifier} is known.
@@ -1120,6 +1116,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             context,
             appReadyPromise,
         });
+
+        if (newAppConnectionAttemptUuid == null) {
+            throw OpenError.ErrorOnLaunch;
+        }
 
         this.proxyLog('OpenRequest application opened', LogLevel.DEBUG, {
             application,
@@ -1595,22 +1595,13 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return Promise.reject(OpenError.AppNotFound);
         }
 
-        const strategyCanOpenResults = await Promise.all(
-            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => {
-                const canOpen = await this.canStrategyOpenApp(application, strategy, context).catch(() => false);
-                return { canOpen, strategy };
-            }),
-        );
+        const strategy = await this.resolveOpenStrategy(application, context);
 
-        const validStrategies: IOpenApplicationStrategy[] = strategyCanOpenResults
-            .filter(({ canOpen }) => canOpen)
-            .map(({ strategy }) => strategy);
-
-        if (validStrategies.length === 0) {
+        if (strategy == null) {
             return Promise.reject(OpenError.ErrorOnLaunch);
         }
 
-        return this.launchApplicationInstance(validStrategies[0], application, this.appIdentifier, context);
+        return this.launchApplicationInstance(strategy, application, this.appIdentifier, context);
     }
 }
 

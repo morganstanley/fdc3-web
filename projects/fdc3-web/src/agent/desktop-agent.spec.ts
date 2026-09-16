@@ -2535,6 +2535,38 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 ).wasCalledOnce();
             });
 
+            it.each([null, undefined])(`should reject a launch with connection UUID %s`, async uuid => {
+                mockErrorOpenStrategy.setupFunction('open', () => Promise.resolve(uuid as unknown as string));
+                createInstance([mockErrorOpenStrategy.mock]);
+
+                const openMessage: BrowserTypes.OpenRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        app: { appId: mockedTargetAppId },
+                        metadata: {},
+                    },
+                    type: 'openRequest',
+                };
+
+                await postRequestMessage(openMessage, source);
+
+                const expectedMessage: BrowserTypes.OpenResponse = {
+                    meta: { ...openMessage.meta, responseUuid: mockedResponseUuid },
+                    payload: { error: OpenError.ErrorOnLaunch },
+                    type: 'openResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedMessage, source),
+                ).wasCalledOnce();
+            });
+
             it(`should publish openResponse with OpenError.ErrorOnLaunch error message if no strategy can open specified application`, async () => {
                 createInstance([]);
 
