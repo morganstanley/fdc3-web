@@ -100,7 +100,7 @@ tests.forEach(({ proxy }) => {
                 setupFunction('addResponseHandler'),
             );
 
-            mockChannels = Mock.create<Channels>();
+            mockChannels = Mock.create<Channels>().setup(setupFunction('getCurrentChannel', async () => null));
 
             let uuidCounter = 0;
             mockedHelpers = Mock.create<typeof helpersImport>().setup(
