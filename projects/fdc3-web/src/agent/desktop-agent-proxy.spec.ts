@@ -2470,6 +2470,33 @@ tests.forEach(({ proxy }) => {
         });
 
         describe('raiseIntent', () => {
+            it.each(['omitted', 'undefined', 'null'] as const)(
+                'substitutes fdc3.nothing for %s context',
+                async mode => {
+                    const instance = await createInstance();
+                    if (mode === 'omitted') {
+                        void instance.raiseIntent('StartCall');
+                    } else {
+                        void instance.raiseIntent('StartCall', mode === 'null' ? null : undefined);
+                    }
+                    await wait();
+                    expect(
+                        mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
+                            payload: {
+                                meta: createExpectedRequestMeta(),
+                                type: 'raiseIntentRequest',
+                                payload: {
+                                    app: undefined,
+                                    context: { type: 'fdc3.nothing' },
+                                    intent: 'StartCall',
+                                    metadata: {},
+                                    newInstance: undefined,
+                                },
+                            },
+                        }),
+                    ).wasCalledOnce();
+                },
+            );
             it.each([undefined, false, true])(
                 'forwards newInstance=%s and metadata in its new position',
                 async newInstance => {

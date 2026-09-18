@@ -295,7 +295,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
 
     public async raiseIntent(
         intent: Intent,
-        context: Context,
+        context?: Context | null,
         app?: AppIdentifier | string | null,
         newInstance?: boolean,
         metadata?: AppProvidableContextMetadata,
@@ -304,7 +304,13 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const message = createRequestMessage<BrowserTypes.RaiseIntentRequest>(
             'raiseIntentRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context, intent: intent, metadata: metadata ?? {}, newInstance },
+            {
+                app: appIdentifier,
+                context: context ?? { type: 'fdc3.nothing' },
+                intent,
+                metadata: metadata ?? {},
+                newInstance,
+            },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(
