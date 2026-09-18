@@ -2,6 +2,7 @@
 
 ### Changed
 
+- Include `channelId` in private-channel listener and disconnect event details (#406).
 - Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
 - Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
 
