@@ -92,6 +92,7 @@ export type ResponseMessage =
     | UpdateInstanceMetadataResponse;
 
 export type EventMessage =
+    | BrowserTypes.ContextClearedEvent
     | BrowserTypes.PrivateChannelOnAddContextListenerEvent
     | BrowserTypes.PrivateChannelOnUnsubscribeEvent
     | BrowserTypes.PrivateChannelOnDisconnectEvent

@@ -82,7 +82,9 @@ export function isAppResponseMessage(value: any): value is ResponseMessage {
     );
 }
 
-export function isAppEventMessage(value: any): value is BrowserTypes.AgentEventMessage {
+export function isAppEventMessage(
+    value: any,
+): value is BrowserTypes.AgentEventMessage | BrowserTypes.ContextClearedEvent {
     const eventMessage = value as BrowserTypes.AgentEventMessage;
     return (
         eventMessage != null &&
