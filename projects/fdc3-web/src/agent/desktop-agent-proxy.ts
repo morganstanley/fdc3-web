@@ -102,13 +102,6 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     public async addEventListener(type: FDC3EventTypes | null, handler: EventHandler): Promise<Listener> {
-        if (type === 'contextCleared') {
-            // TODO(fdc3-3.0): the 'contextCleared' DesktopAgent event has no representation in the
-            // @finos/fdc3-schema alpha AddEventListenerRequestPayload (which only supports
-            // 'USER_CHANNEL_CHANGED'), so it cannot yet be registered with the Desktop Agent.
-            return Promise.reject("'contextCleared' events are not yet supported");
-        }
-
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
@@ -125,9 +118,24 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('listenerUUID is null');
         }
 
+        let currentChannelId: string | null = null;
+        if (type !== 'userChannelChanged') currentChannelId = (await this.getCurrentChannel())?.id ?? null;
+
         this.addMessageCallback(listenerUUID, message => {
             //convert between EventMessageType and FDC3EventTypes
             if (isAppEventMessage(message)) {
+                if (message.type === 'channelChangedEvent') {
+                    currentChannelId = message.payload.currentChannelId ?? message.payload.newChannelId ?? null;
+                }
+                if (message.type === 'contextClearedEvent') {
+                    if (type !== 'userChannelChanged' && message.payload.channelId === currentChannelId) {
+                        handler({
+                            type: 'contextCleared',
+                            details: { channelId: message.payload.channelId, contextType: message.payload.contextType },
+                        });
+                    }
+                    return;
+                }
                 const eventType = convertToFDC3EventTypes(message.type);
                 if (eventType != null && (eventType === type || type == null)) {
                     handler({ type: eventType, details: message.payload });
@@ -287,7 +295,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
 
     public async raiseIntent(
         intent: Intent,
-        context: Context,
+        context?: Context | null,
         app?: AppIdentifier | string | null,
         newInstance?: boolean,
         metadata?: AppProvidableContextMetadata,
@@ -296,7 +304,13 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const message = createRequestMessage<BrowserTypes.RaiseIntentRequest>(
             'raiseIntentRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context, intent: intent, metadata: metadata ?? {}, newInstance },
+            {
+                app: appIdentifier,
+                context: context ?? { type: 'fdc3.nothing' },
+                intent,
+                metadata: metadata ?? {},
+                newInstance,
+            },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(

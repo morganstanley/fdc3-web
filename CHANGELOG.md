@@ -3,6 +3,9 @@
 ### Changed
 
 - Do not send a success response after closing the calling application (#407).
+- Include `channelId` in private-channel listener and disconnect event details (#406).
+- Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
+- Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
 
 - `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
 - Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.
