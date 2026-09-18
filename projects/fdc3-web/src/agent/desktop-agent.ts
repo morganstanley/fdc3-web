@@ -1234,6 +1234,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         const payload = await this.tryToCloseApp(source);
 
+        // Successful closure destroys the calling app; only failures have a response.
+        if (payload.error == null) {
+            return;
+        }
+
         this.rootMessagePublisher.publishResponseMessage(
             createResponseMessage<BrowserTypes.CloseResponse>(
                 'closeResponse',

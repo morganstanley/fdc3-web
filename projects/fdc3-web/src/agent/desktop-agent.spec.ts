@@ -2655,27 +2655,11 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(mockDisabledCloseStrategy.withFunction('closeApp')).wasNotCalled();
             });
 
-            it(`should publish a success closeResponse when the app is closed`, async () => {
+            it('closes the app without publishing a success response', async () => {
                 createInstance([mockCloseStrategy.mock]);
-
                 await postRequestMessage(closeMessage, source);
-
-                const expectedMessage: BrowserTypes.CloseResponse = {
-                    meta: {
-                        requestUuid: mockedRequestUuid,
-                        timestamp: currentDate,
-                        responseUuid: mockedResponseUuid,
-                        source,
-                    },
-                    payload: {},
-                    type: 'closeResponse',
-                };
-
-                expect(
-                    mockRootPublisher
-                        .withFunction('publishResponseMessage')
-                        .withParametersEqualTo(expectedMessage, source),
-                ).wasCalledOnce();
+                expect(mockCloseStrategy.withFunction('closeApp')).wasCalledOnce();
+                expect(mockRootPublisher.withFunction('publishResponseMessage')).wasNotCalled();
             });
 
             it(`should publish closeResponse with CloseError.ErrorOnClose when no strategy can close the app`, async () => {
