@@ -12,6 +12,7 @@ import type {
     AppProvidableContextMetadata,
     BrowserTypes,
     Channel,
+    ChannelEventTypes,
     Context,
     ContextHandler,
     ContextWithMetadata,
@@ -22,6 +23,8 @@ import type {
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
+    generateUUID,
+    isAppEventMessage,
     isBroadcastResponse,
     isClearContextResponse,
     resolveContextType,
@@ -116,10 +119,24 @@ export class PublicChannel extends MessagingBase implements Channel {
         return this.contextListener.addContextListener(contextType, contextHandler);
     }
 
-    public addEventListener(_type: string | null, _handler: EventHandler): Promise<Listener> {
-        // TODO(fdc3-3.0): channel-level event listeners (e.g. 'contextCleared') have no
-        // corresponding request message in the @finos/fdc3-schema alpha, so there is no
-        // transport to register them with the Desktop Agent yet.
-        return Promise.reject('Channel.addEventListener is not yet implemented');
+    public async addEventListener(type: ChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
+        const listenerUUID = generateUUID();
+        await this.addMessageCallback(listenerUUID, message => {
+            if (
+                isAppEventMessage(message) &&
+                message.type === 'contextClearedEvent' &&
+                message.payload.channelId === this.id &&
+                (type == null || type === 'contextCleared')
+            ) {
+                handler({
+                    type: 'contextCleared',
+                    details: {
+                        channelId: message.payload.channelId,
+                        contextType: message.payload.contextType,
+                    },
+                });
+            }
+        });
+        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
     }
 }
