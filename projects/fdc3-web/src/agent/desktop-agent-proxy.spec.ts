@@ -2469,6 +2469,40 @@ tests.forEach(({ proxy }) => {
             });
         });
 
+        describe.each(['raiseIntent', 'raiseIntentForContext'] as const)('%s instance preference contract', method => {
+            it.each([null, undefined])('omits default preference %s from the wire', async preference => {
+                const instance = await createInstance();
+                if (method === 'raiseIntent') {
+                    void instance.raiseIntent('StartChat', contact, null, preference);
+                } else {
+                    void instance.raiseIntentForContext(contact, null, preference);
+                }
+                await wait();
+                const envelope = mockMessagingProvider.functionCallLookup
+                    .sendMessage?.[0][0] as IProxyOutgoingMessageEnvelope;
+                expect(envelope.payload.type).toBe(
+                    method === 'raiseIntent' ? 'raiseIntentRequest' : 'raiseIntentForContextRequest',
+                );
+                if (!('payload' in envelope.payload)) throw new Error('Expected an intent request payload');
+                expect(envelope.payload.payload).not.toHaveProperty('newInstance');
+            });
+
+            it('rejects unavailable existing instances with an Error object', async () => {
+                const instance = await createInstance();
+                const result =
+                    method === 'raiseIntent'
+                        ? instance.raiseIntent('StartChat', contact, null, false)
+                        : instance.raiseIntentForContext(contact, null, false);
+                const rejection = expect(result).rejects.toThrow(ResolveError.TargetInstanceUnavailable);
+                postMessage({
+                    type: method === 'raiseIntent' ? 'raiseIntentResponse' : 'raiseIntentForContextResponse',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, responseUuid: mockedResponseUuid },
+                    payload: { error: ResolveError.TargetInstanceUnavailable },
+                });
+                await rejection;
+            });
+        });
+
         describe('raiseIntent', () => {
             it.each(['omitted', 'undefined', 'null'] as const)(
                 'substitutes fdc3.nothing for %s context',
@@ -2490,7 +2524,6 @@ tests.forEach(({ proxy }) => {
                                     context: { type: 'fdc3.nothing' },
                                     intent: 'StartCall',
                                     metadata: {},
-                                    newInstance: undefined,
                                 },
                             },
                         }),
@@ -2513,7 +2546,7 @@ tests.forEach(({ proxy }) => {
                                     app: appIdentifier,
                                     context: contact,
                                     intent: 'StartChat',
-                                    newInstance,
+                                    ...(typeof newInstance === 'boolean' ? { newInstance } : {}),
                                     metadata,
                                 },
                             },
@@ -2555,7 +2588,6 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         metadata: {},
-                        newInstance: undefined,
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -2581,7 +2613,6 @@ tests.forEach(({ proxy }) => {
                         context: contact,
                         intent: 'StartChat',
                         metadata: {},
-                        newInstance: undefined,
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -2865,7 +2896,12 @@ tests.forEach(({ proxy }) => {
                             payload: {
                                 meta: createExpectedRequestMeta(),
                                 type: 'raiseIntentForContextRequest',
-                                payload: { app: appIdentifier, context: contact, newInstance, metadata },
+                                payload: {
+                                    app: appIdentifier,
+                                    context: contact,
+                                    ...(typeof newInstance === 'boolean' ? { newInstance } : {}),
+                                    metadata,
+                                },
                             },
                         }),
                     ).wasCalledOnce();
@@ -2903,7 +2939,6 @@ tests.forEach(({ proxy }) => {
                         app: undefined,
                         context: contact,
                         metadata: {},
-                        newInstance: undefined,
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -2928,7 +2963,6 @@ tests.forEach(({ proxy }) => {
                         app: appIdentifier,
                         context: contact,
                         metadata: {},
-                        newInstance: undefined,
                     },
                     type: 'raiseIntentForContextRequest',
                 };
