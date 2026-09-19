@@ -25,7 +25,7 @@ import type {
     Listener,
     PrivateChannel,
 } from '@finos/fdc3';
-import { CloseError, OpenError, ResolveError, ResultError } from '@finos/fdc3';
+import { BridgingError, CloseError, OpenError, ResolveError, ResultError } from '@finos/fdc3';
 import {
     IMocked,
     Mock,
@@ -2487,20 +2487,27 @@ tests.forEach(({ proxy }) => {
                 expect(envelope.payload.payload).not.toHaveProperty('newInstance');
             });
 
-            it('rejects unavailable existing instances with an Error object', async () => {
-                const instance = await createInstance();
-                const result =
-                    method === 'raiseIntent'
-                        ? instance.raiseIntent('StartChat', contact, null, false)
-                        : instance.raiseIntentForContext(contact, null, false);
-                const rejection = expect(result).rejects.toThrow(ResolveError.TargetInstanceUnavailable);
-                postMessage({
-                    type: method === 'raiseIntent' ? 'raiseIntentResponse' : 'raiseIntentForContextResponse',
-                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, responseUuid: mockedResponseUuid },
-                    payload: { error: ResolveError.TargetInstanceUnavailable },
-                });
-                await rejection;
-            });
+            it.each([ResolveError.TargetInstanceUnavailable, BridgingError.NotConnectedToBridge])(
+                'rejects %s with an Error object',
+                async error => {
+                    const instance = await createInstance();
+                    const result =
+                        method === 'raiseIntent'
+                            ? instance.raiseIntent('StartChat', contact, null, false)
+                            : instance.raiseIntentForContext(contact, null, false);
+                    const rejection = expect(result).rejects.toThrow(error);
+                    postMessage({
+                        type: method === 'raiseIntent' ? 'raiseIntentResponse' : 'raiseIntentForContextResponse',
+                        meta: {
+                            requestUuid: mockedRequestUuid,
+                            timestamp: currentDate,
+                            responseUuid: mockedResponseUuid,
+                        },
+                        payload: { error },
+                    });
+                    await rejection;
+                },
+            );
         });
 
         describe('raiseIntent', () => {
@@ -2753,7 +2760,7 @@ tests.forEach(({ proxy }) => {
                 };
                 postMessage(responseMessage);
 
-                await expect(intentPromise).rejects.toStrictEqual(ResolveError.TargetAppUnavailable);
+                await expect(intentPromise).rejects.toThrow(ResolveError.TargetAppUnavailable);
             });
 
             it.each([ResultError.IntentHandlerRejected])(
@@ -3102,7 +3109,7 @@ tests.forEach(({ proxy }) => {
                 };
                 postMessage(responseMessage);
 
-                await expect(intentPromise).rejects.toStrictEqual(ResolveError.TargetAppUnavailable);
+                await expect(intentPromise).rejects.toThrow(ResolveError.TargetAppUnavailable);
             });
         });
 

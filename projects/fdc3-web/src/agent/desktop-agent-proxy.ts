@@ -31,7 +31,6 @@ import {
     Listener,
     LogLevel,
     PrivateChannel,
-    ResolveError,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { UpdateInstanceMetadataRequest } from '../contracts.internal.js';
@@ -73,6 +72,8 @@ type ProxyDesktopAgentParams = {
     channelFactory: ChannelFactory;
     logLevels?: GetAgentLogLevels;
 };
+
+const toResponseError = (error: string): Error => new Error(error);
 
 export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext {
     private channels: Channels;
@@ -322,11 +323,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const response = await this.getResponse(message, isRaiseIntentResponse);
 
         if (response.payload.error != null) {
-            return Promise.reject(
-                response.payload.error === ResolveError.TargetInstanceUnavailable
-                    ? new Error(response.payload.error)
-                    : response.payload.error,
-            );
+            return Promise.reject(toResponseError(response.payload.error));
         } else if (response.payload.intentResolution == null) {
             return Promise.reject('intentResolution is null');
         }
@@ -360,11 +357,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const response = await this.getResponse(message, isRaiseIntentForContextResponse);
 
         if (response.payload.error != null) {
-            return Promise.reject(
-                response.payload.error === ResolveError.TargetInstanceUnavailable
-                    ? new Error(response.payload.error)
-                    : response.payload.error,
-            );
+            return Promise.reject(toResponseError(response.payload.error));
         } else if (response.payload.intentResolution == null) {
             //this should not happen - there should be no situation where both intentResolution and error are undefined in response payload
             return Promise.reject('intentResolution is null');
