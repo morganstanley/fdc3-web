@@ -73,6 +73,8 @@ type ProxyDesktopAgentParams = {
     logLevels?: GetAgentLogLevels;
 };
 
+const toResponseError = (error: string): Error => new Error(error);
+
 export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext {
     private channels: Channels;
     private channelFactory: ChannelFactory;
@@ -297,7 +299,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         intent: Intent,
         context?: Context | null,
         app?: AppIdentifier | string | null,
-        newInstance?: boolean,
+        newInstance?: boolean | null,
         metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
         const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
@@ -309,7 +311,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 context: context ?? { type: 'fdc3.nothing' },
                 intent,
                 metadata: metadata ?? {},
-                newInstance,
+                ...(typeof newInstance === 'boolean' ? { newInstance } : {}),
             },
         );
 
@@ -321,7 +323,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const response = await this.getResponse(message, isRaiseIntentResponse);
 
         if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
+            return Promise.reject(toResponseError(response.payload.error));
         } else if (response.payload.intentResolution == null) {
             return Promise.reject('intentResolution is null');
         }
@@ -332,14 +334,19 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     public async raiseIntentForContext(
         context: Context,
         app?: AppIdentifier | string | null,
-        newInstance?: boolean,
+        newInstance?: boolean | null,
         metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
         const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
         const message = createRequestMessage<BrowserTypes.RaiseIntentForContextRequest>(
             'raiseIntentForContextRequest',
             this.appIdentifier,
-            { app: appIdentifier, context: context, metadata: metadata ?? {}, newInstance },
+            {
+                app: appIdentifier,
+                context: context,
+                metadata: metadata ?? {},
+                ...(typeof newInstance === 'boolean' ? { newInstance } : {}),
+            },
         );
 
         const raiseIntentResultResponsePromise = this.awaitRequestUuid(
@@ -350,7 +357,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const response = await this.getResponse(message, isRaiseIntentForContextResponse);
 
         if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
+            return Promise.reject(toResponseError(response.payload.error));
         } else if (response.payload.intentResolution == null) {
             //this should not happen - there should be no situation where both intentResolution and error are undefined in response payload
             return Promise.reject('intentResolution is null');
