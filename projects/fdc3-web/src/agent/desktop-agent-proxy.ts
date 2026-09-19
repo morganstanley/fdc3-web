@@ -31,6 +31,7 @@ import {
     Listener,
     LogLevel,
     PrivateChannel,
+    ResolveError,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { UpdateInstanceMetadataRequest } from '../contracts.internal.js';
@@ -74,6 +75,7 @@ type ProxyDesktopAgentParams = {
 };
 
 export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext {
+    private readonly intentRegistrations = new Set<{ intent: Intent; contextTypes?: string[] }>();
     private channels: Channels;
     private channelFactory: ChannelFactory;
 
@@ -381,6 +383,39 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     private async registerIntentListener(
+        intent: Intent,
+        handler: IntentHandler,
+        contextTypes?: string[],
+    ): Promise<Listener> {
+        const registration = { intent, contextTypes: contextTypes?.slice() };
+        if (
+            [...this.intentRegistrations].some(
+                existing =>
+                    existing.intent === intent &&
+                    (existing.contextTypes == null ||
+                        registration.contextTypes == null ||
+                        existing.contextTypes.some(type => registration.contextTypes?.includes(type))),
+            )
+        ) {
+            throw new Error(ResolveError.IntentListenerConflict);
+        }
+        // Reserve before awaiting the response so concurrent registrations cannot overlap.
+        this.intentRegistrations.add(registration);
+        try {
+            const listener = await this.registerIntentListenerRequest(intent, handler, registration.contextTypes);
+            return {
+                unsubscribe: async () => {
+                    await listener.unsubscribe();
+                    this.intentRegistrations.delete(registration);
+                },
+            };
+        } catch (error) {
+            this.intentRegistrations.delete(registration);
+            throw error;
+        }
+    }
+
+    private async registerIntentListenerRequest(
         intent: Intent,
         handler: IntentHandler,
         contextTypes?: string[],
