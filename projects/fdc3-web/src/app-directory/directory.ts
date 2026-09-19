@@ -263,15 +263,21 @@ export class AppDirectory {
         const key = this.intentKey(app, intent);
         const registrations = this.dynamicIntentContexts.get(key);
         const lookup = this.instanceLookup[app.instanceId];
-        if (registrations == null || lookup == null) return;
+        if (registrations == null || lookup == null) {
+            return;
+        }
         const original = this.originalIntentContexts.get(key);
         const active = [...registrations.values()];
-        if (original !== undefined) active.push(original);
-        if (active.length === 0) delete lookup[intent];
-        else
+        if (original !== undefined) {
+            active.push(original);
+        }
+        if (active.length === 0) {
+            delete lookup[intent];
+        } else {
             lookup[intent] = active.some(contexts => contexts.length === 0)
                 ? []
                 : [...new Map(active.flat().map(context => [context.type, context])).values()];
+        }
         if (registrations.size === 0) {
             this.dynamicIntentContexts.delete(key);
             this.originalIntentContexts.delete(key);
