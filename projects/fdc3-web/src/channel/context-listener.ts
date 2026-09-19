@@ -19,7 +19,6 @@ import {
     isContextListenerUnsubscribeResponse,
     isGetCurrentChannelResponse,
     isGetCurrentContextResponse,
-    resolveContextType,
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { IChannelFactory } from './channel.contracts.js';
@@ -48,18 +47,10 @@ export class ContextListener extends MessagingBase implements ContextListener {
 
     private _id: string | null | undefined;
 
-    public addContextListener(
-        contextType: string | null | string | ContextHandler,
-        handler: ContextHandler,
-    ): Promise<Listener>;
-
-    public addContextListener(handler: ContextHandler): Promise<Listener>;
     public async addContextListener(
-        handlerOrContextType: string | null | ContextHandler,
-        optionalContextHandler?: ContextHandler,
+        contextType: ContextType | null,
+        contextHandler: ContextHandler,
     ): Promise<Listener> {
-        const { contextType, contextHandler } = resolveContextType(handlerOrContextType, optionalContextHandler);
-
         const response = await this.getAddContextListenerResponse(contextType);
 
         const listenerUUID = response.payload.listenerUUID;
