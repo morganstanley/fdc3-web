@@ -40,7 +40,6 @@ import {
     mapApplicationToMetadata,
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
-    resolveAppIdentifier,
     urlContainsAllElements,
 } from '../helpers/index.js';
 
@@ -132,7 +131,7 @@ export class AppDirectory {
     public async resolveAppForIntent(
         intent: Intent,
         context: Context,
-        app?: AppIdentifier | string,
+        app?: AppIdentifier,
         newInstance?: boolean,
     ): Promise<AppIdentifier> {
         const appIdentifier = this.getValidatedAppIdentifier(app, newInstance);
@@ -180,7 +179,7 @@ export class AppDirectory {
      */
     public async resolveAppForContext(
         context: Context,
-        app?: AppIdentifier | string,
+        app?: AppIdentifier,
         newInstance?: boolean,
     ): Promise<ResolveForContextResponse | undefined> {
         const appIdentifier = this.getValidatedAppIdentifier(app, newInstance);
@@ -378,20 +377,20 @@ export class AppDirectory {
      * If the directory does not know the instance or app an error message is returned
      */
     private getValidatedAppIdentifier(
-        identifier: AppIdentifier | string,
+        identifier: AppIdentifier,
         newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | ResolveError; // TODO: sort out this return type in next PR
 
     private getValidatedAppIdentifier(
-        identifier?: AppIdentifier | string,
+        identifier?: AppIdentifier,
         newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError;
 
     private getValidatedAppIdentifier(
-        identifier: AppIdentifier | string | undefined,
+        identifier: AppIdentifier | undefined,
         newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError {
-        const appIdentifier = resolveAppIdentifier(identifier);
+        const appIdentifier = identifier;
 
         if (appIdentifier == null) {
             return undefined;

@@ -13,7 +13,6 @@ export * from './uuid.helper.js';
 export * from './window.helper.js';
 export * from './type-predicate.helper.js';
 export * from './app-identity.helper.js';
-export * from './context.helper.js';
 export * from './url-helper.js';
 export * from './finos-type-predicate.helper.js';
 export * from './app-directory-applications.helper.js';

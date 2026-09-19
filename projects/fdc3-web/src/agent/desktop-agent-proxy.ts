@@ -62,8 +62,6 @@ import {
     isRaiseIntentResponse,
     isRaiseIntentResultResponse,
     isUpdateInstanceMetadataResponse,
-    resolveAppIdentifier,
-    resolveContextType,
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 
@@ -173,24 +171,12 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         throw new Error('Method not implemented.');
     }
 
-    public open(
+    public async open(
         app: AppIdentifier,
         context?: Context | null,
         metadata?: AppProvidableContextMetadata,
-    ): Promise<AppIdentifier>;
-
-    public open(
-        name: string,
-        context?: Context | null,
-        metadata?: AppProvidableContextMetadata,
-    ): Promise<AppIdentifier>;
-
-    public async open(
-        app: AppIdentifier | string,
-        context?: Context | null,
-        metadata?: AppProvidableContextMetadata,
     ): Promise<AppIdentifier> {
-        const appIdentifier = resolveAppIdentifier(app);
+        const appIdentifier = app;
         const message = createRequestMessage<BrowserTypes.OpenRequest>('openRequest', this.appIdentifier, {
             app: appIdentifier,
             context: context ?? undefined,
@@ -300,11 +286,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     public async raiseIntent(
         intent: Intent,
         context?: Context | null,
-        app?: AppIdentifier | string | null,
+        app?: AppIdentifier | null,
         newInstance?: boolean | null,
         metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
-        const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
+        const appIdentifier = app == null ? undefined : app;
         const message = createRequestMessage<BrowserTypes.RaiseIntentRequest>(
             'raiseIntentRequest',
             this.appIdentifier,
@@ -335,11 +321,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
 
     public async raiseIntentForContext(
         context: Context,
-        app?: AppIdentifier | string | null,
+        app?: AppIdentifier | null,
         newInstance?: boolean | null,
         metadata?: AppProvidableContextMetadata,
     ): Promise<IntentResolution> {
-        const appIdentifier = app == null ? undefined : resolveAppIdentifier(app);
+        const appIdentifier = app == null ? undefined : app;
         const message = createRequestMessage<BrowserTypes.RaiseIntentForContextRequest>(
             'raiseIntentForContextRequest',
             this.appIdentifier,
@@ -524,15 +510,8 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return this.channels.broadcast(context, metadata);
     }
 
-    public addContextListener(contextType: ContextType | null, handler: ContextHandler): Promise<Listener>;
-    public addContextListener(handler: ContextHandler): Promise<Listener>;
-    public addContextListener(
-        handlerOrContextType: ContextHandler | null | ContextType,
-        optionalContextHandler?: ContextHandler,
-    ): Promise<Listener> {
-        const { contextType, contextHandler } = resolveContextType(handlerOrContextType, optionalContextHandler);
-
-        return this.channels.addContextListener(contextType, contextHandler);
+    public addContextListener(contextType: ContextType | null, handler: ContextHandler): Promise<Listener> {
+        return this.channels.addContextListener(contextType, handler);
     }
 
     public getUserChannels(): Promise<Channel[]> {
@@ -592,16 +571,6 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             return Promise.reject('appMetadata is null');
         }
         return response.payload.appMetadata;
-    }
-
-    //DEPRECATED
-    public getSystemChannels(): Promise<Channel[]> {
-        return this.getUserChannels();
-    }
-
-    //DEPRECATED
-    public joinChannel(channelId: string): Promise<void> {
-        return this.joinUserChannel(channelId);
     }
 
     private createIntentResolution(

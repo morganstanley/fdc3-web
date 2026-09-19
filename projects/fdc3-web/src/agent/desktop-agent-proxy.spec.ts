@@ -494,7 +494,7 @@ tests.forEach(({ proxy }) => {
             it(`should pass call to channels when only handler passed`, async () => {
                 const instance = await createInstance();
 
-                const result = instance.addContextListener(mockHandler.mock.handler);
+                const result = instance.addContextListener(null, mockHandler.mock.handler);
 
                 expect(
                     mockChannels
@@ -2564,7 +2564,7 @@ tests.forEach(({ proxy }) => {
 
             it('resolves a string app name when requesting a new instance', async () => {
                 const instance = await createInstance();
-                instance.raiseIntent('StartChat', contact, appIdentifier.appId, true);
+                instance.raiseIntent('StartChat', contact, { appId: appIdentifier.appId }, true);
                 await wait();
                 expect(
                     mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
@@ -2917,7 +2917,7 @@ tests.forEach(({ proxy }) => {
 
             it('resolves a string app name when requesting a new instance', async () => {
                 const instance = await createInstance();
-                instance.raiseIntentForContext(contact, appIdentifier.appId, true);
+                instance.raiseIntentForContext(contact, { appId: appIdentifier.appId }, true);
                 await wait();
                 expect(
                     mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({
@@ -3110,46 +3110,6 @@ tests.forEach(({ proxy }) => {
                 postMessage(responseMessage);
 
                 await expect(intentPromise).rejects.toThrow(ResolveError.TargetAppUnavailable);
-            });
-        });
-
-        //DEPRECATED
-        //https://fdc3.finos.org/docs/api/ref/DesktopAgent#getsystemchannels-deprecated
-        describe('getSystemChannels', () => {
-            let returnedPromise: Promise<Channel[]>;
-
-            beforeEach(() => {
-                returnedPromise = Mock.create<Promise<Channel[]>>().mock;
-                mockChannels.setupFunction('getUserChannels', () => returnedPromise);
-            });
-
-            it(`should pass call to channels`, async () => {
-                const instance = await createInstance();
-
-                const result = instance.getSystemChannels();
-
-                expect(mockChannels.withFunction('getUserChannels')).wasCalledOnce();
-                expect(result).toBe(returnedPromise);
-            });
-        });
-
-        //DEPRECATED
-        //https://fdc3.finos.org/docs/api/ref/DesktopAgent#joinchannel-deprecated
-        describe('joinChannel', () => {
-            let returnedPromise: Promise<void>;
-
-            beforeEach(() => {
-                returnedPromise = Mock.create<Promise<void>>().mock;
-                mockChannels.setupFunction('joinUserChannel', () => returnedPromise);
-            });
-
-            it(`should pass call to channels`, async () => {
-                const instance = await createInstance();
-
-                const result = instance.joinChannel('channelId');
-
-                expect(mockChannels.withFunction('joinUserChannel').withParameters('channelId')).wasCalledOnce();
-                expect(result).toBe(returnedPromise);
             });
         });
 
