@@ -141,6 +141,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         );
 
         mockAppDirectory = Mock.create<AppDirectory>().setup(
+            setupFunction('unregisterIntentListener'),
             setupFunction('registerIntentListener', async app => {
                 if (app.appId === 'unqualified-app-id') {
                     return Promise.reject(ResolveError.TargetInstanceUnavailable);
@@ -1344,6 +1345,27 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`addIntentListenerRequest`, () => {
+            it.each([
+                [undefined, undefined],
+                [undefined, ['fdc3.contact']],
+                [['fdc3.contact'], undefined],
+                [[], undefined],
+                [undefined, []],
+                [[], ['fdc3.contact']],
+                [['fdc3.contact'], ['fdc3.contact', 'fdc3.instrument']],
+            ])('rejects conflicting wire registrations', async (first, second) => {
+                createInstance();
+                const message = (contextTypes: string[] | undefined): BrowserTypes.AddIntentListenerRequest => ({
+                    type: 'addIntentListenerRequest',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat', contextTypes },
+                });
+                await postRequestMessage(message(first), source);
+                await postRequestMessage(message(second), source);
+                const responses = mockRootPublisher.functionCallLookup.publishResponseMessage;
+                expect(responses?.at(-1)?.[0].payload).toEqual({ error: ResolveError.IntentListenerConflict });
+            });
+
             it(`should publish addIntentListenerResponse`, async () => {
                 createInstance();
 
@@ -1464,13 +1486,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockAppDirectory
                         .withFunction('registerIntentListener')
-                        .withParametersEqualTo(qualifiedIdentifier, 'StartChat', [
-                            {
-                                type: contact.type,
-                                name: contact.name,
-                                id: contact.id,
-                            },
-                        ]),
+                        .withParametersEqualTo(qualifiedIdentifier, 'StartChat', [], mockedGeneratedUuid),
                 ).wasCalledOnce();
                 expect(
                     mockRootPublisher

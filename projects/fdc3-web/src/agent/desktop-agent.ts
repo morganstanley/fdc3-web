@@ -93,7 +93,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private connectionLog: LoggerFunction;
     private proxyLog;
 
-    private readonly intentListeners: Partial<Record<Intent, AppIdentifierListenerPair[]>> = {};
+    private readonly intentListeners: Partial<
+        Record<Intent, (AppIdentifierListenerPair & { contextTypes?: string[] })[]>
+    > = {};
+
     //used when raising intents so desktop agent knows when chosen app has added required intentListener
     private readonly intentListenerCallbacks: Map<
         string,
@@ -282,7 +285,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             );
 
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(fullyQualifiedAppIdentifier, requestMessage.payload.intent).catch(error => {
+            await this.awaitIntentListener(
+                fullyQualifiedAppIdentifier,
+                requestMessage.payload.intent,
+                requestMessage.payload.context,
+            ).catch(error => {
                 resolveError = error;
 
                 this.rootMessagePublisher.publishResponseMessage(
@@ -345,13 +352,16 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private async awaitIntentListener(
         chosenApp: FullyQualifiedAppIdentifier,
         intent: string,
+        context?: Context,
         timeout: number = 15000,
     ): Promise<void> {
-        //check if intentListener of correct intent type on chosen app has already been added
-        if (
-            this.intentListeners[intent] == null ||
-            !this.intentListeners[intent]?.some(pair => appInstanceEquals(pair.appIdentifier, chosenApp))
-        ) {
+        const hasMatchingListener = () =>
+            this.intentListeners[intent]?.some(
+                pair =>
+                    appInstanceEquals(pair.appIdentifier, chosenApp) &&
+                    (pair.contextTypes == null || context == null || pair.contextTypes.includes(context.type)),
+            );
+        if (!hasMatchingListener()) {
             //wait for intentListener of correct intent type on chosen app to be added
             return new Promise<void>((resolve, reject) => {
                 const callbackUUID = generateUUID();
@@ -363,7 +373,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 }, timeout);
 
                 this.intentListenerCallbacks.set(callbackUUID, (app, listenerType) => {
-                    if (appInstanceEquals(app, chosenApp) && (listenerType == null || listenerType === intent)) {
+                    if (
+                        appInstanceEquals(app, chosenApp) &&
+                        (listenerType == null || listenerType === intent) &&
+                        hasMatchingListener()
+                    ) {
                         this.intentListenerCallbacks.delete(callbackUUID);
                         clearTimeout(timeoutId);
                         resolve();
@@ -426,7 +440,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             let resolveError: any;
 
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(fullyQualifiedAppIdentifier, resolutionResponse.intent).catch(error => {
+            await this.awaitIntentListener(
+                fullyQualifiedAppIdentifier,
+                resolutionResponse.intent,
+                requestMessage.payload.context,
+            ).catch(error => {
                 resolveError = error;
 
                 this.rootMessagePublisher.publishResponseMessage(
@@ -571,33 +589,61 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             this.intentListeners[requestMessage.payload.intent] ??
             (this.intentListeners[requestMessage.payload.intent] = []);
 
-        //fetch context info for app and intent from app directory
-        const contexts =
-            requestMessage.payload.contextTypes?.map(context => ({
-                type: context,
-            })) ?? (await this.directory.getContextForAppIntent(source, requestMessage.payload.intent));
-
-        try {
-            //this should not occur as error should have been caught by directory.getContextForAppIntent
-            await this.directory.registerIntentListener(source, requestMessage.payload.intent, contexts ?? []);
-        } catch (error) {
-            if (error === ResolveError.TargetInstanceUnavailable) {
-                this.rootMessagePublisher.publishResponseMessage(
-                    createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
-                        'addIntentListenerResponse',
-                        { error },
-                        requestMessage.meta.requestUuid,
-                        source,
-                    ),
+        const requestedContextTypes = requestMessage.payload.contextTypes;
+        const contextTypes =
+            requestedContextTypes == null || requestedContextTypes.length === 0
+                ? undefined
+                : requestedContextTypes.slice();
+        if (
+            listeners.some(
+                existing =>
+                    appInstanceEquals(existing.appIdentifier, source) &&
+                    (existing.contextTypes == null ||
+                        contextTypes == null ||
+                        existing.contextTypes.some(type => contextTypes.includes(type))),
+            )
+        ) {
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
+                    'addIntentListenerResponse',
+                    { error: ResolveError.IntentListenerConflict },
+                    requestMessage.meta.requestUuid,
                     source,
-                );
-            }
+                ),
+                source,
+            );
             return;
         }
-
         const listenerUUID = generateUUID();
-
-        listeners.push({ appIdentifier: source, listenerUUID });
+        const registration = { appIdentifier: source, listenerUUID, contextTypes };
+        listeners.push(registration);
+        try {
+            await this.directory.registerIntentListener(
+                source,
+                requestMessage.payload.intent,
+                contextTypes?.map(type => ({ type })) ?? [],
+                listenerUUID,
+            );
+        } catch (error) {
+            this.intentListeners[requestMessage.payload.intent] = listeners.filter(
+                listener => listener !== registration,
+            );
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
+                    'addIntentListenerResponse',
+                    {
+                        error:
+                            error === ResolveError.TargetInstanceUnavailable
+                                ? error
+                                : ResolveError.TargetAppUnavailable,
+                    },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
+        }
 
         this.rootMessagePublisher.publishResponseMessage(
             createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
@@ -839,7 +885,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         source: FullyQualifiedAppIdentifier,
     ): void {
         const eventType = Object.entries(this.eventListeners).find(([_, listenerPairs]) =>
-            listenerPairs.some(pair => pair.listenerUUID === requestMessage.payload.listenerUUID),
+            listenerPairs.some(
+                pair =>
+                    pair.listenerUUID === requestMessage.payload.listenerUUID &&
+                    appInstanceEquals(pair.appIdentifier, source),
+            ),
         )?.[0] as EventListenerKey | undefined;
 
         if (eventType != null) {
@@ -868,13 +918,18 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         source: FullyQualifiedAppIdentifier,
     ): void {
         const intent = Object.entries(this.intentListeners).find(([_, listenerPairs]) =>
-            listenerPairs?.some(pair => pair.listenerUUID === requestMessage.payload.listenerUUID),
+            listenerPairs?.some(
+                pair =>
+                    pair.listenerUUID === requestMessage.payload.listenerUUID &&
+                    appInstanceEquals(pair.appIdentifier, source),
+            ),
         )?.[0];
 
         if (intent != null) {
             const listeners = this.intentListeners[intent];
             const newListeners = listeners?.filter(pair => pair.listenerUUID != requestMessage.payload.listenerUUID);
             this.intentListeners[intent] = newListeners;
+            this.directory.unregisterIntentListener(source, intent, requestMessage.payload.listenerUUID);
         }
 
         this.rootMessagePublisher.publishResponseMessage(
