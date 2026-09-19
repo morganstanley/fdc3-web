@@ -589,7 +589,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             this.intentListeners[requestMessage.payload.intent] ??
             (this.intentListeners[requestMessage.payload.intent] = []);
 
-        const contextTypes = requestMessage.payload.contextTypes?.slice();
+        const requestedContextTypes = requestMessage.payload.contextTypes;
+        const contextTypes =
+            requestedContextTypes == null || requestedContextTypes.length === 0
+                ? undefined
+                : requestedContextTypes.slice();
         if (
             listeners.some(
                 existing =>

@@ -1349,6 +1349,9 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 [undefined, undefined],
                 [undefined, ['fdc3.contact']],
                 [['fdc3.contact'], undefined],
+                [[], undefined],
+                [undefined, []],
+                [[], ['fdc3.contact']],
                 [['fdc3.contact'], ['fdc3.contact', 'fdc3.instrument']],
             ])('rejects conflicting wire registrations', async (first, second) => {
                 createInstance();

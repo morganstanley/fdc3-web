@@ -379,7 +379,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         handler: IntentHandler,
     ): Promise<Listener> {
         const contextTypes = Array.isArray(contextType) ? contextType : [contextType];
-        return this.registerIntentListener(intent, handler, contextTypes);
+        return this.registerIntentListener(intent, handler, contextTypes.length === 0 ? undefined : contextTypes);
     }
 
     private async registerIntentListener(

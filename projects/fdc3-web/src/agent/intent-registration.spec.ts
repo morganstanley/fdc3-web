@@ -57,6 +57,9 @@ describe('intent registration lifecycle', () => {
         [undefined, undefined],
         [undefined, ['fdc3.contact']],
         [['fdc3.contact'], undefined],
+        [[], undefined],
+        [undefined, []],
+        [[], ['fdc3.contact']],
         [['fdc3.contact', 'fdc3.instrument'], ['fdc3.instrument']],
     ])('rejects overlapping registrations, including concurrent requests', async (first, second) => {
         const proxy = createProxy();
