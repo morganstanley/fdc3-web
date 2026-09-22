@@ -606,6 +606,23 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 ],
             };
 
+            expectedPayload.appIntents!.push({
+                apps: [
+                    {
+                        appId: mockedAppIdThree,
+                        instanceId: 'instanceFour',
+                        title: 'app-title-three',
+                        description: undefined,
+                        icons: undefined,
+                        screenshots: undefined,
+                        tooltip: undefined,
+                        version: undefined,
+                        instanceMetadata: undefined,
+                    },
+                ],
+                intent: { name: 'ViewHoldings', displayName: undefined },
+            });
+
             expect(result).toStrictEqual({
                 intent: 'StartChat',
                 app: qualifiedIdentifier,
@@ -1040,6 +1057,23 @@ describe(`${AppDirectory.name} (directory)`, () => {
                     intent: { name: 'StartEmail', displayName: undefined },
                 },
             ];
+
+            expectedResult.push({
+                apps: [
+                    {
+                        appId: mockedAppIdThree,
+                        instanceId: 'instanceFour',
+                        title: 'app-title-three',
+                        description: undefined,
+                        icons: undefined,
+                        screenshots: undefined,
+                        tooltip: undefined,
+                        version: undefined,
+                        instanceMetadata: undefined,
+                    },
+                ],
+                intent: { name: 'ViewHoldings', displayName: undefined },
+            });
 
             expect(result).toEqual(expectedResult);
         });

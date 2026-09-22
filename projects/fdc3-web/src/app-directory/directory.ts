@@ -49,6 +49,12 @@ type DirectoryEntry = { application?: AppDirectoryApplication; instances: string
 type IntentToContextLookup = Partial<Record<Intent, Context[]>>;
 
 export class AppDirectory {
+    private readonly dynamicIntentContexts = new Map<string, Map<string | symbol, Context[]>>();
+    private readonly originalIntentContexts = new Map<string, Context[] | undefined>();
+    private intentKey(app: FullyQualifiedAppIdentifier, intent: Intent): string {
+        return JSON.stringify([app.instanceId, intent]);
+    }
+
     private log = createLogger(AppDirectory, 'proxy');
 
     private readonly directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = {}; //indexed by appId
@@ -223,6 +229,7 @@ export class AppDirectory {
         app: FullyQualifiedAppIdentifier,
         intent: Intent,
         context: Context[],
+        listenerUUID: string | symbol = Symbol(),
     ): Promise<void> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
@@ -237,7 +244,44 @@ export class AppDirectory {
             return Promise.reject(ResolveError.TargetAppUnavailable);
         }
 
-        this.addNewIntentContextLookup(app.instanceId, { intent, context });
+        const key = this.intentKey(app, intent);
+        if (!this.dynamicIntentContexts.has(key)) {
+            this.originalIntentContexts.set(key, this.instanceLookup[app.instanceId]?.[intent]?.slice());
+            this.dynamicIntentContexts.set(key, new Map());
+        }
+        this.dynamicIntentContexts.get(key)!.set(listenerUUID, context);
+        this.refreshIntentContexts(app, intent);
+    }
+
+    public unregisterIntentListener(app: FullyQualifiedAppIdentifier, intent: Intent, listenerUUID: string): void {
+        const key = this.intentKey(app, intent);
+        this.dynamicIntentContexts.get(key)?.delete(listenerUUID);
+        this.refreshIntentContexts(app, intent);
+    }
+
+    private refreshIntentContexts(app: FullyQualifiedAppIdentifier, intent: Intent): void {
+        const key = this.intentKey(app, intent);
+        const registrations = this.dynamicIntentContexts.get(key);
+        const lookup = this.instanceLookup[app.instanceId];
+        if (registrations == null || lookup == null) {
+            return;
+        }
+        const original = this.originalIntentContexts.get(key);
+        const active = [...registrations.values()];
+        if (original !== undefined) {
+            active.push(original);
+        }
+        if (active.length === 0) {
+            delete lookup[intent];
+        } else {
+            lookup[intent] = active.some(contexts => contexts.length === 0)
+                ? []
+                : [...new Map(active.flat().map(context => [context.type, context])).values()];
+        }
+        if (registrations.size === 0) {
+            this.dynamicIntentContexts.delete(key);
+            this.originalIntentContexts.delete(key);
+        }
     }
 
     /**
@@ -518,7 +562,7 @@ export class AppDirectory {
                 ...Object.values(this.instanceLookup)
                     .filter(intentContextLookups => intentContextLookups != null)
                     .flatMap(intentContextLookups => Object.entries(intentContextLookups))
-                    .filter(([_, contexts]) => contexts?.some(possibleContext => possibleContext.type === context.type))
+                    .filter(([_, contexts]) => contexts != null && this.isContextInArray(contexts, context))
                     .map(([intent]) => intent),
             ]),
         ];
@@ -744,36 +788,6 @@ export class AppDirectory {
         }
     }
 
-    /**
-     * Add new intentContextLookup without introducing duplicates
-     * @param instanceId which is having new intentContextLookup added
-     * @param newIntentContextLookup being added
-     * @returns true if intentContextLookup was added, and false otherwise
-     */
-    private addNewIntentContextLookup(
-        instanceId: string,
-        newIntentContextLookup: { intent: Intent; context: Context[] },
-    ): boolean {
-        const lookup = this.instanceLookup[instanceId];
-        if (lookup == null) {
-            return false;
-        }
-        const existingContexts = lookup[newIntentContextLookup.intent];
-
-        if (existingContexts != null) {
-            //intent is already registered so add contexts without duplicating
-            const existingTypes = new Set(existingContexts.map(c => c.type));
-            lookup[newIntentContextLookup.intent] = [
-                ...existingContexts,
-                ...newIntentContextLookup.context.filter(c => !existingTypes.has(c.type)),
-            ];
-        } else {
-            //add completely new intent context mapping
-            lookup[newIntentContextLookup.intent] = [...newIntentContextLookup.context];
-        }
-        return true;
-    }
-
     public async getAppDirectoryApplication(appId: string): Promise<AppDirectoryApplication | undefined> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
@@ -799,6 +813,12 @@ export class AppDirectory {
     }
 
     public removeDisconnectedApp(app: FullyQualifiedAppIdentifier): void {
+        for (const key of this.dynamicIntentContexts.keys()) {
+            if (JSON.parse(key)[0] === app.instanceId) {
+                this.dynamicIntentContexts.delete(key);
+                this.originalIntentContexts.delete(key);
+            }
+        }
         delete this.instanceLookup[app.instanceId];
         delete this.instanceMetadataLookup[app.instanceId];
 
