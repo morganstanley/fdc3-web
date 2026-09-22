@@ -780,6 +780,48 @@ describe(`${ContextListener.name} (context-listener)`, () => {
             expect(context).toBeNull();
         });
 
+        it('should return context and metadata from getCurrentContextWithMetadata', async () => {
+            const instance = await createInstance(details);
+
+            setupGetCurrentContextResponse(contact);
+
+            await expect(instance.getCurrentContextWithMetadata('fdc3.contact')).resolves.toEqual({
+                context: contact,
+                metadata: expectedMetadata,
+            });
+        });
+
+        it('should return null from getCurrentContextWithMetadata for an empty channel', async () => {
+            const instance = await createInstance(details);
+
+            setupGetCurrentContextResponse(null);
+
+            await expect(instance.getCurrentContextWithMetadata('fdc3.contact')).resolves.toBeNull();
+        });
+
+        it.each([
+            ['getCurrentContext', (instance: ContextListener) => instance.getCurrentContext('fdc3.contact')],
+            [
+                'getCurrentContextWithMetadata',
+                (instance: ContextListener) => instance.getCurrentContextWithMetadata('fdc3.contact'),
+            ],
+        ])('should reject malformed context/metadata pairs from %s', async (_method, invoke) => {
+            const malformedPayloads: BrowserTypes.GetCurrentContextResponsePayload[] = [
+                { context: null },
+                { context: null, metadata: expectedMetadata },
+                { context: contact, metadata: null },
+                { context: contact },
+                { metadata: expectedMetadata },
+            ];
+
+            for (const payload of malformedPayloads) {
+                const instance = await createInstance(details);
+                setupGetCurrentContextPayload(payload);
+
+                await expect(invoke(instance)).rejects.toThrow(ChannelError.MalformedContext);
+            }
+        });
+
         it('should not return Context object or null when non-matching requestUuid is passed', async () => {
             const instance = await createInstance(details);
 
@@ -1023,6 +1065,13 @@ describe(`${ContextListener.name} (context-listener)`, () => {
     }
 
     function setupGetCurrentContextResponse(context: Context | null) {
+        setupGetCurrentContextPayload({
+            context,
+            metadata: context != null ? expectedMetadata : null,
+        });
+    }
+
+    function setupGetCurrentContextPayload(payload: BrowserTypes.GetCurrentContextResponsePayload) {
         awaitMessage(isGetCurrentContextRequest).then(() => {
             const responseMessage: BrowserTypes.GetCurrentContextResponse = {
                 meta: {
@@ -1030,10 +1079,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     timestamp: currentDate,
                     responseUuid: mockedResponseUuid,
                 },
-                payload: {
-                    context,
-                    metadata: context != null ? expectedMetadata : null,
-                },
+                payload,
                 type: 'getCurrentContextResponse',
             };
 

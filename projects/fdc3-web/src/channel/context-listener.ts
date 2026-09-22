@@ -9,6 +9,7 @@
  * and limitations under the License. */
 
 import type { BrowserTypes, Channel, ContextHandler, ContextType, ContextWithMetadata, Listener } from '@finos/fdc3';
+import { ChannelError } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
@@ -23,6 +24,26 @@ import {
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { IChannelFactory } from './channel.contracts.js';
+
+function parseCurrentContextResponse(
+    response: BrowserTypes.GetCurrentContextResponsePayload,
+): ContextWithMetadata | null {
+    const { context, metadata } = response;
+
+    if (context === null) {
+        if (metadata !== null) {
+            throw new Error(ChannelError.MalformedContext);
+        }
+
+        return null;
+    }
+
+    if (context === undefined || metadata == null) {
+        throw new Error(ChannelError.MalformedContext);
+    }
+
+    return { context, metadata };
+}
 
 /**
 Listens to broadcast events.
@@ -139,7 +160,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
 
         const response = await this.requestCurrentContext(channelId, contextType);
 
-        return response.context ?? null;
+        return parseCurrentContextResponse(response)?.context ?? null;
     }
 
     public async getCurrentContextWithMetadata(contextType?: string | null): Promise<ContextWithMetadata | null> {
@@ -151,11 +172,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
 
         const response = await this.requestCurrentContext(channelId, contextType);
 
-        if (response.context == null || response.metadata == null) {
-            return null;
-        }
-
-        return { context: response.context, metadata: response.metadata };
+        return parseCurrentContextResponse(response);
     }
 
     private async requestCurrentContext(
