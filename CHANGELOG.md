@@ -6,6 +6,7 @@
 - Include `channelId` in private-channel listener and disconnect event details (#406).
 - Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
 - Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
+- Accept null instance preferences, omit default preferences on the wire, and expose existing-instance failures as Error objects (#408).
 - Reject conflicting intent listeners, allow disjoint filters, and remove dynamic resolution mappings on unsubscribe (#405).
 
 - `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
