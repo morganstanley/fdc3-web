@@ -26,9 +26,6 @@ import {
     isPrivateChannelAddEventListenerResponse,
     isPrivateChannelDisconnectResponse,
     isPrivateChannelEvent,
-    isPrivateChannelOnAddContextListenerEvent,
-    isPrivateChannelOnDisconnectEvent,
-    isPrivateChannelOnUnsubscribeEvent,
     isPrivateChannelUnsubscribeEventListenerResponse,
 } from '../helpers/index.js';
 import { ContextListener } from './channel.contracts.js';
@@ -50,45 +47,6 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
         contextListener: ContextListener,
     ) {
         super(channelDetails, appIdentifier, messagingProvider, contextListener);
-    }
-
-    //DEPRECATED
-    public onAddContextListener(handler: (contextType?: string) => void): Listener {
-        const listenerUUID = generateUUID();
-
-        this.addMessageCallback(listenerUUID, message => {
-            if (isPrivateChannelOnAddContextListenerEvent(message) && message.payload.privateChannelId === this.id) {
-                handler(message.payload.contextType ?? undefined);
-            }
-        });
-
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
-    }
-
-    //DEPRECATED
-    public onUnsubscribe(handler: (contextType?: string) => void): Listener {
-        const listenerUUID = generateUUID();
-
-        this.addMessageCallback(listenerUUID, message => {
-            if (isPrivateChannelOnUnsubscribeEvent(message) && message.payload.privateChannelId === this.id) {
-                handler(message.payload.contextType ?? undefined);
-            }
-        });
-
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
-    }
-
-    //DEPRECATED
-    public onDisconnect(handler: () => void): Listener {
-        const listenerUUID = generateUUID();
-
-        this.addMessageCallback(listenerUUID, message => {
-            if (isPrivateChannelOnDisconnectEvent(message) && message.payload.privateChannelId === this.id) {
-                handler();
-            }
-        });
-
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
     }
 
     /**

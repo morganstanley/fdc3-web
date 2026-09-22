@@ -230,7 +230,7 @@ describe(`${AppDirectory.name} (directory)`, () => {
     });
 
     describe.each(['intent', 'context'] as const)('newInstance resolution for %s', mode => {
-        function resolve(directory: AppDirectory, app?: AppIdentifier | string, newInstance?: boolean) {
+        function resolve(directory: AppDirectory, app?: AppIdentifier, newInstance?: boolean) {
             return mode === 'intent'
                 ? directory.resolveAppForIntent('StartChat', contact, app, newInstance)
                 : directory.resolveAppForContext(contact, app, newInstance).then(result => result?.app);

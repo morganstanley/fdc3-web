@@ -32,7 +32,7 @@ import { MessagingBase } from '../messaging/index.js';
 import { ContextListener, IChannelFactory } from './channel.contracts.js';
 
 /**
- * addContextListener is omitted from this list so that we don't have to implement the deprecated function overload
+ * Context listener registration is delegated to ContextListener separately.
  */
 type AgentChannels = Pick<
     DesktopAgent,

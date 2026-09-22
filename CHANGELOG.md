@@ -8,6 +8,7 @@
 - Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
 - Accept null instance preferences, omit default preferences on the wire, and expose existing-instance failures as Error objects (#408).
 - Reject conflicting intent listeners, allow disjoint filters, and remove dynamic resolution mappings on unsubscribe (#405).
+- **Breaking:** Remove FDC3 APIs deprecated in 2.x (#409). Use `getUserChannels()` and `joinUserChannel()` instead of the system-channel aliases; pass `null` explicitly to unfiltered `addContextListener(null, handler)` calls; use `{ appId }` instead of string targets for `open` and intent APIs. Replace private-channel callbacks with `await channel.addEventListener(type, handler)` and read context types from `event.details.contextType`.
 
 - `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
 - Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.

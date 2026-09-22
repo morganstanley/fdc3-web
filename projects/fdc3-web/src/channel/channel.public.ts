@@ -27,7 +27,6 @@ import {
     isAppEventMessage,
     isBroadcastResponse,
     isClearContextResponse,
-    resolveContextType,
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { ContextListener } from './channel.contracts.js';
@@ -108,15 +107,8 @@ export class PublicChannel extends MessagingBase implements Channel {
         }
     }
 
-    public addContextListener(contextType: string | null, handler: ContextHandler): Promise<Listener>;
-    public addContextListener(handler: ContextHandler): Promise<Listener>;
-    public async addContextListener(
-        handlerOrContextType: string | null | ContextHandler,
-        optionalContextHandler?: ContextHandler,
-    ): Promise<Listener> {
-        const { contextType, contextHandler } = resolveContextType(handlerOrContextType, optionalContextHandler);
-
-        return this.contextListener.addContextListener(contextType, contextHandler);
+    public addContextListener(contextType: string | null, handler: ContextHandler): Promise<Listener> {
+        return this.contextListener.addContextListener(contextType, handler);
     }
 
     public async addEventListener(type: ChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
