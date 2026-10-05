@@ -222,7 +222,9 @@ export type AppIdentifierListenerPair = {
 
 //uses 'allEvents' constant instead of null to signify app is listening to all events as null cannot be used as an index
 export type EventListenerKey = FDC3EventTypes | 'allEvents';
-export type EventListenerLookup = Partial<Record<EventListenerKey, AppIdentifierListenerPair[]>>;
+export type EventListenerLookup = Partial<
+    Record<EventListenerKey, (AppIdentifierListenerPair & { channelId: string | null })[]>
+>;
 
 export type UnqualifiedAppIdentifier = Omit<AppIdentifier, 'instanceId'>;
 export type FullyQualifiedAppIdentifier = Required<Pick<AppIdentifier, 'appId' | 'instanceId'>>;

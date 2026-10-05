@@ -8,7 +8,15 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier, BrowserTypes, Channel, DesktopAgent, PrivateChannel } from '@finos/fdc3';
+import type {
+    AppIdentifier,
+    BrowserTypes,
+    Channel,
+    ContextHandler,
+    DesktopAgent,
+    Listener,
+    PrivateChannel,
+} from '@finos/fdc3';
 import { IProxyMessagingProvider } from '../contracts.js';
 
 /**
@@ -28,8 +36,7 @@ export interface IChannelFactory {
     ): PrivateChannel;
 }
 
-export type ContextListener = Pick<
-    Channel,
-    'addContextListener' | 'getCurrentContext' | 'getCurrentContextWithMetadata'
-> &
-    Pick<DesktopAgent, 'getCurrentChannel'>;
+export type ContextListener = Pick<Channel, 'getCurrentContext' | 'getCurrentContextWithMetadata'> &
+    Pick<DesktopAgent, 'getCurrentChannel'> & {
+        addContextListener(contextType: string | string[] | null, handler: ContextHandler): Promise<Listener>;
+    };

@@ -46,7 +46,6 @@ import {
 } from '../contracts.js';
 import {
     appInstanceEquals,
-    convertToEventListenerIndex,
     createContextMetadata,
     createEvent,
     createLogger,
@@ -174,11 +173,19 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             case 'findIntentRequest':
                 return this.onFindIntentRequest(requestMessage, sourceApp);
             case 'addEventListenerRequest':
-                return this.onAddEventListenerRequest(requestMessage, sourceApp);
+                return this.channelMessageHandler.onAddEventListenerRequest(
+                    requestMessage,
+                    sourceApp,
+                    this.eventListeners,
+                );
             case 'findIntentsByContextRequest':
                 return this.onFindIntentsByContextRequest(requestMessage, sourceApp);
             case 'eventListenerUnsubscribeRequest':
-                return this.onEventListenerUnsubscribeRequest(requestMessage, sourceApp);
+                return this.channelMessageHandler.onEventListenerUnsubscribeRequest(
+                    requestMessage,
+                    sourceApp,
+                    this.eventListeners,
+                );
             case 'intentListenerUnsubscribeRequest':
                 return this.onIntentListenerUnsubscribeRequest(requestMessage, sourceApp);
             case 'openRequest':
@@ -214,7 +221,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             case 'getCurrentContextRequest':
                 return this.channelMessageHandler.onGetCurrentContextRequest(requestMessage, sourceApp);
             case 'clearContextRequest':
-                return this.channelMessageHandler.onClearContextRequest(requestMessage, sourceApp);
+                return this.channelMessageHandler.onClearContextRequest(requestMessage, sourceApp, this.eventListeners);
             case 'privateChannelAddEventListenerRequest':
                 return this.channelMessageHandler.onPrivateChannelAddEventListenerRequest(requestMessage, sourceApp);
             case 'privateChannelUnsubscribeEventListenerRequest':
@@ -843,65 +850,6 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             createResponseMessage<BrowserTypes.FindIntentResponse>(
                 'findIntentResponse',
                 { appIntent },
-                requestMessage.meta.requestUuid,
-                source,
-            ),
-            source,
-        );
-    }
-
-    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
-    /**
-     * Add an event listener for a given event and app, and respond with the listenerUUID
-     */
-    private onAddEventListenerRequest(
-        requestMessage: BrowserTypes.AddEventListenerRequest,
-        source: FullyQualifiedAppIdentifier,
-    ): void {
-        const eventType = convertToEventListenerIndex(requestMessage.payload.type);
-        const listeners = this.eventListeners[eventType] ?? (this.eventListeners[eventType] = []);
-
-        const listenerUUID = generateUUID();
-
-        listeners.push({ appIdentifier: source, listenerUUID });
-
-        this.rootMessagePublisher.publishResponseMessage(
-            createResponseMessage<BrowserTypes.AddEventListenerResponse>(
-                'addEventListenerResponse',
-                { listenerUUID },
-                requestMessage.meta.requestUuid,
-                source,
-            ),
-            source,
-        );
-    }
-
-    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
-    /**
-     * Remove event listener which source app has unsubscribed from
-     */
-    private onEventListenerUnsubscribeRequest(
-        requestMessage: BrowserTypes.EventListenerUnsubscribeRequest,
-        source: FullyQualifiedAppIdentifier,
-    ): void {
-        const eventType = Object.entries(this.eventListeners).find(([_, listenerPairs]) =>
-            listenerPairs.some(
-                pair =>
-                    pair.listenerUUID === requestMessage.payload.listenerUUID &&
-                    appInstanceEquals(pair.appIdentifier, source),
-            ),
-        )?.[0] as EventListenerKey | undefined;
-
-        if (eventType != null) {
-            const listeners = this.eventListeners[eventType];
-            const newListeners = listeners?.filter(pair => pair.listenerUUID != requestMessage.payload.listenerUUID);
-            this.eventListeners[eventType] = newListeners;
-        }
-
-        this.rootMessagePublisher.publishResponseMessage(
-            createResponseMessage<BrowserTypes.EventListenerUnsubscribeResponse>(
-                'eventListenerUnsubscribeResponse',
-                {},
                 requestMessage.meta.requestUuid,
                 source,
             ),

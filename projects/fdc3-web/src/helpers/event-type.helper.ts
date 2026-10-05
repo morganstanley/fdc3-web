@@ -30,12 +30,19 @@ export function convertToFDC3EventTypes(type: BrowserTypes.EventMessageType): FD
     }
 }
 
-export function convertToEventListenerIndex(type: 'USER_CHANNEL_CHANGED' | null): EventListenerKey {
-    return type === 'USER_CHANNEL_CHANGED' ? 'userChannelChanged' : 'allEvents';
+export function convertToEventListenerIndex(type: BrowserTypes.FDC3EventType | null): EventListenerKey {
+    switch (type) {
+        case 'USER_CHANNEL_CHANGED':
+            return 'userChannelChanged';
+        case 'CONTEXT_CLEARED':
+            return 'contextCleared';
+        case null:
+            return 'allEvents';
+    }
 }
 
 export function convertToPrivateChannelEventTypes(
-    type: BrowserTypes.PrivateChannelEventType | PrivateChannelEventMessageTypes,
+    type: PrivateChannelEventTypes | PrivateChannelEventMessageTypes,
 ): PrivateChannelEventTypes {
     switch (type) {
         case 'privateChannelOnAddContextListenerEvent':
@@ -58,13 +65,10 @@ export function convertToPrivateChannelEventMessageTypes(
 ): PrivateChannelEventMessageTypes {
     switch (type) {
         case 'addContextListener':
-        case 'privateChannelOnAddContextListenerEvent':
             return 'privateChannelOnAddContextListenerEvent';
         case 'disconnect':
-        case 'privateChannelOnDisconnectEvent':
             return 'privateChannelOnDisconnectEvent';
         case 'unsubscribe':
-        case 'privateChannelOnUnsubscribeEvent':
             return 'privateChannelOnUnsubscribeEvent';
         case 'contextCleared':
             return 'contextClearedEvent';
