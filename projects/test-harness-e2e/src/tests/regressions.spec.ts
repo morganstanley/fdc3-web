@@ -52,5 +52,6 @@ test('GAP-004: agent traceId takes precedence over intent result metadata traceI
     );
     const result = await sender.call('getResultMetadata', [], 'resolution');
     await check('the result has metadata', result, expect.objectContaining({ traceId: expect.any(String) }));
-    await check('agent traceId wins', result.traceId === 'handler-trace', false);
+    await check('agent traceId replaces the handler traceId', result.traceId === 'handler-trace', false);
+    await check('agent traceId is not the raiseIntent request traceId', result.traceId === metadata.traceId, false);
 });

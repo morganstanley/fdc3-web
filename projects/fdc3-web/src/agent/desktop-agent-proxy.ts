@@ -487,7 +487,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 let handlerResult: Awaited<ReturnType<IntentHandler>>;
                 try {
                     handlerResult = await handler(message.payload.context, message.payload.metadata);
-                } catch {
+                } catch (error) {
+                    this.log(
+                        `Intent handler for ${intent} threw, reporting IntentHandlerRejected: ${error instanceof Error ? error.message : String(error)}`,
+                        LogLevel.WARN,
+                    );
                     await this.publishIntentResultRequest(undefined, message, ResultError.IntentHandlerRejected);
                     return;
                 }

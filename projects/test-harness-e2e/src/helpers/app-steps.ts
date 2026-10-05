@@ -85,7 +85,7 @@ export class AppSteps {
         await base.step(`Then ${this.name}'s ${listener} handler receives ${JSON.stringify(args)}`, async () => {
             await expect
                 .poll(() => this.events(listener))
-                .toEqual(expect.arrayContaining([expect.objectContaining({ args: expect.arrayContaining(args) })]));
+                .toEqual(expect.arrayContaining([expect.objectContaining({ args })]));
         });
     }
 

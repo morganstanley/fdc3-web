@@ -197,10 +197,11 @@ test('context-specific intent listeners can coexist for disjoint types', async (
     const target = await receiver.identity();
     await sender.call('raiseIntent', ['FilteredIntent', contact, target], 'agent', 'resolution');
     await receiver.received('contact', [contact]);
-    await receiver.eventCount('instrument', 0);
+    // getResult resolves only after the matching handler has run, so any wrong delivery has been queued before the count check.
     await check(
         'only the matching handler supplies the result',
         await sender.call('getResult', [], 'resolution'),
         contact,
     );
+    await receiver.eventCount('instrument', 0);
 });

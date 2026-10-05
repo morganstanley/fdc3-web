@@ -17,7 +17,7 @@ The configuration starts the harness and app-directory servers, including built 
 
 HTML reports contain named helper steps, exact API arguments, callbacks, and assertions. Failures retain a screenshot, video and trace in `test-results/`. Tests locate controls by `automation-id` and apps by their iframe's `data-app-url`, including an instance index for duplicate apps. They do not read arbitrary div text, use private implementation objects, or sleep to wait for message delivery.
 
-The approach builds on `agent-bridging`'s `projects/test-harness-e2e` setup, app-frame helpers, automation IDs and HTML reporting. This branch tests a single desktop agent across application origins; it does not need or start the bridge server.
+The app-frame helpers, automation IDs and HTML reporting are adapted from the agent-bridging work (#389), which is not yet merged. This suite tests a single desktop agent across application origins; it does not need or start the bridge server.
 
 ## API explorer
 
@@ -33,7 +33,7 @@ Each harness app now includes an expandable **FDC3 API explorer**. Choose a meth
 
 ## Coverage matrix
 
-Source: `/home/coder/github/FDC3/website/docs/api/ref/` at local revision `d68649527` (DesktopAgent, Channel, PrivateChannel, GetAgent and Types). These are the current 3.0 docs, not the versioned 2.x docs. The external checkout is a design reference only; it is not required to run the suite.
+Source: the FDC3 3.0 API reference (DesktopAgent, Channel, PrivateChannel, GetAgent and Types). These are the current 3.0 docs, not the versioned 2.x docs.
 
 | API                                                          | Variations and assertions                                                                                                                                   | Spec                                                         |
 | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |

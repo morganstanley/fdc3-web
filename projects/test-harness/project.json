@@ -74,10 +74,10 @@
         },
         "build:release": {},
         "e2e": {
-            "executor": "nx:run-commands",
-            "options": {
-                "command": "nx e2e test-harness-e2e"
-            }
+            "executor": "nx:noop",
+            "dependsOn": [
+                "test-harness-e2e:e2e"
+            ]
         }
     }
 }

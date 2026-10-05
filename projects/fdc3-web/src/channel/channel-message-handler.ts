@@ -809,7 +809,7 @@ export class ChannelMessageHandler {
 
         // Each proxy dispatches the event to all of its matching local listeners.
         // Sending once per subscription would invoke those listeners multiple times.
-        return [...new Map(targets.map(app => [JSON.stringify([app.appId, app.instanceId]), app])).values()];
+        return targets.filter((app, index) => targets.findIndex(other => appInstanceEquals(other, app)) === index);
     }
 
     /**
