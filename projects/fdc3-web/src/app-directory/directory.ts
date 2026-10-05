@@ -536,7 +536,7 @@ export class AppDirectory {
             }),
             {},
         );
-        return Object.values(appIntentsForContextRecord);
+        return Object.values(appIntentsForContextRecord).filter(appIntent => appIntent.apps.length > 0);
     }
 
     /**
@@ -632,7 +632,10 @@ export class AppDirectory {
                     }
                 }
                 //this should always be true
-                if (isFullyQualifiedAppId(appId)) {
+                if (
+                    isFullyQualifiedAppId(appId) &&
+                    (resultType == null || this.doesAppReturnResultType(entry?.application, intent, resultType))
+                ) {
                     //find all entries for app instances that resolve given intent and handle given context if provided
                     apps.push(...(await this.getInstancesForIntent(appId, intent, context)));
                 }
@@ -645,13 +648,17 @@ export class AppDirectory {
     /**
      * Returns true if given application returns result of given resultType when resolving given intent, and false otherwise
      */
-    private doesAppReturnResultType(application: AppDirectoryApplication, intent: Intent, resultType: string): boolean {
+    private doesAppReturnResultType(
+        application: AppDirectoryApplication | undefined,
+        intent: Intent,
+        resultType: string,
+    ): boolean {
         if (resultType.includes('channel')) {
             //return true if application returns channel of specific type if one is given, or any channel otherwise, when resolving given intent
-            if (application.interop?.intents?.listensFor?.[intent].resultType?.includes(resultType)) {
+            if (application?.interop?.intents?.listensFor?.[intent]?.resultType?.includes(resultType)) {
                 return true;
             }
-        } else if (application.interop?.intents?.listensFor?.[intent].resultType === resultType) {
+        } else if (application?.interop?.intents?.listensFor?.[intent]?.resultType === resultType) {
             return true;
         }
         return false;

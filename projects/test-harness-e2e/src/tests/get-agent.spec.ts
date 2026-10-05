@@ -36,7 +36,6 @@ for (const { name, args } of variants) {
             expect.objectContaining({ sameAgent: true }),
         );
         if (name === 'dontSetWindowFdc3') {
-            test.fail(true, 'GAP-005: getAgent ignores dontSetWindowFdc3 when creating a proxy');
             await check('window.fdc3 stays unset', connected.windowFdc3Set, false);
         }
     });

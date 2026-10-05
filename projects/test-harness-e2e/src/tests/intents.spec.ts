@@ -169,8 +169,8 @@ for (const resultType of ['void', 'context', 'app channel', 'private channel', '
             'resolution',
         );
         if (resultType === 'rejected') {
-            test.fail(true, 'GAP-003: a rejected intent handler leaves getResult pending; see README.md');
             await sender.rejects('getResult', [], 'IntentHandlerRejected', 'resolution');
+            await sender.rejects('getResultMetadata', [], 'IntentHandlerRejected', 'resolution');
         } else
             await check(
                 'the promised result has the expected shape',

@@ -132,6 +132,18 @@ describe(`${DesktopAgentFactory.name} (desktop-agent.factory)`, () => {
             expect(mockedWindow.withSetter('fdc3')).wasCalledOnce();
         });
 
+        it('should leave window.fdc3 and fdc3Ready untouched when dontSetWindowFdc3 is true', async () => {
+            const agent = await createInstance().createProxy({
+                messagingProviderFactory: mockedFactory.mock.factory,
+                appIdentifier,
+                dontSetWindowFdc3: true,
+            });
+
+            expect(agent).toBeInstanceOf(DesktopAgentProxy);
+            expect(mockedWindow.withSetter('fdc3')).wasNotCalled();
+            expect(mockedWindow.withFunction('dispatchEvent')).wasNotCalled();
+        });
+
         it(`should not set window.fdc3 if it is already set`, async () => {
             mockedWindow.setupProperty('fdc3', {} as any);
             const instance = createInstance();

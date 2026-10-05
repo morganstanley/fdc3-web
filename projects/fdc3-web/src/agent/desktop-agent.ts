@@ -25,6 +25,7 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS, HEARTBEAT } from '../constants.js';
+import type { IntentResultRequest } from '../contracts.internal.js';
 import {
     IRootPublisher,
     UpdateInstanceMetadataRequest,
@@ -514,7 +515,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
     // https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#addintentlistener
     private async onIntentResultRequest(
-        requestMessage: BrowserTypes.IntentResultRequest,
+        requestMessage: IntentResultRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         this.rootMessagePublisher.publishResponseMessage(
@@ -534,7 +535,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         );
 
         if (raiseIntentSource?.payload != null && isFullyQualifiedAppIdentifier(raiseIntentSource.payload)) {
-            if (requestMessage.payload.intentResult.channel != null) {
+            if (requestMessage.payload.error == null && requestMessage.payload.intentResult.channel != null) {
                 //if intentResult is PrivateChannel, add receiving app to channel's allowedList
                 this.channelMessageHandler.addToPrivateChannelAllowedList(
                     requestMessage.payload.intentResult.channel.id,
@@ -544,10 +545,16 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
             const raiseIntentResultResponse = createResponseMessage<BrowserTypes.RaiseIntentResultResponse>(
                 'raiseIntentResultResponse',
-                {
-                    intentResult: requestMessage.payload.intentResult,
-                    resultMetadata: createContextMetadata(source, requestMessage.payload.metadata),
-                },
+                requestMessage.payload.error != null
+                    ? { error: requestMessage.payload.error }
+                    : {
+                          intentResult: requestMessage.payload.intentResult,
+                          resultMetadata: createContextMetadata(source, {
+                              ...requestMessage.payload.metadata,
+                              // Result trace IDs are controlled by the agent, unlike broadcast metadata.
+                              traceId: generateUUID(),
+                          }),
+                      },
                 raiseIntentSource.uuid,
                 raiseIntentSource.payload,
             );
@@ -912,7 +919,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return;
         }
 
-        const appIntents = await this.directory.getAppIntentsForContext(requestMessage.payload.context);
+        const appIntents = await this.directory.getAppIntentsForContext(
+            requestMessage.payload.context,
+            requestMessage.payload.resultType,
+        );
 
         if (appIntents.length === 0 || appIntents.find(appIntent => appIntent.apps.length != 0) == null) {
             //responds with error if no intents to handle given context were found, or if no apps which resolve those intents and handle given context were found

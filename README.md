@@ -339,9 +339,9 @@ npx nx e2e test-harness-e2e --ui
 npx nx e2e test-harness-e2e --list
 ```
 
-The HTML report is written to `playwright-report/`, with JSON results in `reports/playwright-results.json`. Failures retain screenshots, videos and traces in `test-results/`. Six tests currently reproduce five known implementation gaps using Playwright's expected-failure annotations. These tests execute their documented assertions and flag an unexpected pass when a gap is fixed.
+The HTML report is written to `playwright-report/`, with JSON results in `reports/playwright-results.json`. Failures retain screenshots, videos and traces in `test-results/`. The suite includes regression tests for duplicate broadcast delivery, intent result-type filtering, rejected intent handlers, result metadata and connection options. All E2E tests run as ordinary assertions; there are no expected-failure annotations.
 
-See the [E2E suite README](./projects/test-harness-e2e/README.md) for the API coverage matrix, known gaps and API explorer instructions. Browser tests run through the `e2e` target; `npm test` runs the unit tests.
+See the [E2E suite README](./projects/test-harness-e2e/README.md) for the API coverage matrix, regression coverage and API explorer instructions. Browser tests run through the `e2e` target; `npm test` runs the unit tests.
 
 ### Running Conformance Tests
 

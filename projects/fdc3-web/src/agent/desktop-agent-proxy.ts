@@ -32,9 +32,10 @@ import {
     LogLevel,
     PrivateChannel,
     ResolveError,
+    ResultError,
 } from '@finos/fdc3';
 import { ChannelFactory, Channels } from '../channel/index.js';
-import { UpdateInstanceMetadataRequest } from '../contracts.internal.js';
+import { IntentResultRequest, UpdateInstanceMetadataRequest } from '../contracts.internal.js';
 import { DesktopAgentNext, FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import { convertToFDC3EventTypes } from '../helpers/event-type.helper.js';
 import {
@@ -483,10 +484,13 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 message.payload.intent === intent &&
                 (contextTypes == null || contextTypes.includes(message.payload.context.type))
             ) {
-                const intentResultPromise = handler(message.payload.context, message.payload.metadata);
-
-                const handlerResult = await intentResultPromise;
-
+                let handlerResult: Awaited<ReturnType<IntentHandler>>;
+                try {
+                    handlerResult = await handler(message.payload.context, message.payload.metadata);
+                } catch {
+                    await this.publishIntentResultRequest(undefined, message, ResultError.IntentHandlerRejected);
+                    return;
+                }
                 await this.publishIntentResultRequest(handlerResult, message);
             }
         });
@@ -509,6 +513,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     private async publishIntentResultRequest(
         handlerResult: Context | ContextWithMetadata | Channel | PrivateChannel | void,
         intentEvent: BrowserTypes.IntentEvent,
+        error?: ResultError,
     ): Promise<void> {
         const intentResult: BrowserTypes.IntentResult = {};
         let metadata: BrowserTypes.AppProvidableContextMetadata | undefined;
@@ -528,7 +533,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             };
         }
 
-        const payload: BrowserTypes.IntentResultRequestPayload = {
+        const payload: IntentResultRequest['payload'] = {
             intentResult,
             intentEventUuid: intentEvent.meta.eventUuid,
             raiseIntentRequestUuid: intentEvent.payload.raiseIntentRequestUuid,
@@ -536,8 +541,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         if (metadata != null) {
             payload.metadata = metadata;
         }
+        if (error != null) {
+            payload.error = error;
+        }
 
-        const requestMessage = createRequestMessage<BrowserTypes.IntentResultRequest>(
+        const requestMessage = createRequestMessage<IntentResultRequest>(
             'intentResultRequest',
             this.appIdentifier,
             payload,
@@ -628,6 +636,10 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             ...intentResolution,
             getResult: async (): Promise<any> => {
                 const raiseIntentResultResponse = await raiseIntentResultResponsePromise;
+
+                if (raiseIntentResultResponse.payload.error != null) {
+                    throw raiseIntentResultResponse.payload.error;
+                }
 
                 switch (raiseIntentResultResponse.payload.intentResult?.channel?.type) {
                     case 'user':

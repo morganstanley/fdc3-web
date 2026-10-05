@@ -10,7 +10,7 @@
 
 import { check, expect, handler, instrument, metadata, reply, test } from '../helpers/harness.js';
 
-// These execute the documented assertion. Playwright reports unexpected passes when a gap is fixed.
+// Regressions for implementation gaps found by the original browser suite.
 test('GAP-001: overlapping context listeners each receive a broadcast exactly once', async ({ sender, receiver }) => {
     await sender.call('getOrCreateChannel', ['overlap'], 'agent', 'channel');
     await receiver.call('getOrCreateChannel', ['overlap'], 'agent', 'channel');
@@ -20,8 +20,8 @@ test('GAP-001: overlapping context listeners each receive a broadcast exactly on
     await receiver.received('second', [instrument]);
     // An acknowledged read in the receiver follows the queued broadcast deliveries.
     await receiver.call('getCurrentContext', [], 'channel');
-    test.fail(true, 'GAP-001: one broadcast is delivered once per matching remote subscription to all local handlers');
     await receiver.eventCount('first', 1);
+    await receiver.eventCount('second', 1);
 });
 
 for (const method of ['findIntent', 'findIntentsByContext']) {
@@ -35,12 +35,7 @@ for (const method of ['findIntent', 'findIntentsByContext']) {
                 : [instrument, 'incompatible.result'];
         await sender.start(method, args);
         const outcome = await sender.outcome();
-        test.fail(true, 'GAP-002: resultType filters directory apps but not running instances');
-        await check(
-            'no incompatible apps are returned',
-            outcome,
-            method === 'findIntent' ? { ok: false, error: 'NoAppsFound' } : { ok: true, value: [] },
-        );
+        await check('no incompatible apps are returned', outcome, { ok: false, error: 'NoAppsFound' });
     });
 }
 
@@ -57,6 +52,5 @@ test('GAP-004: agent traceId takes precedence over intent result metadata traceI
     );
     const result = await sender.call('getResultMetadata', [], 'resolution');
     await check('the result has metadata', result, expect.objectContaining({ traceId: expect.any(String) }));
-    test.fail(true, 'GAP-004: result metadata uses the handler traceId instead of the agent traceId');
     await check('agent traceId wins', result.traceId === 'handler-trace', false);
 });

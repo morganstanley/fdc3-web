@@ -18,6 +18,7 @@ import {
     type Listener,
     OpenError,
     ResolveError,
+    ResultError,
 } from '@finos/fdc3';
 import {
     IMocked,
@@ -35,6 +36,7 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
+import type { IntentResultRequest } from '../contracts.internal.js';
 import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
 import {
     DesktopAgentNext,
@@ -1241,6 +1243,61 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 reset(mockedHelpers);
             });
 
+            it('should forward handler failures to the raiser without sharing a channel or success metadata', async () => {
+                createInstance();
+                const request: IntentResultRequest = {
+                    type: 'intentResultRequest',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: {
+                        intentEventUuid: 'failed-event',
+                        raiseIntentRequestUuid: JSON.stringify({ ...originalSource, uuid: raiseIntentRequestUuid }),
+                        intentResult: {},
+                        error: ResultError.IntentHandlerRejected,
+                    },
+                };
+                await postRequestMessage(request, source);
+                const replies = mockRootPublisher.functionCallLookup.publishResponseMessage;
+                expect(replies).toContainEqual([
+                    expect.objectContaining({
+                        type: 'raiseIntentResultResponse',
+                        payload: { error: ResultError.IntentHandlerRejected },
+                    }),
+                    originalSource,
+                ]);
+                expect(replies).toContainEqual([
+                    expect.objectContaining({ type: 'intentResultResponse', payload: {} }),
+                    source,
+                ]);
+            });
+
+            it('should replace result traceId while preserving custom and signed metadata', async () => {
+                createInstance();
+                const metadata = {
+                    traceId: 'handler-trace',
+                    custom: { example: true },
+                    signature: { protected: 'header', signature: 'signature' },
+                    antiReplay: { iat: 100, exp: 200, jti: 'nonce' },
+                };
+                await postRequestMessage(
+                    {
+                        type: 'intentResultRequest',
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        payload: {
+                            intentEventUuid: 'metadata-event',
+                            raiseIntentRequestUuid: JSON.stringify({ ...originalSource, uuid: raiseIntentRequestUuid }),
+                            intentResult: { context: contact },
+                            metadata,
+                        },
+                    },
+                    source,
+                );
+                expect(
+                    mockedHelpers
+                        .withFunction('createContextMetadata')
+                        .withParametersEqualTo(source, { ...metadata, traceId: mockedGeneratedUuid }),
+                ).wasCalledOnce();
+            });
+
             it(`should publish raiseIntentResultResponse to original source`, async () => {
                 createInstance();
 
@@ -2071,6 +2128,23 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`findIntentsByContextRequest`, () => {
+            it('should pass the resultType filter to the directory', async () => {
+                createInstance();
+                await postRequestMessage(
+                    {
+                        type: 'findIntentsByContextRequest',
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        payload: { context: contact, resultType: 'fdc3.currency' },
+                    },
+                    source,
+                );
+                expect(
+                    mockAppDirectory
+                        .withFunction('getAppIntentsForContext')
+                        .withParametersEqualTo(contact, 'fdc3.currency'),
+                ).wasCalledOnce();
+            });
+
             it(`should publish findIntentsByContextResponse containing appIntents for possible intents that can handle given context`, async () => {
                 createInstance();
 

@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes } from '@finos/fdc3';
+import { BrowserTypes, ResultError } from '@finos/fdc3';
 import { AppDirectoryApplication } from './app-directory.contracts.js';
 import { EventMessage, FullyQualifiedAppIdentifier, IProxyMessagingProvider, ResponseMessage } from './contracts.js';
 
@@ -52,3 +52,12 @@ export interface UpdateInstanceMetadataResponse {
 export interface UpdateInstanceMetadataResponsePayload {
     error?: BrowserTypes.ResponsePayloadError;
 }
+
+/**
+ * Local extension: the current DACP IntentResultRequest schema has no error field.
+ * Successful requests retain the standard payload. Our proxy uses this field to
+ * report handler failures so our agent can send a standard raiseIntentResultResponse error.
+ */
+export type IntentResultRequest = BrowserTypes.IntentResultRequest & {
+    payload: BrowserTypes.IntentResultRequestPayload & { error?: ResultError };
+};
