@@ -225,7 +225,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
-            { type: 'USER_CHANNEL_CHANGED' },
+            { type: 'USER_CHANNEL_CHANGED', channelId: null },
         );
 
         const response = await this.getResponse(message, isAddEventListenerResponse);

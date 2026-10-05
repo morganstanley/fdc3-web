@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DesktopAgentProxy } from '../agent/desktop-agent-proxy.js';
 import type { IRootPublisher } from '../contracts.internal.js';
 import type { EventListenerLookup, IProxyIncomingMessageEnvelope, IProxyMessagingProvider } from '../contracts.js';
-import { createRequestMessage, createResponseMessage } from '../helpers/messages.helper.js';
+import { createRequestMessage } from '../helpers/messages.helper.js';
 import { ChannelMessageHandler } from './channel-message-handler.js';
 import { ChannelFactory } from './channels.factory.js';
 
@@ -66,42 +66,15 @@ function setup() {
                     case 'getCurrentContextRequest':
                         return server.onGetCurrentContextRequest(request, app);
                     case 'clearContextRequest':
-                        return server.onClearContextRequest(request, app);
+                        return server.onClearContextRequest(request, app, eventListeners);
                     case 'privateChannelAddEventListenerRequest':
                         return server.onPrivateChannelAddEventListenerRequest(request, app);
                     case 'privateChannelUnsubscribeEventListenerRequest':
                         return server.onPrivateChannelUnsubscribeEventListenerRequest(request, app);
-                    case 'addEventListenerRequest': {
-                        const key =
-                            request.payload.type === 'USER_CHANNEL_CHANGED' ? 'userChannelChanged' : 'allEvents';
-                        const listenerUUID = crypto.randomUUID();
-                        (eventListeners[key] ??= []).push({ appIdentifier: app, listenerUUID });
-                        publisher.publishResponseMessage(
-                            createResponseMessage<BrowserTypes.AddEventListenerResponse>(
-                                'addEventListenerResponse',
-                                { listenerUUID },
-                                request.meta.requestUuid,
-                                app,
-                            ),
-                            app,
-                        );
-                        return;
-                    }
+                    case 'addEventListenerRequest':
+                        return server.onAddEventListenerRequest(request, app, eventListeners);
                     case 'eventListenerUnsubscribeRequest':
-                        for (const key of ['allEvents', 'userChannelChanged'] as const)
-                            eventListeners[key] = eventListeners[key]?.filter(
-                                listener => listener.listenerUUID !== request.payload.listenerUUID,
-                            );
-                        publisher.publishResponseMessage(
-                            createResponseMessage<BrowserTypes.EventListenerUnsubscribeResponse>(
-                                'eventListenerUnsubscribeResponse',
-                                {},
-                                request.meta.requestUuid,
-                                app,
-                            ),
-                            app,
-                        );
-                        return;
+                        return server.onEventListenerUnsubscribeRequest(request, app, eventListeners);
                     default:
                         throw new Error(`Unexpected request: ${request.type}`);
                 }
@@ -113,11 +86,11 @@ function setup() {
             agent: new DesktopAgentProxy({ appIdentifier: app, messagingProvider: provider, channelFactory: factory }),
         };
     };
-    return { client, server, factory, publisher };
+    return { client, server, factory, publisher, eventListeners };
 }
 
 describe('context-cleared event delivery', () => {
-    it('notifies both channel holders, clears only the requested type and supports unsubscribe', async () => {
+    it('notifies remote subscribers, excludes the caller and supports unsubscribe', async () => {
         const { client } = setup();
         const a = client('a'),
             b = client('b');
@@ -137,17 +110,14 @@ describe('context-cleared event delivery', () => {
             type: 'contextCleared',
             details: { channelId: 'shared', contextType: 'fdc3.contact' },
         });
-        expect(localHandler).toHaveBeenCalledTimes(1);
+        expect(localHandler).not.toHaveBeenCalled();
         expect(otherHandler).not.toHaveBeenCalled();
         expect(await remote.getCurrentContext('fdc3.contact')).toBeNull();
         expect(await remote.getCurrentContext('fdc3.instrument')).toEqual({ type: 'fdc3.instrument' });
         await listener.unsubscribe();
         await channel.clearContext();
         expect(remoteHandler).toHaveBeenCalledTimes(1);
-        expect(localHandler).toHaveBeenLastCalledWith({
-            type: 'contextCleared',
-            details: { channelId: 'shared', contextType: null },
-        });
+        expect(localHandler).not.toHaveBeenCalled();
         expect(await remote.getCurrentContext()).toBeNull();
     });
 
@@ -167,7 +137,9 @@ describe('context-cleared event delivery', () => {
         const authorizedHandler = vi.fn(),
             forbiddenHandler = vi.fn();
         const listener = await remote.addEventListener(null, authorizedHandler);
-        await forbidden.addEventListener('contextCleared', forbiddenHandler);
+        await expect(forbidden.addEventListener('contextCleared', forbiddenHandler)).rejects.toThrow(
+            ChannelError.AccessDenied,
+        );
         await channel.clearContext();
         expect(authorizedHandler).toHaveBeenCalledExactlyOnceWith({
             type: 'contextCleared',
@@ -347,5 +319,122 @@ describe('array context listeners', () => {
             [a.app, 'fdc3.contact'],
             [a.app, 'fdc3.instrument'],
         ]);
+    });
+});
+
+describe('scoped event registration', () => {
+    it('registers channel handles over DACP and delivers once per app with multiple subscribers', async () => {
+        const { client, factory, publisher } = setup();
+        const a = client('a'),
+            b = client('b'),
+            idle = client('idle');
+        const channel = await b.agent.getOrCreateChannel('shared');
+        await idle.agent.getOrCreateChannel('shared');
+        // A has no tracked getOrCreateChannel call: the subscription itself determines delivery.
+        const remote = factory.createPublicChannel({ id: channel.id, type: 'app' }, a.app, a.provider);
+        const one = vi.fn(),
+            two = vi.fn();
+        const send = vi.spyOn(a.provider, 'sendMessage');
+        const first = await remote.addEventListener('contextCleared', one);
+        const second = await remote.addEventListener(null, two);
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                payload: expect.objectContaining({
+                    type: 'addEventListenerRequest',
+                    payload: { type: 'CONTEXT_CLEARED', channelId: 'shared' },
+                }),
+            }),
+        );
+        const publish = vi.spyOn(publisher, 'publishEvent');
+        await channel.clearContext();
+        expect(publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: 'contextClearedEvent' }), [
+            a.app,
+        ]);
+        expect(one).toHaveBeenCalledTimes(1);
+        expect(two).toHaveBeenCalledTimes(1);
+        await first.unsubscribe();
+        await channel.clearContext();
+        expect(one).toHaveBeenCalledTimes(1);
+        expect(two).toHaveBeenCalledTimes(2);
+        await second.unsubscribe();
+        publish.mockClear();
+        await channel.clearContext();
+        expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('keeps agent scope separate from fixed channel handles after switching and leaving user channels', async () => {
+        const { client } = setup();
+        const a = client('a'),
+            b = client('b');
+        const [first, second] = await b.agent.getUserChannels();
+        await a.agent.joinUserChannel(first.id);
+        const agentHandler = vi.fn(),
+            channelHandler = vi.fn();
+        await a.agent.addEventListener('contextCleared', agentHandler);
+        const handle = await a.agent.getOrCreateChannel(first.id);
+        await handle.addEventListener('contextCleared', channelHandler);
+        await first.clearContext();
+        expect(agentHandler).toHaveBeenCalledTimes(1);
+        expect(channelHandler).toHaveBeenCalledTimes(1);
+        await a.agent.joinUserChannel(second.id);
+        await first.clearContext();
+        expect(agentHandler).toHaveBeenCalledTimes(1);
+        expect(channelHandler).toHaveBeenCalledTimes(2);
+        await second.clearContext();
+        expect(agentHandler).toHaveBeenCalledTimes(2);
+        await a.agent.leaveCurrentChannel();
+        await second.clearContext();
+        expect(agentHandler).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not leak membership events into channel-scoped all-event subscriptions', async () => {
+        const { client, publisher } = setup();
+        const a = client('a');
+        const [channel] = await a.agent.getUserChannels();
+        const handler = vi.fn();
+        await channel.addEventListener(null, handler);
+        const publish = vi.spyOn(publisher, 'publishEvent');
+        await a.agent.joinUserChannel(channel.id);
+        expect(publish).not.toHaveBeenCalled();
+        expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('rejects unknown channels and removes the local callback after failed registration', async () => {
+        const { client, factory, publisher } = setup();
+        const a = client('a');
+        const channel = factory.createPublicChannel({ id: 'missing', type: 'app' }, a.app, a.provider);
+        const handler = vi.fn();
+        await expect(channel.addEventListener('contextCleared', handler)).rejects.toThrow(ChannelError.NoChannelFound);
+        publisher.publishEvent(
+            {
+                type: 'contextClearedEvent',
+                meta: { eventUuid: 'event', timestamp: new Date() },
+                payload: { channelId: 'missing', contextType: null },
+            },
+            [a.app],
+        );
+        expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('does not allow another app to remove a scoped subscription', async () => {
+        const { client, server, eventListeners } = setup();
+        const a = client('a'),
+            b = client('b');
+        const channel = await a.agent.getOrCreateChannel('shared');
+        const remote = await b.agent.getOrCreateChannel('shared');
+        const handler = vi.fn();
+        await channel.addEventListener('contextCleared', handler);
+        const listenerUUID = eventListeners.contextCleared![0].listenerUUID;
+        server.onEventListenerUnsubscribeRequest(
+            createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
+                'eventListenerUnsubscribeRequest',
+                b.app,
+                { listenerUUID },
+            ),
+            b.app,
+            eventListeners,
+        );
+        await remote.clearContext();
+        expect(handler).toHaveBeenCalledTimes(1);
     });
 });

@@ -39,6 +39,10 @@ describe(`event-type.helper`, () => {
             expect(result).toEqual('userChannelChanged');
         });
 
+        it('maps CONTEXT_CLEARED to its own listener group', () => {
+            expect(convertToEventListenerIndex('CONTEXT_CLEARED')).toBe('contextCleared');
+        });
+
         it(`should return 'allEvents' if type === null`, () => {
             const result = convertToEventListenerIndex(null);
             expect(result).toEqual('allEvents');

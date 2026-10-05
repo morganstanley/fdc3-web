@@ -24,9 +24,11 @@ import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contrac
 import {
     createRequestMessage,
     generateUUID,
+    isAddEventListenerResponse,
     isAppEventMessage,
     isBroadcastResponse,
     isClearContextResponse,
+    isEventListenerUnsubscribeResponse,
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { ContextListener } from './channel.contracts.js';
@@ -129,6 +131,35 @@ export class PublicChannel extends MessagingBase implements Channel {
                 });
             }
         });
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
+        try {
+            const response = await this.getResponse(
+                createRequestMessage<BrowserTypes.AddEventListenerRequest>(
+                    'addEventListenerRequest',
+                    this.appIdentifier,
+                    { type: type === 'contextCleared' ? 'CONTEXT_CLEARED' : null, channelId: this.id },
+                ),
+                isAddEventListenerResponse,
+            );
+            if (response.payload.error != null) throw new Error(response.payload.error);
+            const registeredUUID = response.payload.listenerUUID;
+            if (registeredUUID == null) throw new Error('listenerUUID is null');
+            return {
+                unsubscribe: async () => {
+                    const result = await this.getResponse(
+                        createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
+                            'eventListenerUnsubscribeRequest',
+                            this.appIdentifier,
+                            { listenerUUID: registeredUUID },
+                        ),
+                        isEventListenerUnsubscribeResponse,
+                    );
+                    if (result.payload.error != null) throw new Error(result.payload.error);
+                    await this.removeMessageCallback(listenerUUID);
+                },
+            };
+        } catch (error) {
+            await this.removeMessageCallback(listenerUUID);
+            throw error;
+        }
     }
 }

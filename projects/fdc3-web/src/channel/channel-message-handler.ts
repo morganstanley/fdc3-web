@@ -10,8 +10,8 @@
 
 import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes, ResolveError } from '@finos/fdc3';
 import { IRootPublisher } from '../contracts.internal.js';
-import { EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
-import { convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
+import { EventListenerKey, EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
+import { convertToEventListenerIndex, convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
 import {
     appInstanceEquals,
     createContextMetadata,
@@ -60,17 +60,83 @@ type PrivateChannelInfo = ChannelContextHistory & { allowedList: FullyQualifiedA
  */
 export class ChannelMessageHandler {
     private contextSequence = 0;
-    // Channel events register locally in the proxy. Retain recipients while they hold handles,
-    // just as channel objects themselves are retained until the application disconnects.
-    private readonly channelRecipients = new Map<string, Map<string, FullyQualifiedAppIdentifier>>();
-
-    public trackChannelRecipient(channelId: string, app: FullyQualifiedAppIdentifier): void {
-        let recipients = this.channelRecipients.get(channelId);
-        if (recipients == null) {
-            recipients = new Map();
-            this.channelRecipients.set(channelId, recipients);
+    public onAddEventListenerRequest(
+        requestMessage: BrowserTypes.AddEventListenerRequest,
+        source: FullyQualifiedAppIdentifier,
+        eventListeners: EventListenerLookup,
+    ): void {
+        const { channelId, type } = requestMessage.payload;
+        const error =
+            channelId !== null && !this.isAppAllowedOnChannel(source, channelId)
+                ? ChannelError.AccessDenied
+                : channelId !== null &&
+                    !this.appChannels[channelId] &&
+                    !this.privateChannels[channelId] &&
+                    !recommendedChannels.some(channel => channel.id === channelId)
+                  ? ChannelError.NoChannelFound
+                  : undefined;
+        if (error != null) {
+            this.messagingProvider.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddEventListenerResponse>(
+                    'addEventListenerResponse',
+                    { error },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
         }
-        recipients.set(app.instanceId, app);
+        const eventType = convertToEventListenerIndex(type);
+        const listeners = eventListeners[eventType] ?? (eventListeners[eventType] = []);
+
+        const listenerUUID = generateUUID();
+
+        listeners.push({ appIdentifier: source, listenerUUID, channelId });
+
+        this.messagingProvider.publishResponseMessage(
+            createResponseMessage<BrowserTypes.AddEventListenerResponse>(
+                'addEventListenerResponse',
+                { listenerUUID },
+                requestMessage.meta.requestUuid,
+                source,
+            ),
+            source,
+        );
+    }
+
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    /**
+     * Remove event listener which source app has unsubscribed from
+     */
+    public onEventListenerUnsubscribeRequest(
+        requestMessage: BrowserTypes.EventListenerUnsubscribeRequest,
+        source: FullyQualifiedAppIdentifier,
+        eventListeners: EventListenerLookup,
+    ): void {
+        const eventType = Object.entries(eventListeners).find(([_, listenerPairs]) =>
+            listenerPairs.some(
+                pair =>
+                    pair.listenerUUID === requestMessage.payload.listenerUUID &&
+                    appInstanceEquals(pair.appIdentifier, source),
+            ),
+        )?.[0] as EventListenerKey | undefined;
+
+        if (eventType != null) {
+            const listeners = eventListeners[eventType];
+            const newListeners = listeners?.filter(pair => pair.listenerUUID != requestMessage.payload.listenerUUID);
+            eventListeners[eventType] = newListeners;
+        }
+
+        this.messagingProvider.publishResponseMessage(
+            createResponseMessage<BrowserTypes.EventListenerUnsubscribeResponse>(
+                'eventListenerUnsubscribeResponse',
+                {},
+                requestMessage.meta.requestUuid,
+                source,
+            ),
+            source,
+        );
     }
 
     private currentUserChannels: Partial<Record<string, BrowserTypes.Channel>> = {}; //indexed by instanceId
@@ -116,7 +182,6 @@ export class ChannelMessageHandler {
         requestMessage: BrowserTypes.GetUserChannelsRequest,
         source: FullyQualifiedAppIdentifier,
     ): void {
-        for (const channel of recommendedChannels) this.trackChannelRecipient(channel.id, source);
         //user channels available are those defined by the FDC3 spec and stored in recommendedChannels
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.GetUserChannelsResponse>(
@@ -134,8 +199,6 @@ export class ChannelMessageHandler {
         requestMessage: BrowserTypes.GetCurrentChannelRequest,
         source: FullyQualifiedAppIdentifier,
     ): void {
-        const channel = this.currentUserChannels[source.instanceId];
-        if (channel != null) this.trackChannelRecipient(channel.id, source);
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.GetCurrentChannelResponse>(
                 'getCurrentChannelResponse',
@@ -168,7 +231,6 @@ export class ChannelMessageHandler {
         }
 
         if (channel == null) return;
-        this.trackChannelRecipient(channel.id, source);
         this.currentUserChannels[source.instanceId] = channel;
 
         //only send ChannelChangedEvent when origin app is listening for them
@@ -219,11 +281,13 @@ export class ChannelMessageHandler {
         source: FullyQualifiedAppIdentifier,
     ): boolean {
         return (
-            (eventListeners['userChannelChanged']?.some(listenerPair =>
-                appInstanceEquals(listenerPair.appIdentifier, source),
+            (eventListeners['userChannelChanged']?.some(
+                listenerPair =>
+                    listenerPair.channelId === null && appInstanceEquals(listenerPair.appIdentifier, source),
             ) ||
-                eventListeners['allEvents']?.some(listenerPair =>
-                    appInstanceEquals(listenerPair.appIdentifier, source),
+                eventListeners['allEvents']?.some(
+                    listenerPair =>
+                        listenerPair.channelId === null && appInstanceEquals(listenerPair.appIdentifier, source),
                 )) ??
             false
         );
@@ -359,7 +423,6 @@ export class ChannelMessageHandler {
      * @param app is appIdentifier of app being added to allowedList
      */
     public addToPrivateChannelAllowedList(channelId: string, app: FullyQualifiedAppIdentifier): void {
-        this.trackChannelRecipient(channelId, app);
         this.privateChannels[channelId]?.allowedList.push(app);
     }
 
@@ -384,8 +447,6 @@ export class ChannelMessageHandler {
 
             return;
         }
-
-        this.trackChannelRecipient(requestMessage.payload.channelId, source);
 
         //check if channel is a current app channel
         const appChannel = this.appChannels[requestMessage.payload.channelId]?.channel;
@@ -877,6 +938,7 @@ export class ChannelMessageHandler {
     public onClearContextRequest(
         requestMessage: BrowserTypes.ClearContextRequest,
         source: FullyQualifiedAppIdentifier,
+        eventListeners: EventListenerLookup,
     ): void {
         if (!this.isAppAllowedOnChannel(source, requestMessage.payload.channelId)) {
             //origin app is not allowed to clear context on given private channel
@@ -895,12 +957,19 @@ export class ChannelMessageHandler {
 
         const { channelId, contextType } = requestMessage.payload;
         this.clearChannelHistory(channelId, contextType);
-        const recipients = new Map(this.channelRecipients.get(channelId));
-        recipients.set(source.instanceId, source);
-        for (const app of this.privateChannels[channelId]?.allowedList ?? []) recipients.set(app.instanceId, app);
-        for (const listener of this.contextListeners[channelId] ?? [])
-            recipients.set(listener.source.instanceId, listener.source);
-        const allowed = [...recipients.values()].filter(app => this.isAppAllowedOnChannel(app, channelId));
+        const recipients = new Map<string, FullyQualifiedAppIdentifier>();
+        for (const listener of [...(eventListeners.contextCleared ?? []), ...(eventListeners.allEvents ?? [])]) {
+            const app = listener.appIdentifier;
+            const scopedChannelId = listener.channelId ?? this.currentUserChannels[app.instanceId]?.id;
+            if (
+                scopedChannelId === channelId &&
+                !appInstanceEquals(app, source) &&
+                this.isAppAllowedOnChannel(app, channelId)
+            ) {
+                recipients.set(app.instanceId, app);
+            }
+        }
+        const allowed = [...recipients.values()];
         if (isNonEmptyArray(allowed)) {
             this.messagingProvider.publishEvent(
                 createEvent<BrowserTypes.ContextClearedEvent>('contextClearedEvent', { channelId, contextType }),
@@ -1017,7 +1086,6 @@ export class ChannelMessageHandler {
      * @param appId The app ID of the disconnected proxy
      */
     public cleanupDisconnectedProxy(appId: FullyQualifiedAppIdentifier): void {
-        for (const recipients of this.channelRecipients.values()) recipients.delete(appId.instanceId);
         // Remove the app from the currentUserChannels mapping if it exists.
         this.removeFromCurrentUserChannels(appId);
 

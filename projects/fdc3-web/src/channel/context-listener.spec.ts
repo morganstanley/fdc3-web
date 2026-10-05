@@ -326,6 +326,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                         meta: createExpectedRequestMeta(),
                         payload: {
                             type: 'USER_CHANNEL_CHANGED',
+                            channelId: null,
                         },
                         type: 'addEventListenerRequest',
                     };

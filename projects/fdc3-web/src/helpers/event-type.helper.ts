@@ -30,8 +30,15 @@ export function convertToFDC3EventTypes(type: BrowserTypes.EventMessageType): FD
     }
 }
 
-export function convertToEventListenerIndex(type: 'USER_CHANNEL_CHANGED' | null): EventListenerKey {
-    return type === 'USER_CHANNEL_CHANGED' ? 'userChannelChanged' : 'allEvents';
+export function convertToEventListenerIndex(type: BrowserTypes.FDC3EventType | null): EventListenerKey {
+    switch (type) {
+        case 'USER_CHANNEL_CHANGED':
+            return 'userChannelChanged';
+        case 'CONTEXT_CLEARED':
+            return 'contextCleared';
+        case null:
+            return 'allEvents';
+    }
 }
 
 export function convertToPrivateChannelEventTypes(

@@ -239,7 +239,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                userChannelChanged: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                userChannelChanged: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             const joinUserChannelRequest: BrowserTypes.JoinUserChannelRequest = {
@@ -273,7 +273,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                allEvents: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                allEvents: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             const joinUserChannelRequest: BrowserTypes.JoinUserChannelRequest = {
@@ -411,7 +411,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                userChannelChanged: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                userChannelChanged: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             mockJoinChannel(recommendedChannels[1], instance);
@@ -447,7 +447,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                allEvents: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                allEvents: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             mockJoinChannel(recommendedChannels[1], instance);
@@ -1650,6 +1650,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                     payload: { channelId: mockedChannelId, contextType: 'latest' },
                 },
                 source,
+                {},
             );
 
             const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {

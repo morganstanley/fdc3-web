@@ -193,6 +193,7 @@ tests.forEach(({ proxy }) => {
                     meta: createExpectedRequestMeta(),
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };
@@ -215,6 +216,7 @@ tests.forEach(({ proxy }) => {
                     meta: createExpectedRequestMeta(),
                     payload: {
                         type: null,
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };

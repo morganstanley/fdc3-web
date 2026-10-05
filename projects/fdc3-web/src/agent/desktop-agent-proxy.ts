@@ -107,7 +107,15 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
-            { type: type === 'userChannelChanged' ? 'USER_CHANNEL_CHANGED' : null },
+            {
+                type:
+                    type === 'userChannelChanged'
+                        ? 'USER_CHANNEL_CHANGED'
+                        : type === 'contextCleared'
+                          ? 'CONTEXT_CLEARED'
+                          : null,
+                channelId: null,
+            },
         );
 
         const response = await this.getResponse(message, isAddEventListenerResponse);
@@ -121,6 +129,14 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         }
 
         let currentChannelId: string | null = null;
+        // A context-cleared-only subscription also tracks membership changes locally so
+        // events delivered for other channel handles on this app cannot reach this handler.
+        const channelChanges =
+            type === 'contextCleared'
+                ? await this.addEventListener('userChannelChanged', event => {
+                      currentChannelId = event.details.newChannelId ?? null;
+                  })
+                : undefined;
         if (type !== 'userChannelChanged') currentChannelId = (await this.getCurrentChannel())?.id ?? null;
 
         this.addMessageCallback(listenerUUID, message => {
@@ -154,7 +170,8 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
 
             await this.getResponse(eventListenerUnsubscribeRequest, isEventListenerUnsubscribeResponse);
 
-            this.removeMessageCallback(listenerUUID);
+            await this.removeMessageCallback(listenerUUID);
+            await channelChanges?.unsubscribe();
         };
         return { unsubscribe };
     }
