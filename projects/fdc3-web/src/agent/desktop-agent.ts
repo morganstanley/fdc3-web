@@ -364,7 +364,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         context?: Context,
         timeout: number = 15000,
     ): Promise<void> {
-        const hasMatchingListener = () =>
+        const hasMatchingListener = (): boolean | undefined =>
             this.intentListeners[intent]?.some(
                 pair =>
                     appInstanceEquals(pair.appIdentifier, chosenApp) &&
@@ -555,7 +555,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                           intentResult: requestMessage.payload.intentResult,
                           resultMetadata: createContextMetadata(source, {
                               ...requestMessage.payload.metadata,
-                              // Result trace IDs are controlled by the agent, unlike broadcast metadata.
+                              // getResultMetadata gives the agent's trace ID precedence over the handler's.
+                              // We use a fresh result trace; DACP UUIDs correlate it with the request.
                               traceId: generateUUID(),
                           }),
                       },

@@ -17,7 +17,7 @@ test('GAP-001: overlapping context listeners each receive a broadcast exactly on
     await receiver.call('addContextListener', [null, handler('first')], 'channel');
     await receiver.call('addContextListener', [null, handler('second')], 'channel');
     await sender.call('broadcast', [instrument], 'channel');
-    await receiver.received('second', [instrument]);
+    await receiver.received('second', [instrument, expect.any(Object)]);
     // An acknowledged read in the receiver follows the queued broadcast deliveries.
     await receiver.call('getCurrentContext', [], 'channel');
     await receiver.eventCount('first', 1);
@@ -39,7 +39,10 @@ for (const method of ['findIntent', 'findIntentsByContext']) {
     });
 }
 
-test('GAP-004: agent traceId takes precedence over intent result metadata traceId', async ({ sender, receiver }) => {
+test('GAP-004: agent creates a fresh result traceId distinct from request and handler traceIds', async ({
+    sender,
+    receiver,
+}) => {
     await receiver.call('addIntentListener', [
         'TraceIntent',
         handler('intent', { context: reply, metadata: { traceId: 'handler-trace' } }),

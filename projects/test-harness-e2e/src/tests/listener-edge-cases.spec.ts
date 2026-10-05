@@ -25,7 +25,7 @@ test('Channel.addContextListener does not replay context already on the channel'
     await sender.call('broadcast', [instrument], 'channel');
     await receiver.call('addContextListener', [null, handler('late')], 'channel');
     await sender.call('broadcast', [contact], 'channel');
-    await receiver.received('late', [contact]);
+    await receiver.received('late', [contact, expect.any(Object)]);
     await receiver.eventCount('late', 1);
 });
 
@@ -38,12 +38,12 @@ test('DesktopAgent.addContextListener replays existing user context and follows 
     await sender.call('broadcast', [instrument]);
     await receiver.call('joinUserChannel', [first.id]);
     await receiver.call('addContextListener', [instrument.type, handler('replayed')]);
-    await receiver.received('replayed', [instrument]);
+    await receiver.received('replayed', [instrument, expect.any(Object)]);
     await sender.call('joinUserChannel', [second.id]);
     const updated = { ...instrument, id: { ticker: 'AAPL' } };
     await sender.call('broadcast', [updated]);
     await receiver.call('joinUserChannel', [second.id]);
-    await receiver.received('replayed', [updated]);
+    await receiver.received('replayed', [updated, expect.any(Object)]);
     await receiver.eventCount('replayed', 2);
 });
 
@@ -56,7 +56,7 @@ test('cleared context is not replayed to new user-channel listeners', async ({ s
     await receiver.call('joinUserChannel', [channel.id]);
     await receiver.call('addContextListener', [null, handler('late')]);
     await sender.call('broadcast', [contact]);
-    await receiver.received('late', [contact]);
+    await receiver.received('late', [contact, expect.any(Object)]);
     await receiver.eventCount('late', 1);
 });
 

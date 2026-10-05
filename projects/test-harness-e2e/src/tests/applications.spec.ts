@@ -69,9 +69,10 @@ for (const variant of ['omitted', 'null', 'context', 'context and metadata', 'me
         await opened.ready();
         if (variant === 'context' || variant === 'context and metadata') {
             await opened.call('addContextListener', [null, handler('initial')]);
-            await opened.received('initial', [instrument]);
-            if (variant === 'context and metadata')
-                await opened.received('initial', [expect.objectContaining(metadata)]);
+            await opened.received('initial', [
+                instrument,
+                variant === 'context and metadata' ? expect.objectContaining(metadata) : expect.any(Object),
+            ]);
         }
         const identity = await sender.success();
         await check('open returns the newly connected instance', identity, await opened.identity());

@@ -76,7 +76,7 @@ for (const filter of [undefined, 'fdc3.instrument', ['fdc3.instrument', 'fdc3.co
             resolution,
             expect.objectContaining({ intent: 'DynamicIntent', source: target }),
         );
-        await receiver.received('intent', [instrument]);
+        await receiver.received('intent', [instrument, expect.any(Object)]);
         await check('getResult delivers handler context', await sender.call('getResult', [], 'resolution'), reply);
         await receiver.rejects('addIntentListener', ['DynamicIntent', handler('conflict')], 'IntentListenerConflict');
         await receiver.call('unsubscribe', [], 'listener');
@@ -107,9 +107,10 @@ for (const variation of variations) {
             variation.args.length === 0 || variation.args[0] === null || variation.args[0] === omitted
                 ? { type: 'fdc3.nothing' }
                 : variation.args[0];
-        await receiver.received('intent', [context]);
-        if (variation.name.startsWith('metadata'))
-            await receiver.received('intent', [expect.objectContaining(metadata)]);
+        await receiver.received('intent', [
+            context,
+            variation.name.startsWith('metadata') ? expect.objectContaining(metadata) : expect.any(Object),
+        ]);
         await check('getResult returns the listener result', await sender.call('getResult', [], 'resolution'), reply);
     });
 }
@@ -134,8 +135,10 @@ for (const mode of ['omitted', 'app', 'instance', 'existing', 'nulls', 'metadata
         await sender.start('raiseIntentForContext', [context, ...optional], 'agent', 'resolution');
         await sender.selectResolver(target, 'ContextIntent');
         await sender.success();
-        await receiver.received('intent', [context]);
-        if (mode === 'metadata') await receiver.received('intent', [expect.objectContaining(metadata)]);
+        await receiver.received('intent', [
+            context,
+            mode === 'metadata' ? expect.objectContaining(metadata) : expect.any(Object),
+        ]);
         await check(
             'result is returned for the resolved context intent',
             await sender.call('getResult', [], 'resolution'),
@@ -196,7 +199,7 @@ test('context-specific intent listeners can coexist for disjoint types', async (
     await receiver.call('addIntentListenerWithContext', ['FilteredIntent', contact.type, handler('contact', contact)]);
     const target = await receiver.identity();
     await sender.call('raiseIntent', ['FilteredIntent', contact, target], 'agent', 'resolution');
-    await receiver.received('contact', [contact]);
+    await receiver.received('contact', [contact, expect.any(Object)]);
     // getResult resolves only after the matching handler has run, so any wrong delivery has been queued before the count check.
     await check(
         'only the matching handler supplies the result',

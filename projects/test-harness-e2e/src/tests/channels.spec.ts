@@ -40,7 +40,7 @@ for (const filter of [null, 'fdc3.instrument', ['fdc3.instrument', 'fdc3.contact
             // A second active listener provides an ordering barrier for the negative assertion.
             await receiver.call('addContextListener', [null, handler('barrier')]);
             await sender.call('broadcast', [contact]);
-            await receiver.received('barrier', [contact]);
+            await receiver.received('barrier', [contact, expect.any(Object)]);
             await receiver.eventCount('broadcasts', 1);
         });
     }
@@ -151,13 +151,13 @@ for (const filter of [null, 'fdc3.instrument', ['fdc3.instrument', 'fdc3.contact
         await receiver.call('getOrCreateChannel', ['shared'], 'agent', 'channel');
         await receiver.call('addContextListener', [filter, handler('contexts')], 'channel', 'listener');
         await sender.call('broadcast', [instrument], 'channel');
-        await receiver.received('contexts', [instrument]);
+        await receiver.received('contexts', [instrument, expect.any(Object)]);
         await sender.call('broadcast', [contact], 'channel');
         await receiver.eventCount('contexts', typeof filter === 'string' ? 1 : 2);
         await receiver.call('unsubscribe', [], 'listener');
         await receiver.call('addContextListener', [null, handler('barrier')], 'channel');
         await sender.call('broadcast', [instrument], 'channel');
-        await receiver.received('barrier', [instrument]);
+        await receiver.received('barrier', [instrument, expect.any(Object)]);
         await receiver.eventCount('contexts', typeof filter === 'string' ? 1 : 2);
     });
 }

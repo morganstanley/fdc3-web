@@ -172,12 +172,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 if (context === mockedContextWithNoIntents) {
                     return [];
                 } else if (context === mockedContextWithNoApps) {
-                    return [
-                        {
-                            intent: { name: mockedUnresolvableIntent, displayName: mockedUnresolvableIntent },
-                            apps: [],
-                        },
-                    ];
+                    // The directory excludes intents with no matching apps.
+                    return [];
                 }
                 return [
                     {
@@ -1267,6 +1263,33 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(replies).toContainEqual([
                     expect.objectContaining({ type: 'intentResultResponse', payload: {} }),
                     source,
+                ]);
+            });
+
+            it.each([
+                ...Object.values(ResultError).map(error => ({ error, expected: error })),
+                ...['UnknownError', '', 42, false, { message: 'failure' }].map(error => ({
+                    error,
+                    expected: ResultError.IntentHandlerRejected,
+                })),
+            ])('normalizes untrusted intent-result error $error to $expected', async ({ error, expected }) => {
+                createInstance();
+                await postRequestMessage(
+                    {
+                        type: 'intentResultRequest',
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        payload: {
+                            intentEventUuid: 'failed-event',
+                            raiseIntentRequestUuid: JSON.stringify({ ...originalSource, uuid: raiseIntentRequestUuid }),
+                            intentResult: {},
+                            error,
+                        },
+                    } as IntentResultRequest,
+                    source,
+                );
+                expect(mockRootPublisher.functionCallLookup.publishResponseMessage).toContainEqual([
+                    expect.objectContaining({ type: 'raiseIntentResultResponse', payload: { error: expected } }),
+                    originalSource,
                 ]);
             });
 
