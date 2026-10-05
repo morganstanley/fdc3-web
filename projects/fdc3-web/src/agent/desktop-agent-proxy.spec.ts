@@ -253,7 +253,12 @@ tests.forEach(({ proxy }) => {
                 expect(typeof listener.unsubscribe).toBe('function');
             });
 
-            it('should call event handler and pass it FDC3Event object when AgentEventMessage of correct type is received', async () => {
+            it.each([
+                { currentChannelId: mockedChannelId },
+                { newChannelId: mockedChannelId },
+                { currentChannelId: null },
+                { newChannelId: null },
+            ])('maps channel changes to API event details for %j', async payload => {
                 const mockedListenerUuid: string = `mocked-listener-uuid`;
 
                 const instance = await createInstance();
@@ -279,16 +284,14 @@ tests.forEach(({ proxy }) => {
                         eventUuid: 'mocked-event-uuid',
                         timestamp: currentDate,
                     },
-                    payload: {
-                        newChannelId: mockedChannelId,
-                    },
+                    payload,
                 };
 
                 postMessage(channelChangedEvent);
                 expect(
                     mockHandler.withFunction('handler').withParametersEqualTo({
                         type: 'userChannelChanged',
-                        details: { currentChannelId: mockedChannelId },
+                        details: { currentChannelId: payload.currentChannelId ?? payload.newChannelId ?? null },
                     }),
                 ).wasCalledOnce();
             });

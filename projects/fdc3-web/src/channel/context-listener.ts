@@ -274,7 +274,7 @@ export class ContextListener extends MessagingBase implements ContextListener {
         this.addMessageCallback(listenerUUID, async message => {
             //TODO: filter by appIdentifier?? https://github.com/finos/FDC3/issues/1313
             if (isChannelChangedEvent(message)) {
-                this._id = message.payload.newChannelId;
+                this._id = message.payload.currentChannelId ?? message.payload.newChannelId ?? null;
                 //gets current context for channel whenever app joins new user channel
                 await this.replayCurrentContext(contextType, contextHandler);
             }

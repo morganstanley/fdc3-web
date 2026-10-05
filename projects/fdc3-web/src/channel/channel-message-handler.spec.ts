@@ -260,7 +260,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: recommendedChannels[1].id,
+                    currentChannelId: recommendedChannels[1].id,
                 },
             };
 
@@ -294,7 +294,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: recommendedChannels[1].id,
+                    currentChannelId: recommendedChannels[1].id,
                 },
             };
 
@@ -326,7 +326,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: recommendedChannels[1].id,
+                    currentChannelId: recommendedChannels[1].id,
                 },
             };
 
@@ -434,7 +434,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: null,
+                    currentChannelId: null,
                 },
             };
 
@@ -470,7 +470,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: null,
+                    currentChannelId: null,
                 },
             };
 
@@ -504,7 +504,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: null,
+                    currentChannelId: null,
                 },
             };
 

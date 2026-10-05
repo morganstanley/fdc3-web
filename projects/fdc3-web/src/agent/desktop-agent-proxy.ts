@@ -129,20 +129,14 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         }
 
         let currentChannelId: string | null = null;
-        // A context-cleared-only subscription also tracks membership changes locally so
-        // events delivered for other channel handles on this app cannot reach this handler.
-        const channelChanges =
-            type === 'contextCleared'
-                ? await this.addEventListener('userChannelChanged', event => {
-                      currentChannelId = event.details.currentChannelId ?? null;
-                  })
-                : undefined;
-        if (type !== 'userChannelChanged') currentChannelId = (await this.getCurrentChannel())?.id ?? null;
+        let membershipChanged = false;
+        let channelChanges: Listener | undefined;
 
         this.addMessageCallback(listenerUUID, message => {
             //convert between EventMessageType and FDC3EventTypes
             if (isAppEventMessage(message)) {
                 if (message.type === 'channelChangedEvent') {
+                    membershipChanged = true;
                     currentChannelId = message.payload.currentChannelId ?? message.payload.newChannelId ?? null;
                 }
                 if (message.type === 'contextClearedEvent') {
@@ -158,10 +152,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 if (eventType != null && (eventType === type || type == null)) {
                     handler({
                         type: eventType,
-                        details:
-                            message.type === 'channelChangedEvent'
-                                ? { currentChannelId: message.payload.newChannelId }
-                                : message.payload,
+                        details: message.type === 'channelChangedEvent' ? { currentChannelId } : message.payload,
                     });
                 }
             }
@@ -174,11 +165,33 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 { listenerUUID },
             );
 
-            await this.getResponse(eventListenerUnsubscribeRequest, isEventListenerUnsubscribeResponse);
-
-            await this.removeMessageCallback(listenerUUID);
-            await channelChanges?.unsubscribe();
+            try {
+                await this.getResponse(eventListenerUnsubscribeRequest, isEventListenerUnsubscribeResponse);
+            } finally {
+                await this.removeMessageCallback(listenerUUID);
+                await channelChanges?.unsubscribe();
+            }
         };
+
+        try {
+            // A context-cleared-only subscription also requests membership changes so
+            // events delivered for other channel handles cannot reach this handler.
+            if (type === 'contextCleared') {
+                channelChanges = await this.addEventListener('userChannelChanged', event => {
+                    membershipChanged = true;
+                    currentChannelId = event.details.currentChannelId ?? null;
+                });
+            }
+            if (type !== 'userChannelChanged') {
+                const currentChannel = await this.getCurrentChannel();
+                // Events received during setup are newer than the channel snapshot.
+                if (!membershipChanged) currentChannelId = currentChannel?.id ?? null;
+            }
+        } catch (error) {
+            // Preserve the setup error even if remote cleanup also fails.
+            await Promise.allSettled([unsubscribe()]);
+            throw error;
+        }
         return { unsubscribe };
     }
 

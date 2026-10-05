@@ -295,14 +295,14 @@ export class ChannelMessageHandler {
 
     /**
      * Publishes a ChannelChangedEvent to the origin app
-     * @param newChannelId is the channelId of the user channel the user has joined or null if the user is now not joined to a user channel;
+     * @param currentChannelId is the channelId of the user channel the user has joined or null if the user is now not joined to a user channel;
      * @param messagingProvider is used to publish the event
      * @param source is the appIdentifier of the origin app
      */
-    private publishChannelChangedEvent(newChannelId: string | null, source: FullyQualifiedAppIdentifier): void {
+    private publishChannelChangedEvent(currentChannelId: string | null, source: FullyQualifiedAppIdentifier): void {
         this.messagingProvider.publishEvent(
             createEvent<BrowserTypes.ChannelChangedEvent>('channelChangedEvent', {
-                newChannelId,
+                currentChannelId,
             }),
             [source],
         );

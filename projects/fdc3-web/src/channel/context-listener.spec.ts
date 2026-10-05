@@ -340,49 +340,50 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     ).wasCalledOnce();
                 });
 
-                it(`should request latest context for channel and pass it to listener when app joins new channel`, async () => {
-                    const instance = await createInstance(details);
+                it.each([{ currentChannelId: mockedChannelId }, { newChannelId: mockedChannelId }])(
+                    'replays context when app joins a channel with %j',
+                    async payload => {
+                        const instance = await createInstance(details);
 
-                    setupContextListenerResponse();
-                    setupAddEventListenerResponse();
-                    mockChannelSelection();
-                    setupGetCurrentContextResponse(contact);
+                        setupContextListenerResponse();
+                        setupAddEventListenerResponse();
+                        mockChannelSelection();
+                        setupGetCurrentContextResponse(contact);
 
-                    await instance.addContextListener('fdc3.contact', mockHandler.mock.handler);
+                        await instance.addContextListener('fdc3.contact', mockHandler.mock.handler);
 
-                    setupGetCurrentContextResponse(contact);
-                    mockChannelSelection(mockedChannelId);
+                        setupGetCurrentContextResponse(contact);
+                        mockChannelSelection(mockedChannelId);
 
-                    const userChannelChangedEvent: BrowserTypes.ChannelChangedEvent = {
-                        meta: { timestamp: currentDate, eventUuid: `mocked-event-uuid` },
-                        payload: {
-                            newChannelId: mockedChannelId,
-                        },
-                        type: 'channelChangedEvent',
-                    };
+                        const userChannelChangedEvent: BrowserTypes.ChannelChangedEvent = {
+                            meta: { timestamp: currentDate, eventUuid: `mocked-event-uuid` },
+                            payload,
+                            type: 'channelChangedEvent',
+                        };
 
-                    postMessage(userChannelChangedEvent);
+                        postMessage(userChannelChangedEvent);
 
-                    const expectedMessage: BrowserTypes.GetCurrentContextRequest = {
-                        meta: createExpectedRequestMeta(),
-                        payload: {
-                            channelId: mockedChannelId,
-                            contextType: 'fdc3.contact',
-                        },
-                        type: 'getCurrentContextRequest',
-                    };
+                        const expectedMessage: BrowserTypes.GetCurrentContextRequest = {
+                            meta: createExpectedRequestMeta(),
+                            payload: {
+                                channelId: mockedChannelId,
+                                contextType: 'fdc3.contact',
+                            },
+                            type: 'getCurrentContextRequest',
+                        };
 
-                    await wait();
+                        await wait();
 
-                    expect(
-                        mockMessagingProvider
-                            .withFunction('sendMessage')
-                            .withParametersEqualTo({ payload: expectedMessage }),
-                    ).wasCalledOnce();
-                    expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
-                    ).wasCalledOnce();
-                });
+                        expect(
+                            mockMessagingProvider
+                                .withFunction('sendMessage')
+                                .withParametersEqualTo({ payload: expectedMessage }),
+                        ).wasCalledOnce();
+                        expect(
+                            mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
+                        ).wasCalledOnce();
+                    },
+                );
             }
 
             it('should return promise that resolves to added context listener', async () => {
@@ -1004,7 +1005,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
         const eventListenerEvent: BrowserTypes.ChannelChangedEvent = {
             meta: { eventUuid: 'add-event-listener-event-uuid', timestamp: currentDate },
             payload: {
-                newChannelId: channelId,
+                currentChannelId: channelId,
             },
             type: 'channelChangedEvent',
         };

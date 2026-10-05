@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { type BrowserTypes, ChannelError } from '@finos/fdc3';
+import { type BrowserTypes, type Channel, ChannelError } from '@finos/fdc3';
 import { describe, expect, it, vi } from 'vitest';
 import { DesktopAgentProxy } from '../agent/desktop-agent-proxy.js';
 import type { IRootPublisher } from '../contracts.internal.js';
@@ -168,6 +168,96 @@ describe('context-cleared event delivery', () => {
                 details: expect.objectContaining({ contextType: 'fdc3.contact' }),
             }),
         );
+    });
+
+    it.each([
+        { type: 'contextCleared', leave: false },
+        { type: 'contextCleared', leave: true },
+        { type: null, leave: false },
+        { type: null, leave: true },
+    ] as const)('preserves membership changes during lookup: %j', async ({ type, leave }) => {
+        const { client } = setup();
+        const a = client('a'),
+            b = client('b');
+        const [first, second] = await a.agent.getUserChannels();
+        await b.agent.joinUserChannel(first.id);
+        // Keep an explicit handle subscribed so stale-channel events still reach this app.
+        const oldChannel = await b.agent.getOrCreateChannel(first.id);
+        await oldChannel.addEventListener('contextCleared', vi.fn());
+        let resolveLookup!: (channel: Channel | null) => void;
+        const lookup = vi.spyOn(b.agent, 'getCurrentChannel').mockImplementationOnce(
+            () =>
+                new Promise(resolve => {
+                    resolveLookup = resolve;
+                }),
+        );
+        const handler = vi.fn();
+        const subscribing = b.agent.addEventListener(type, handler);
+        await vi.waitFor(() => expect(lookup).toHaveBeenCalledOnce());
+        if (leave) await b.agent.leaveCurrentChannel();
+        else await b.agent.joinUserChannel(second.id);
+        resolveLookup(first);
+        const listener = await subscribing;
+        handler.mockClear();
+        await first.clearContext();
+        expect(handler).not.toHaveBeenCalled();
+        await second.clearContext();
+        expect(handler).toHaveBeenCalledTimes(leave ? 0 : 1);
+        if (!leave)
+            expect(handler).toHaveBeenLastCalledWith({
+                type: 'contextCleared',
+                details: { channelId: second.id, contextType: null },
+            });
+        await listener.unsubscribe();
+    });
+
+    it.each(['subscription', 'lookup'] as const)('cleans up when membership %s fails', async failure => {
+        const { client, publisher, server, eventListeners } = setup();
+        const a = client('a');
+        const error = ChannelError.AccessDenied;
+        if (failure === 'subscription') {
+            const register = server.onAddEventListenerRequest.bind(server);
+            vi.spyOn(server, 'onAddEventListenerRequest').mockImplementation((request, app, listeners) => {
+                if (request.payload.type === 'USER_CHANNEL_CHANGED') {
+                    publisher.publishResponseMessage(
+                        {
+                            type: 'addEventListenerResponse',
+                            meta: {
+                                requestUuid: request.meta.requestUuid,
+                                responseUuid: 'failed',
+                                timestamp: new Date(),
+                            },
+                            payload: { error },
+                        },
+                        app,
+                    );
+                } else register(request, app, listeners);
+            });
+        } else vi.spyOn(a.agent, 'getCurrentChannel').mockRejectedValueOnce(error);
+        const handler = vi.fn();
+        const send = vi.spyOn(a.provider, 'sendMessage');
+        await expect(a.agent.addEventListener('contextCleared', handler)).rejects.toBe(error);
+        expect(Object.values(eventListeners).flat()).toHaveLength(0);
+        expect(
+            send.mock.calls.filter(([message]) => message.payload.type === 'eventListenerUnsubscribeRequest'),
+        ).toHaveLength(failure === 'subscription' ? 1 : 2);
+        publisher.publishEvent(
+            {
+                type: 'channelChangedEvent',
+                meta: { eventUuid: 'change', timestamp: new Date() },
+                payload: { currentChannelId: 'old' },
+            },
+            [a.app],
+        );
+        publisher.publishEvent(
+            {
+                type: 'contextClearedEvent',
+                meta: { eventUuid: 'clear', timestamp: new Date() },
+                payload: { channelId: 'old', contextType: null },
+            },
+            [a.app],
+        );
+        expect(handler).not.toHaveBeenCalled();
     });
 
     it('follows current-user-channel changes for DesktopAgent subscriptions', async () => {
