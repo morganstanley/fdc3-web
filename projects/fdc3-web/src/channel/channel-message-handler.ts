@@ -67,14 +67,16 @@ export class ChannelMessageHandler {
     ): void {
         const { channelId, type } = requestMessage.payload;
         const error =
-            channelId !== null && !this.isAppAllowedOnChannel(source, channelId)
-                ? ChannelError.AccessDenied
-                : channelId !== null &&
-                    !this.appChannels[channelId] &&
-                    !this.privateChannels[channelId] &&
-                    !recommendedChannels.some(channel => channel.id === channelId)
-                  ? ChannelError.NoChannelFound
-                  : undefined;
+            type !== null && type !== 'USER_CHANNEL_CHANGED' && type !== 'CONTEXT_CLEARED'
+                ? ResolveError.InvalidArguments
+                : channelId !== null && !this.isAppAllowedOnChannel(source, channelId)
+                  ? ChannelError.AccessDenied
+                  : channelId !== null &&
+                      !this.appChannels[channelId] &&
+                      !this.privateChannels[channelId] &&
+                      !recommendedChannels.some(channel => channel.id === channelId)
+                    ? ChannelError.NoChannelFound
+                    : undefined;
         if (error != null) {
             this.messagingProvider.publishResponseMessage(
                 createResponseMessage<BrowserTypes.AddEventListenerResponse>(

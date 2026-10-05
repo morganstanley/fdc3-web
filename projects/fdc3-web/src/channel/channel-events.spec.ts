@@ -236,7 +236,7 @@ describe('context-cleared event delivery', () => {
         } else vi.spyOn(a.agent, 'getCurrentChannel').mockRejectedValueOnce(error);
         const handler = vi.fn();
         const send = vi.spyOn(a.provider, 'sendMessage');
-        await expect(a.agent.addEventListener('contextCleared', handler)).rejects.toBe(error);
+        await expect(a.agent.addEventListener('contextCleared', handler)).rejects.toThrow(error);
         expect(Object.values(eventListeners).flat()).toHaveLength(0);
         expect(
             send.mock.calls.filter(([message]) => message.payload.type === 'eventListenerUnsubscribeRequest'),
@@ -258,6 +258,145 @@ describe('context-cleared event delivery', () => {
             [a.app],
         );
         expect(handler).not.toHaveBeenCalled();
+    });
+
+    it.each(['contextCleared', null] as const)(
+        'tracks events before the initial lookup finishes for %s',
+        async type => {
+            const { client } = setup();
+            const a = client('a'),
+                b = client('b');
+            const [channel] = await a.agent.getUserChannels();
+            let resolveLookup!: (channel: Channel | null) => void;
+            const lookup = vi.spyOn(b.agent, 'getCurrentChannel').mockImplementationOnce(
+                () =>
+                    new Promise(resolve => {
+                        resolveLookup = resolve;
+                    }),
+            );
+            const handler = vi.fn();
+            const subscribing = b.agent.addEventListener(type, handler);
+            await vi.waitFor(() => expect(lookup).toHaveBeenCalledOnce());
+            await b.agent.joinUserChannel(channel.id);
+            handler.mockClear();
+            await channel.clearContext();
+            expect(handler).toHaveBeenCalledExactlyOnceWith({
+                type: 'contextCleared',
+                details: { channelId: channel.id, contextType: null },
+            });
+            resolveLookup(null);
+            await (await subscribing).unsubscribe();
+        },
+    );
+
+    it.each(['agent', 'context'] as const)('cleans up the companion listener when %s unsubscribe fails', async kind => {
+        for (const failure of ['transport', 'response'] as const) {
+            const { client, publisher, eventListeners } = setup();
+            const a = client('a');
+            const [channel] = await a.agent.getUserChannels();
+            await a.agent.joinUserChannel(channel.id);
+            const handler = vi.fn();
+            const listener =
+                kind === 'agent'
+                    ? await a.agent.addEventListener('contextCleared', handler)
+                    : await a.agent.addContextListener(null, handler);
+            const send = a.provider.sendMessage.bind(a.provider);
+            const failedType =
+                kind === 'agent' ? 'eventListenerUnsubscribeRequest' : 'contextListenerUnsubscribeRequest';
+            let failed = false;
+            vi.spyOn(a.provider, 'sendMessage').mockImplementation(envelope => {
+                const request = envelope.payload;
+                if (!failed && request.type === failedType) {
+                    failed = true;
+                    if (failure === 'transport') throw new Error('transport failed');
+                    publisher.publishResponseMessage(
+                        {
+                            type:
+                                kind === 'agent'
+                                    ? 'eventListenerUnsubscribeResponse'
+                                    : 'contextListenerUnsubscribeResponse',
+                            meta: {
+                                requestUuid: request.meta.requestUuid,
+                                responseUuid: 'failed',
+                                timestamp: new Date(),
+                            },
+                            payload: { error: ChannelError.AccessDenied },
+                        },
+                        a.app,
+                    );
+                } else send(envelope);
+            });
+            await expect(listener.unsubscribe()).rejects.toThrow(
+                failure === 'transport' ? 'transport failed' : ChannelError.AccessDenied,
+            );
+            expect(eventListeners.userChannelChanged).toHaveLength(0);
+            publisher.publishEvent(
+                {
+                    type: 'contextClearedEvent',
+                    meta: { eventUuid: 'clear', timestamp: new Date() },
+                    payload: { channelId: channel.id, contextType: null },
+                },
+                [a.app],
+            );
+            publisher.publishEvent(
+                {
+                    type: 'broadcastEvent',
+                    meta: { eventUuid: 'broadcast', timestamp: new Date() },
+                    payload: {
+                        channelId: channel.id,
+                        context: { type: 'fdc3.contact' },
+                        metadata: {
+                            source: a.app,
+                            timestamp: new Date(),
+                            traceId: 'trace',
+                        },
+                    },
+                },
+                [a.app],
+            );
+            const sendCount = vi.mocked(a.provider.sendMessage).mock.calls.length;
+            publisher.publishEvent(
+                {
+                    type: 'channelChangedEvent',
+                    meta: { eventUuid: 'change', timestamp: new Date() },
+                    payload: { currentChannelId: channel.id },
+                },
+                [a.app],
+            );
+            expect(a.provider.sendMessage).toHaveBeenCalledTimes(sendCount);
+            expect(handler).not.toHaveBeenCalled();
+        }
+    });
+
+    it('reports a failed companion unsubscribe and removes its local callback', async () => {
+        const { client, publisher } = setup();
+        const a = client('a');
+        const listener = await a.agent.addContextListener(null, vi.fn());
+        const send = a.provider.sendMessage.bind(a.provider);
+        vi.spyOn(a.provider, 'sendMessage').mockImplementation(envelope => {
+            const request = envelope.payload;
+            if (request.type === 'eventListenerUnsubscribeRequest') {
+                publisher.publishResponseMessage(
+                    {
+                        type: 'eventListenerUnsubscribeResponse',
+                        meta: { requestUuid: request.meta.requestUuid, responseUuid: 'failed', timestamp: new Date() },
+                        payload: { error: ChannelError.AccessDenied },
+                    },
+                    a.app,
+                );
+            } else send(envelope);
+        });
+        await expect(listener.unsubscribe()).rejects.toThrow(ChannelError.AccessDenied);
+        vi.mocked(a.provider.sendMessage).mockClear();
+        publisher.publishEvent(
+            {
+                type: 'channelChangedEvent',
+                meta: { eventUuid: 'change', timestamp: new Date() },
+                payload: { currentChannelId: 'channel' },
+            },
+            [a.app],
+        );
+        expect(a.provider.sendMessage).not.toHaveBeenCalled();
     });
 
     it('follows current-user-channel changes for DesktopAgent subscriptions', async () => {
@@ -343,6 +482,39 @@ describe('array context listeners', () => {
         expect(handler).toHaveBeenCalledTimes(5);
     });
 
+    it('requests replay contexts concurrently and delivers them in filter order', async () => {
+        const { client, server } = setup();
+        const a = client('a');
+        const [first, second] = await a.agent.getUserChannels();
+        for (const channel of [first, second]) {
+            await channel.broadcast({ type: 'fdc3.contact' });
+            await channel.broadcast({ type: 'fdc3.instrument' });
+        }
+        await a.agent.joinUserChannel(first.id);
+        const respond = server.onGetCurrentContextRequest.bind(server);
+        const pending: (() => void)[] = [];
+        vi.spyOn(server, 'onGetCurrentContextRequest').mockImplementation((request, source) => {
+            pending.push(() => respond(request, source));
+        });
+        const handler = vi.fn();
+        const subscribing = a.agent.addContextListener(['fdc3.contact', 'fdc3.instrument'], handler);
+        await vi.waitFor(() => expect(pending).toHaveLength(2));
+        pending.pop()!();
+        await Promise.resolve();
+        expect(handler).not.toHaveBeenCalled();
+        pending.pop()!();
+        const listener = await subscribing;
+        expect(handler.mock.calls.map(([context]) => context.type)).toEqual(['fdc3.contact', 'fdc3.instrument']);
+        handler.mockClear();
+        await a.agent.joinUserChannel(second.id);
+        expect(pending).toHaveLength(2);
+        pending.pop()!();
+        pending.pop()!();
+        await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(2));
+        expect(handler.mock.calls.map(([context]) => context.type)).toEqual(['fdc3.contact', 'fdc3.instrument']);
+        await listener.unsubscribe();
+    });
+
     it('reports each private-channel filter on registration, late event subscription and unsubscribe', async () => {
         const { client } = setup();
         const a = client('a');
@@ -413,6 +585,39 @@ describe('array context listeners', () => {
 });
 
 describe('scoped event registration', () => {
+    it.each(['INVALID', undefined, 42])('rejects an invalid wire event type: %s', invalidType => {
+        const { server, publisher, client, eventListeners } = setup();
+        const a = client('a');
+        const response = vi.spyOn(publisher, 'publishResponseMessage');
+        server.onAddEventListenerRequest(
+            createRequestMessage<BrowserTypes.AddEventListenerRequest>('addEventListenerRequest', a.app, {
+                channelId: null,
+                type: invalidType as BrowserTypes.FDC3EventType,
+            }),
+            a.app,
+            eventListeners,
+        );
+        expect(response).toHaveBeenCalledWith(
+            expect.objectContaining({ payload: { error: 'InvalidArguments' } }),
+            a.app,
+        );
+        expect(eventListeners).toEqual({});
+    });
+
+    it('rejects invalid API event types with Error objects for both scopes', async () => {
+        const { client } = setup();
+        const a = client('a');
+        const channel = await a.agent.getOrCreateChannel('shared');
+        const send = vi.spyOn(a.provider, 'sendMessage');
+        await expect(a.agent.addEventListener('invalid' as 'contextCleared', vi.fn())).rejects.toThrow(
+            'InvalidArguments',
+        );
+        await expect(channel.addEventListener('invalid' as 'contextCleared', vi.fn())).rejects.toThrow(
+            'InvalidArguments',
+        );
+        expect(send).not.toHaveBeenCalled();
+    });
+
     it('registers channel handles over DACP and delivers once per app with multiple subscribers', async () => {
         const { client, factory, publisher } = setup();
         const a = client('a'),

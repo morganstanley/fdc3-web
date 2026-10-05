@@ -89,8 +89,9 @@ describe(`${ContextListener.name} (context-listener)`, () => {
             setupFunction('createPublicChannel', channel => createMockChannel(channel).mock),
         );
 
+        let callbackUuid = 0;
         mockedHelpers = Mock.create<typeof helpersImport>().setup(
-            setupFunction('generateUUID', () => mockedRequestUuid),
+            setupFunction('generateUUID', () => `callback-${callbackUuid++}`),
             setupFunction('getTimestamp', () => currentDate),
             setupFunction(
                 'createRequestMessage',

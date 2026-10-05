@@ -468,7 +468,7 @@ tests.forEach(({ proxy }) => {
                 };
                 postMessage(responseMessage);
 
-                await expect(listenerPromise).rejects.toStrictEqual(ResolveError.NoAppsFound);
+                await expect(listenerPromise).rejects.toThrow(ResolveError.NoAppsFound);
             });
         });
 

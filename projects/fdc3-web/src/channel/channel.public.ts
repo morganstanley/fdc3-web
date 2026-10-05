@@ -20,6 +20,7 @@ import type {
     EventHandler,
     Listener,
 } from '@finos/fdc3';
+import { ResolveError } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
@@ -114,6 +115,7 @@ export class PublicChannel extends MessagingBase implements Channel {
     }
 
     public async addEventListener(type: ChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
+        if (type !== null && type !== 'contextCleared') throw new Error(ResolveError.InvalidArguments);
         const listenerUUID = generateUUID();
         await this.addMessageCallback(listenerUUID, message => {
             if (

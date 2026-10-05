@@ -104,6 +104,9 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     public async addEventListener(type: FDC3EventTypes | null, handler: EventHandler): Promise<Listener> {
+        if (type !== null && type !== 'userChannelChanged' && type !== 'contextCleared') {
+            throw new Error(ResolveError.InvalidArguments);
+        }
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
@@ -122,10 +125,10 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
 
         const listenerUUID = response.payload.listenerUUID;
         if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
+            throw toResponseError(response.payload.error);
         } else if (listenerUUID == null) {
             //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
-            return Promise.reject('listenerUUID is null');
+            throw new Error('listenerUUID is null');
         }
 
         let currentChannelId: string | null = null;
@@ -140,6 +143,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                     currentChannelId = message.payload.currentChannelId ?? message.payload.newChannelId ?? null;
                 }
                 if (message.type === 'contextClearedEvent') {
+                    // Ignore clears until a membership event or the initial lookup seeds the channel.
                     if (type !== 'userChannelChanged' && message.payload.channelId === currentChannelId) {
                         handler({
                             type: 'contextCleared',
@@ -166,7 +170,11 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             );
 
             try {
-                await this.getResponse(eventListenerUnsubscribeRequest, isEventListenerUnsubscribeResponse);
+                const result = await this.getResponse(
+                    eventListenerUnsubscribeRequest,
+                    isEventListenerUnsubscribeResponse,
+                );
+                if (result.payload.error != null) throw toResponseError(result.payload.error);
             } finally {
                 await this.removeMessageCallback(listenerUUID);
                 await channelChanges?.unsubscribe();
@@ -190,7 +198,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         } catch (error) {
             // Preserve the setup error even if remote cleanup also fails.
             await Promise.allSettled([unsubscribe()]);
-            throw error;
+            throw error instanceof Error ? error : toResponseError(String(error));
         }
         return { unsubscribe };
     }

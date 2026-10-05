@@ -114,19 +114,38 @@ export class ContextListener extends MessagingBase implements ContextListener {
                     { listenerUUID },
                 );
 
-            await this.getResponse(contextListenerUnsubscribeRequest, isContextListenerUnsubscribeResponse);
-
-            await this.removeMessageCallback(listenerUUID);
-            if (channelListenerUUID != null) {
-                await this.getResponse(
-                    createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
-                        'eventListenerUnsubscribeRequest',
-                        this.appIdentifier,
-                        { listenerUUID: channelListenerUUID },
-                    ),
-                    isEventListenerUnsubscribeResponse,
-                );
-                await this.removeMessageCallback(channelListenerUUID);
+            // Attempt both remote removals even when one fails, and always remove local callbacks.
+            const results = await Promise.allSettled([
+                (async () => {
+                    try {
+                        const result = await this.getResponse(
+                            contextListenerUnsubscribeRequest,
+                            isContextListenerUnsubscribeResponse,
+                        );
+                        if (result.payload.error != null) throw new Error(result.payload.error);
+                    } finally {
+                        await this.removeMessageCallback(listenerUUID);
+                    }
+                })(),
+                (async () => {
+                    if (channelListenerUUID == null) return;
+                    try {
+                        const result = await this.getResponse(
+                            createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
+                                'eventListenerUnsubscribeRequest',
+                                this.appIdentifier,
+                                { listenerUUID: channelListenerUUID },
+                            ),
+                            isEventListenerUnsubscribeResponse,
+                        );
+                        if (result.payload.error != null) throw new Error(result.payload.error);
+                    } finally {
+                        await this.removeMessageCallback(channelListenerUUID);
+                    }
+                })(),
+            ]);
+            for (const result of results) {
+                if (result.status === 'rejected') throw result.reason;
             }
         };
 
@@ -260,8 +279,12 @@ export class ContextListener extends MessagingBase implements ContextListener {
         contextType: ContextType | ContextType[] | null,
         contextHandler: ContextHandler,
     ): Promise<void> {
-        for (const type of Array.isArray(contextType) ? contextType : [contextType]) {
-            const current = await this.getCurrentContextWithMetadata(type);
+        const contexts = await Promise.all(
+            (Array.isArray(contextType) ? contextType : [contextType]).map(type =>
+                this.getCurrentContextWithMetadata(type),
+            ),
+        );
+        for (const current of contexts) {
             if (current != null) contextHandler(current.context, current.metadata);
         }
     }
