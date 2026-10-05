@@ -35,7 +35,7 @@ export function convertToEventListenerIndex(type: 'USER_CHANNEL_CHANGED' | null)
 }
 
 export function convertToPrivateChannelEventTypes(
-    type: BrowserTypes.PrivateChannelEventType | PrivateChannelEventMessageTypes,
+    type: PrivateChannelEventTypes | PrivateChannelEventMessageTypes,
 ): PrivateChannelEventTypes {
     switch (type) {
         case 'privateChannelOnAddContextListenerEvent':
@@ -58,13 +58,10 @@ export function convertToPrivateChannelEventMessageTypes(
 ): PrivateChannelEventMessageTypes {
     switch (type) {
         case 'addContextListener':
-        case 'privateChannelOnAddContextListenerEvent':
             return 'privateChannelOnAddContextListenerEvent';
         case 'disconnect':
-        case 'privateChannelOnDisconnectEvent':
             return 'privateChannelOnDisconnectEvent';
         case 'unsubscribe':
-        case 'privateChannelOnUnsubscribeEvent':
             return 'privateChannelOnUnsubscribeEvent';
         case 'contextCleared':
             return 'contextClearedEvent';

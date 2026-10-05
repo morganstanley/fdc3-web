@@ -46,15 +46,14 @@ describe(`event-type.helper`, () => {
     });
 });
 
-// Both API aliases must route to the same wire event and canonical listener key.
+// API event names and wire message names have distinct conversion directions.
 describe('private channel event conversions', () => {
     it.each([
         ['addContextListener', 'privateChannelOnAddContextListenerEvent'],
         ['disconnect', 'privateChannelOnDisconnectEvent'],
         ['unsubscribe', 'privateChannelOnUnsubscribeEvent'],
-    ] as const)('normalizes %s and %s', (apiType, messageType) => {
+    ] as const)('converts %s and %s', (apiType, messageType) => {
         expect(convertToPrivateChannelEventMessageTypes(apiType)).toBe(messageType);
-        expect(convertToPrivateChannelEventMessageTypes(messageType)).toBe(messageType);
         expect(convertToPrivateChannelEventTypes(apiType)).toBe(apiType);
         expect(convertToPrivateChannelEventTypes(messageType)).toBe(apiType);
     });

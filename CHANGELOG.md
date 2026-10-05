@@ -2,6 +2,8 @@
 
 ### Changed
 
+- Align private-channel API event name conversions with FDC3 3.0 alpha.5 types.
+
 - Do not send a success response after closing the calling application (#407).
 - Include `channelId` in private-channel listener and disconnect event details (#406).
 - Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
