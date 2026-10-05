@@ -2,6 +2,14 @@
 
 ### Changed
 
+- Expose `currentChannelId` in user-channel change event details, including `null` when leaving a channel.
+
+- Register channel-scoped context-cleared events over DACP, honor subscription scope and unsubscribe, and exclude the clearing app from delivery.
+
+- Support array context filters across agents and channels, including replay, private-channel notifications, validation and listener cleanup.
+
+- Align private-channel API event name conversions with FDC3 3.0 alpha.5 types.
+
 - Do not send a success response after closing the calling application (#407).
 - Include `channelId` in private-channel listener and disconnect event details (#406).
 - Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).

@@ -220,7 +220,14 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             setupFunction('removeDisconnectedApp'),
             setupFunction('updateInstanceMetadata'),
         );
+        const eventChannelHandler = new ChannelMessageHandler(mockRootPublisher.mock);
         mockChannelHandler = Mock.create<ChannelMessageHandler>().setup(
+            setupFunction('onAddEventListenerRequest', (request, source, listeners) =>
+                eventChannelHandler.onAddEventListenerRequest(request, source, listeners),
+            ),
+            setupFunction('onEventListenerUnsubscribeRequest', (request, source, listeners) =>
+                eventChannelHandler.onEventListenerUnsubscribeRequest(request, source, listeners),
+            ),
             setupFunction('onGetUserChannelsRequest'),
             setupFunction('onGetCurrentChannelRequest'),
             setupFunction('onJoinUserChannelRequest'),
@@ -1894,6 +1901,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };
@@ -1926,6 +1934,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };
@@ -1964,7 +1973,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockEventHandler.withFunction('handler').withParametersEqualTo({
                         type: 'userChannelChanged',
-                        details: { newChannelId: mockedChannelId },
+                        details: { currentChannelId: mockedChannelId },
                     }),
                 ).wasCalledOnce();
             });
@@ -1982,6 +1991,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };

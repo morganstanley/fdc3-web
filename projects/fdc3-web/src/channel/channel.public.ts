@@ -20,13 +20,16 @@ import type {
     EventHandler,
     Listener,
 } from '@finos/fdc3';
+import { ResolveError } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
     generateUUID,
+    isAddEventListenerResponse,
     isAppEventMessage,
     isBroadcastResponse,
     isClearContextResponse,
+    isEventListenerUnsubscribeResponse,
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { ContextListener } from './channel.contracts.js';
@@ -107,11 +110,12 @@ export class PublicChannel extends MessagingBase implements Channel {
         }
     }
 
-    public addContextListener(contextType: string | null, handler: ContextHandler): Promise<Listener> {
+    public addContextListener(contextType: string | string[] | null, handler: ContextHandler): Promise<Listener> {
         return this.contextListener.addContextListener(contextType, handler);
     }
 
     public async addEventListener(type: ChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
+        if (type !== null && type !== 'contextCleared') throw new Error(ResolveError.InvalidArguments);
         const listenerUUID = generateUUID();
         await this.addMessageCallback(listenerUUID, message => {
             if (
@@ -129,6 +133,35 @@ export class PublicChannel extends MessagingBase implements Channel {
                 });
             }
         });
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
+        try {
+            const response = await this.getResponse(
+                createRequestMessage<BrowserTypes.AddEventListenerRequest>(
+                    'addEventListenerRequest',
+                    this.appIdentifier,
+                    { type: type === 'contextCleared' ? 'CONTEXT_CLEARED' : null, channelId: this.id },
+                ),
+                isAddEventListenerResponse,
+            );
+            if (response.payload.error != null) throw new Error(response.payload.error);
+            const registeredUUID = response.payload.listenerUUID;
+            if (registeredUUID == null) throw new Error('listenerUUID is null');
+            return {
+                unsubscribe: async () => {
+                    const result = await this.getResponse(
+                        createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
+                            'eventListenerUnsubscribeRequest',
+                            this.appIdentifier,
+                            { listenerUUID: registeredUUID },
+                        ),
+                        isEventListenerUnsubscribeResponse,
+                    );
+                    if (result.payload.error != null) throw new Error(result.payload.error);
+                    await this.removeMessageCallback(listenerUUID);
+                },
+            };
+        } catch (error) {
+            await this.removeMessageCallback(listenerUUID);
+            throw error;
+        }
     }
 }

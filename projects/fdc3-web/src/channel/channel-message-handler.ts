@@ -8,10 +8,10 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes } from '@finos/fdc3';
+import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes, ResolveError } from '@finos/fdc3';
 import { IRootPublisher } from '../contracts.internal.js';
-import { EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
-import { convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
+import { EventListenerKey, EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
+import { convertToEventListenerIndex, convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
 import {
     appInstanceEquals,
     createContextMetadata,
@@ -34,7 +34,7 @@ type PrivateChannelEventListener = {
 //uses 'currentChannel' constant instead of null to signify context listener is listening to contexts on current channel as null cannot be used as an index
 type ContextListenerKey = string | 'currentChannel';
 type ChannelContextListener = {
-    contextType: string | null; //null for contextType indicates listener is for all contexts
+    contextType: string | string[] | null; //null for contextType indicates listener is for all contexts
     listenerUUID: string;
     source: FullyQualifiedAppIdentifier;
 };
@@ -60,17 +60,85 @@ type PrivateChannelInfo = ChannelContextHistory & { allowedList: FullyQualifiedA
  */
 export class ChannelMessageHandler {
     private contextSequence = 0;
-    // Channel events register locally in the proxy. Retain recipients while they hold handles,
-    // just as channel objects themselves are retained until the application disconnects.
-    private readonly channelRecipients = new Map<string, Map<string, FullyQualifiedAppIdentifier>>();
-
-    public trackChannelRecipient(channelId: string, app: FullyQualifiedAppIdentifier): void {
-        let recipients = this.channelRecipients.get(channelId);
-        if (recipients == null) {
-            recipients = new Map();
-            this.channelRecipients.set(channelId, recipients);
+    public onAddEventListenerRequest(
+        requestMessage: BrowserTypes.AddEventListenerRequest,
+        source: FullyQualifiedAppIdentifier,
+        eventListeners: EventListenerLookup,
+    ): void {
+        const { channelId, type } = requestMessage.payload;
+        const error =
+            type !== null && type !== 'USER_CHANNEL_CHANGED' && type !== 'CONTEXT_CLEARED'
+                ? ResolveError.InvalidArguments
+                : channelId !== null && !this.isAppAllowedOnChannel(source, channelId)
+                  ? ChannelError.AccessDenied
+                  : channelId !== null &&
+                      !this.appChannels[channelId] &&
+                      !this.privateChannels[channelId] &&
+                      !recommendedChannels.some(channel => channel.id === channelId)
+                    ? ChannelError.NoChannelFound
+                    : undefined;
+        if (error != null) {
+            this.messagingProvider.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddEventListenerResponse>(
+                    'addEventListenerResponse',
+                    { error },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
         }
-        recipients.set(app.instanceId, app);
+        const eventType = convertToEventListenerIndex(type);
+        const listeners = eventListeners[eventType] ?? (eventListeners[eventType] = []);
+
+        const listenerUUID = generateUUID();
+
+        listeners.push({ appIdentifier: source, listenerUUID, channelId });
+
+        this.messagingProvider.publishResponseMessage(
+            createResponseMessage<BrowserTypes.AddEventListenerResponse>(
+                'addEventListenerResponse',
+                { listenerUUID },
+                requestMessage.meta.requestUuid,
+                source,
+            ),
+            source,
+        );
+    }
+
+    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
+    /**
+     * Remove event listener which source app has unsubscribed from
+     */
+    public onEventListenerUnsubscribeRequest(
+        requestMessage: BrowserTypes.EventListenerUnsubscribeRequest,
+        source: FullyQualifiedAppIdentifier,
+        eventListeners: EventListenerLookup,
+    ): void {
+        const eventType = Object.entries(eventListeners).find(([_, listenerPairs]) =>
+            listenerPairs.some(
+                pair =>
+                    pair.listenerUUID === requestMessage.payload.listenerUUID &&
+                    appInstanceEquals(pair.appIdentifier, source),
+            ),
+        )?.[0] as EventListenerKey | undefined;
+
+        if (eventType != null) {
+            const listeners = eventListeners[eventType];
+            const newListeners = listeners?.filter(pair => pair.listenerUUID != requestMessage.payload.listenerUUID);
+            eventListeners[eventType] = newListeners;
+        }
+
+        this.messagingProvider.publishResponseMessage(
+            createResponseMessage<BrowserTypes.EventListenerUnsubscribeResponse>(
+                'eventListenerUnsubscribeResponse',
+                {},
+                requestMessage.meta.requestUuid,
+                source,
+            ),
+            source,
+        );
     }
 
     private currentUserChannels: Partial<Record<string, BrowserTypes.Channel>> = {}; //indexed by instanceId
@@ -116,7 +184,6 @@ export class ChannelMessageHandler {
         requestMessage: BrowserTypes.GetUserChannelsRequest,
         source: FullyQualifiedAppIdentifier,
     ): void {
-        for (const channel of recommendedChannels) this.trackChannelRecipient(channel.id, source);
         //user channels available are those defined by the FDC3 spec and stored in recommendedChannels
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.GetUserChannelsResponse>(
@@ -134,8 +201,6 @@ export class ChannelMessageHandler {
         requestMessage: BrowserTypes.GetCurrentChannelRequest,
         source: FullyQualifiedAppIdentifier,
     ): void {
-        const channel = this.currentUserChannels[source.instanceId];
-        if (channel != null) this.trackChannelRecipient(channel.id, source);
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.GetCurrentChannelResponse>(
                 'getCurrentChannelResponse',
@@ -168,7 +233,6 @@ export class ChannelMessageHandler {
         }
 
         if (channel == null) return;
-        this.trackChannelRecipient(channel.id, source);
         this.currentUserChannels[source.instanceId] = channel;
 
         //only send ChannelChangedEvent when origin app is listening for them
@@ -219,11 +283,13 @@ export class ChannelMessageHandler {
         source: FullyQualifiedAppIdentifier,
     ): boolean {
         return (
-            (eventListeners['userChannelChanged']?.some(listenerPair =>
-                appInstanceEquals(listenerPair.appIdentifier, source),
+            (eventListeners['userChannelChanged']?.some(
+                listenerPair =>
+                    listenerPair.channelId === null && appInstanceEquals(listenerPair.appIdentifier, source),
             ) ||
-                eventListeners['allEvents']?.some(listenerPair =>
-                    appInstanceEquals(listenerPair.appIdentifier, source),
+                eventListeners['allEvents']?.some(
+                    listenerPair =>
+                        listenerPair.channelId === null && appInstanceEquals(listenerPair.appIdentifier, source),
                 )) ??
             false
         );
@@ -231,14 +297,14 @@ export class ChannelMessageHandler {
 
     /**
      * Publishes a ChannelChangedEvent to the origin app
-     * @param newChannelId is the channelId of the user channel the user has joined or null if the user is now not joined to a user channel;
+     * @param currentChannelId is the channelId of the user channel the user has joined or null if the user is now not joined to a user channel;
      * @param messagingProvider is used to publish the event
      * @param source is the appIdentifier of the origin app
      */
-    private publishChannelChangedEvent(newChannelId: string | null, source: FullyQualifiedAppIdentifier): void {
+    private publishChannelChangedEvent(currentChannelId: string | null, source: FullyQualifiedAppIdentifier): void {
         this.messagingProvider.publishEvent(
             createEvent<BrowserTypes.ChannelChangedEvent>('channelChangedEvent', {
-                newChannelId,
+                currentChannelId,
             }),
             [source],
         );
@@ -359,7 +425,6 @@ export class ChannelMessageHandler {
      * @param app is appIdentifier of app being added to allowedList
      */
     public addToPrivateChannelAllowedList(channelId: string, app: FullyQualifiedAppIdentifier): void {
-        this.trackChannelRecipient(channelId, app);
         this.privateChannels[channelId]?.allowedList.push(app);
     }
 
@@ -384,8 +449,6 @@ export class ChannelMessageHandler {
 
             return;
         }
-
-        this.trackChannelRecipient(requestMessage.payload.channelId, source);
 
         //check if channel is a current app channel
         const appChannel = this.appChannels[requestMessage.payload.channelId]?.channel;
@@ -417,6 +480,27 @@ export class ChannelMessageHandler {
         requestMessage: BrowserTypes.AddContextListenerRequest,
         source: FullyQualifiedAppIdentifier,
     ): void {
+        const { contextType: singleType, contextTypes } = requestMessage.payload;
+        if (
+            (singleType !== undefined) === (contextTypes !== undefined) ||
+            (contextTypes !== undefined &&
+                (!Array.isArray(contextTypes) ||
+                    contextTypes.length === 0 ||
+                    contextTypes.some(type => typeof type !== 'string'))) ||
+            (singleType !== undefined && singleType !== null && typeof singleType !== 'string')
+        ) {
+            this.messagingProvider.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddContextListenerResponse>(
+                    'addContextListenerResponse',
+                    { error: ResolveError.InvalidArguments },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
+        }
+        const contextType = contextTypes !== undefined ? [...new Set(contextTypes)] : (singleType ?? null);
         const channelIdIndex = this.convertToContextListenerIndex(requestMessage.payload.channelId);
 
         //if channelId is null, then channel is user channel and so origin app is allowed to listen on it
@@ -443,7 +527,7 @@ export class ChannelMessageHandler {
         const listenerUUID = generateUUID();
 
         //add new contextListener to array of contextListeners for that channelId
-        listeners.push({ contextType: requestMessage.payload.contextType, listenerUUID, source });
+        listeners.push({ contextType, listenerUUID, source });
 
         //if channel is private channel, publish privateChannelOnAddContextListenerEvent to all apps listening for them on channel
         //if message.payload.channelId == null, it is referring to the current user channel
@@ -465,7 +549,7 @@ export class ChannelMessageHandler {
 
             this.publishPrivateChannelOnAddContextListenerEvent(
                 requestMessage.payload.channelId,
-                requestMessage.payload.contextType,
+                contextType,
                 appIdentifiers,
             );
         }
@@ -480,7 +564,9 @@ export class ChannelMessageHandler {
             source,
         );
 
-        this.onContextListenerCreation(source, requestMessage.payload.contextType);
+        for (const type of Array.isArray(contextType) ? contextType : [contextType]) {
+            this.onContextListenerCreation(source, type);
+        }
     }
 
     /**
@@ -508,21 +594,23 @@ export class ChannelMessageHandler {
      */
     private publishPrivateChannelOnAddContextListenerEvent(
         channelId: string,
-        contextType: string | null,
+        contextType: string | string[] | null,
         appIdentifiers: FullyQualifiedAppIdentifier[],
     ): void {
         //only publish privateChannelOnUnsubscribeEvent if there are any apps listening for them on given channel
         if (isNonEmptyArray(appIdentifiers)) {
-            this.messagingProvider.publishEvent(
-                createEvent<BrowserTypes.PrivateChannelOnAddContextListenerEvent>(
-                    'privateChannelOnAddContextListenerEvent',
-                    {
-                        contextType,
-                        privateChannelId: channelId,
-                    },
-                ),
-                appIdentifiers,
-            );
+            for (const type of Array.isArray(contextType) ? contextType : [contextType]) {
+                this.messagingProvider.publishEvent(
+                    createEvent<BrowserTypes.PrivateChannelOnAddContextListenerEvent>(
+                        'privateChannelOnAddContextListenerEvent',
+                        {
+                            contextType: type,
+                            privateChannelId: channelId,
+                        },
+                    ),
+                    appIdentifiers,
+                );
+            }
         }
     }
 
@@ -579,13 +667,17 @@ export class ChannelMessageHandler {
 
         //only publish privateChannelOnUnsubscribeEvent if there are any apps listening for them on given channel
         if (isNonEmptyArray(appIdentifiers)) {
-            this.messagingProvider.publishEvent(
-                createEvent<BrowserTypes.PrivateChannelOnUnsubscribeEvent>('privateChannelOnUnsubscribeEvent', {
-                    contextType: contextListener.contextType,
-                    privateChannelId: channelId,
-                }),
-                appIdentifiers,
-            );
+            for (const type of Array.isArray(contextListener.contextType)
+                ? contextListener.contextType
+                : [contextListener.contextType]) {
+                this.messagingProvider.publishEvent(
+                    createEvent<BrowserTypes.PrivateChannelOnUnsubscribeEvent>('privateChannelOnUnsubscribeEvent', {
+                        contextType: type,
+                        privateChannelId: channelId,
+                    }),
+                    appIdentifiers,
+                );
+            }
         }
     }
 
@@ -728,7 +820,10 @@ export class ChannelMessageHandler {
         source: FullyQualifiedAppIdentifier,
     ): boolean {
         return (
-            (contextListener.contextType === contextType || contextListener.contextType == null) &&
+            (contextListener.contextType == null ||
+                (Array.isArray(contextListener.contextType)
+                    ? contextListener.contextType.includes(contextType)
+                    : contextListener.contextType === contextType)) &&
             !appInstanceEquals(contextListener.source, source)
         );
     }
@@ -845,6 +940,7 @@ export class ChannelMessageHandler {
     public onClearContextRequest(
         requestMessage: BrowserTypes.ClearContextRequest,
         source: FullyQualifiedAppIdentifier,
+        eventListeners: EventListenerLookup,
     ): void {
         if (!this.isAppAllowedOnChannel(source, requestMessage.payload.channelId)) {
             //origin app is not allowed to clear context on given private channel
@@ -863,12 +959,19 @@ export class ChannelMessageHandler {
 
         const { channelId, contextType } = requestMessage.payload;
         this.clearChannelHistory(channelId, contextType);
-        const recipients = new Map(this.channelRecipients.get(channelId));
-        recipients.set(source.instanceId, source);
-        for (const app of this.privateChannels[channelId]?.allowedList ?? []) recipients.set(app.instanceId, app);
-        for (const listener of this.contextListeners[channelId] ?? [])
-            recipients.set(listener.source.instanceId, listener.source);
-        const allowed = [...recipients.values()].filter(app => this.isAppAllowedOnChannel(app, channelId));
+        const recipients = new Map<string, FullyQualifiedAppIdentifier>();
+        for (const listener of [...(eventListeners.contextCleared ?? []), ...(eventListeners.allEvents ?? [])]) {
+            const app = listener.appIdentifier;
+            const scopedChannelId = listener.channelId ?? this.currentUserChannels[app.instanceId]?.id;
+            if (
+                scopedChannelId === channelId &&
+                !appInstanceEquals(app, source) &&
+                this.isAppAllowedOnChannel(app, channelId)
+            ) {
+                recipients.set(app.instanceId, app);
+            }
+        }
+        const allowed = [...recipients.values()];
         if (isNonEmptyArray(allowed)) {
             this.messagingProvider.publishEvent(
                 createEvent<BrowserTypes.ContextClearedEvent>('contextClearedEvent', { channelId, contextType }),
@@ -985,7 +1088,6 @@ export class ChannelMessageHandler {
      * @param appId The app ID of the disconnected proxy
      */
     public cleanupDisconnectedProxy(appId: FullyQualifiedAppIdentifier): void {
-        for (const recipients of this.channelRecipients.values()) recipients.delete(appId.instanceId);
         // Remove the app from the currentUserChannels mapping if it exists.
         this.removeFromCurrentUserChannels(appId);
 

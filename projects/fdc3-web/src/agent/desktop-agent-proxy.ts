@@ -104,32 +104,46 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
     }
 
     public async addEventListener(type: FDC3EventTypes | null, handler: EventHandler): Promise<Listener> {
+        if (type !== null && type !== 'userChannelChanged' && type !== 'contextCleared') {
+            throw new Error(ResolveError.InvalidArguments);
+        }
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
-            { type: type === 'userChannelChanged' ? 'USER_CHANNEL_CHANGED' : null },
+            {
+                type:
+                    type === 'userChannelChanged'
+                        ? 'USER_CHANNEL_CHANGED'
+                        : type === 'contextCleared'
+                          ? 'CONTEXT_CLEARED'
+                          : null,
+                channelId: null,
+            },
         );
 
         const response = await this.getResponse(message, isAddEventListenerResponse);
 
         const listenerUUID = response.payload.listenerUUID;
         if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
+            throw toResponseError(response.payload.error);
         } else if (listenerUUID == null) {
             //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
-            return Promise.reject('listenerUUID is null');
+            throw new Error('listenerUUID is null');
         }
 
         let currentChannelId: string | null = null;
-        if (type !== 'userChannelChanged') currentChannelId = (await this.getCurrentChannel())?.id ?? null;
+        let membershipChanged = false;
+        let channelChanges: Listener | undefined;
 
         this.addMessageCallback(listenerUUID, message => {
             //convert between EventMessageType and FDC3EventTypes
             if (isAppEventMessage(message)) {
                 if (message.type === 'channelChangedEvent') {
+                    membershipChanged = true;
                     currentChannelId = message.payload.currentChannelId ?? message.payload.newChannelId ?? null;
                 }
                 if (message.type === 'contextClearedEvent') {
+                    // Ignore clears until a membership event or the initial lookup seeds the channel.
                     if (type !== 'userChannelChanged' && message.payload.channelId === currentChannelId) {
                         handler({
                             type: 'contextCleared',
@@ -140,7 +154,10 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 }
                 const eventType = convertToFDC3EventTypes(message.type);
                 if (eventType != null && (eventType === type || type == null)) {
-                    handler({ type: eventType, details: message.payload });
+                    handler({
+                        type: eventType,
+                        details: message.type === 'channelChangedEvent' ? { currentChannelId } : message.payload,
+                    });
                 }
             }
         });
@@ -152,10 +169,37 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 { listenerUUID },
             );
 
-            await this.getResponse(eventListenerUnsubscribeRequest, isEventListenerUnsubscribeResponse);
-
-            this.removeMessageCallback(listenerUUID);
+            try {
+                const result = await this.getResponse(
+                    eventListenerUnsubscribeRequest,
+                    isEventListenerUnsubscribeResponse,
+                );
+                if (result.payload.error != null) throw toResponseError(result.payload.error);
+            } finally {
+                await this.removeMessageCallback(listenerUUID);
+                await channelChanges?.unsubscribe();
+            }
         };
+
+        try {
+            // A context-cleared-only subscription also requests membership changes so
+            // events delivered for other channel handles cannot reach this handler.
+            if (type === 'contextCleared') {
+                channelChanges = await this.addEventListener('userChannelChanged', event => {
+                    membershipChanged = true;
+                    currentChannelId = event.details.currentChannelId ?? null;
+                });
+            }
+            if (type !== 'userChannelChanged') {
+                const currentChannel = await this.getCurrentChannel();
+                // Events received during setup are newer than the channel snapshot.
+                if (!membershipChanged) currentChannelId = currentChannel?.id ?? null;
+            }
+        } catch (error) {
+            // Preserve the setup error even if remote cleanup also fails.
+            await Promise.allSettled([unsubscribe()]);
+            throw error instanceof Error ? error : toResponseError(String(error));
+        }
         return { unsubscribe };
     }
 
@@ -510,7 +554,10 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return this.channels.broadcast(context, metadata);
     }
 
-    public addContextListener(contextType: ContextType | null, handler: ContextHandler): Promise<Listener> {
+    public addContextListener(
+        contextType: ContextType | ContextType[] | null,
+        handler: ContextHandler,
+    ): Promise<Listener> {
         return this.channels.addContextListener(contextType, handler);
     }
 
