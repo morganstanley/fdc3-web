@@ -17,7 +17,10 @@
         "generate-docs": "nx run-many -t generate-docs",
         "prebuild:release": "npm run reset",
         "build:release": "nx run-many -t build:release",
-        "release": "nx release"
+        "release": "nx release",
+        "test:e2e": "node projects/test-harness-e2e/run.mjs",
+        "test:e2e:ui": "npm run test:e2e -- --ui",
+        "test:e2e:report": "playwright show-report playwright-report"
     },
     "workspaces": [
         "projects/*"
@@ -34,6 +37,7 @@
         "@nx/vite": "21.6.11",
         "@nx/web": "21.6.11",
         "@nx/workspace": "21.6.11",
+        "@playwright/test": "^1.63.0",
         "@swc-node/register": "^1.12.1",
         "@swc/core": "^1.16.1",
         "@swc/helpers": "~0.5.23",

@@ -1,0 +1,19 @@
+{
+    "name": "test-harness-e2e",
+    "projectType": "application",
+    "implicitDependencies": ["test-harness"],
+    "targets": {
+        "e2e": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "npm run test:e2e"
+            }
+        },
+        "type-check-specs": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "tsc -p projects/test-harness-e2e/tsconfig.json"
+            }
+        }
+    }
+}

@@ -26,3 +26,6 @@ npm run build
 ### Configuration of Apps in the Test Harness
 ```test-harness-config.json```
 This file contains the configuration for the apps that can be added either by default or dynamically, with currently 10 apps configured across 6 different domains. More apps can be added to this configuration by following the established format. Apps marked with `default`: true are added by default upon loading the test harness, while other apps are made available in the `Select App` dropdown of the settings panel for dynamic addition at a later time. For apps added by default, the intents that are to be raised and supported by each app can also be specified.
+### Automated browser tests
+
+Run `npm run test:e2e` from the repository root. See the [Playwright suite](../test-harness-e2e/README.md) for setup, API coverage, helper conventions, reports and known implementation gaps. The harness's FDC3 API explorer supports exact arguments and structured callback/result inspection for manual reproduction.
