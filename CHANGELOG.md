@@ -2,6 +2,8 @@
 
 ### Changed
 
+- Expose `currentChannelId` in user-channel change event details, including `null` when leaving a channel.
+
 - Register channel-scoped context-cleared events over DACP, honor subscription scope and unsubscribe, and exclude the clearing app from delivery.
 
 - Support array context filters across agents and channels, including replay, private-channel notifications, validation and listener cleanup.

@@ -288,7 +288,7 @@ tests.forEach(({ proxy }) => {
                 expect(
                     mockHandler.withFunction('handler').withParametersEqualTo({
                         type: 'userChannelChanged',
-                        details: { newChannelId: mockedChannelId },
+                        details: { currentChannelId: mockedChannelId },
                     }),
                 ).wasCalledOnce();
             });

@@ -857,7 +857,6 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         );
     }
 
-
     //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
      * Remove intent listener which source app has unsubscribed from

@@ -1973,7 +1973,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockEventHandler.withFunction('handler').withParametersEqualTo({
                         type: 'userChannelChanged',
-                        details: { newChannelId: mockedChannelId },
+                        details: { currentChannelId: mockedChannelId },
                     }),
                 ).wasCalledOnce();
             });

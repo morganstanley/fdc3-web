@@ -438,3 +438,36 @@ describe('scoped event registration', () => {
         expect(handler).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('user-channel event details', () => {
+    it.each(['userChannelChanged', null] as const)(
+        'exposes currentChannelId before join resolves for %s listeners',
+        async type => {
+            const { client } = setup();
+            const a = client('a');
+            const [first, second] = await a.agent.getUserChannels();
+            const handler = vi.fn();
+            const listener = await a.agent.addEventListener(type, handler);
+            const joining = a.agent.joinUserChannel(first.id);
+            await joining.then(() =>
+                expect(handler).toHaveBeenLastCalledWith({
+                    type: 'userChannelChanged',
+                    details: { currentChannelId: first.id },
+                }),
+            );
+            await a.agent.joinUserChannel(second.id);
+            expect(handler).toHaveBeenLastCalledWith({
+                type: 'userChannelChanged',
+                details: { currentChannelId: second.id },
+            });
+            await a.agent.leaveCurrentChannel();
+            expect(handler).toHaveBeenLastCalledWith({
+                type: 'userChannelChanged',
+                details: { currentChannelId: null },
+            });
+            await listener.unsubscribe();
+            await a.agent.joinUserChannel(first.id);
+            expect(handler).toHaveBeenCalledTimes(3);
+        },
+    );
+});

@@ -134,7 +134,7 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         const channelChanges =
             type === 'contextCleared'
                 ? await this.addEventListener('userChannelChanged', event => {
-                      currentChannelId = event.details.newChannelId ?? null;
+                      currentChannelId = event.details.currentChannelId ?? null;
                   })
                 : undefined;
         if (type !== 'userChannelChanged') currentChannelId = (await this.getCurrentChannel())?.id ?? null;
@@ -156,7 +156,13 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
                 }
                 const eventType = convertToFDC3EventTypes(message.type);
                 if (eventType != null && (eventType === type || type == null)) {
-                    handler({ type: eventType, details: message.payload });
+                    handler({
+                        type: eventType,
+                        details:
+                            message.type === 'channelChangedEvent'
+                                ? { currentChannelId: message.payload.newChannelId }
+                                : message.payload,
+                    });
                 }
             }
         });
