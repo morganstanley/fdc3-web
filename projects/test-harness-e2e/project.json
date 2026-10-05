@@ -5,6 +5,7 @@
     "targets": {
         "e2e": {
             "executor": "nx:run-commands",
+            "dependsOn": ["^build", "type-check-specs"],
             "options": {
                 "command": "playwright test --config projects/test-harness-e2e/playwright.config.ts",
                 "env": {

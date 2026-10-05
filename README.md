@@ -343,6 +343,8 @@ The HTML report is written to `playwright-report/`, with JSON results in `report
 
 See the [E2E suite README](./projects/test-harness-e2e/README.md) for the API coverage matrix, regression coverage and API explorer instructions. Browser tests run through the `e2e` target; `npm test` runs the unit tests.
 
+`npm run build:release` also requires the full E2E suite to pass. Nx runs the shared Playwright target once per release build, after building the harness and type-checking the browser tests. Install Chromium before your first local release build (`npx playwright install chromium`; use `--with-deps` on Linux if system dependencies are missing). Both CI workflows install Chromium and its system dependencies before running the release build.
+
 ### Running Conformance Tests
 
 Purpose: Run the FDC3 website conformance test suite using the test harness UI.
@@ -410,7 +412,7 @@ npx nx e2e test-harness-e2e
 # Checks the code for lint errors
 npm run lint 
 
-# Run a full build (Compile, Tests, Lint)
+# Run a full build (Compile, Unit Tests, E2E Tests, Lint)
 npm run build:release
 
 # test a single project
