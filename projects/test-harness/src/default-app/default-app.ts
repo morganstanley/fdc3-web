@@ -48,6 +48,7 @@ import {
     ISelectableAppsRequestContext,
     ISelectableAppsResponseContext,
     type ISelectAppContext,
+    OpenAppContextType,
     OpenAppIntent,
     SelectableAppsIntent,
     SelectableAppsRequestContextType,
@@ -600,7 +601,9 @@ export class DefaultApp extends LitElement {
     private async subscribeToOpenAppIntent(agent: DesktopAgent): Promise<void> {
         // listens for open app intents
         await agent
-            .addIntentListener(OpenAppIntent, context => this.openChildApp(context as IOpenAppContext))
+            .addIntentListenerWithContext(OpenAppIntent, OpenAppContextType, context =>
+                this.openChildApp(context as IOpenAppContext),
+            )
             .then(() => this.log(`'${OpenAppIntent}' intent listener added`))
             .catch(err => this.log(`Error adding intent listener for '${OpenAppIntent}'`, err, 'error'));
     }
