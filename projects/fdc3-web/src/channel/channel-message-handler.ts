@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes } from '@finos/fdc3';
+import { BrowserTypes, ChannelError, Context, PrivateChannelEventTypes, ResolveError } from '@finos/fdc3';
 import { IRootPublisher } from '../contracts.internal.js';
 import { EventListenerLookup, FullyQualifiedAppIdentifier } from '../contracts.js';
 import { convertToPrivateChannelEventTypes } from '../helpers/event-type.helper.js';
@@ -34,7 +34,7 @@ type PrivateChannelEventListener = {
 //uses 'currentChannel' constant instead of null to signify context listener is listening to contexts on current channel as null cannot be used as an index
 type ContextListenerKey = string | 'currentChannel';
 type ChannelContextListener = {
-    contextType: string | null; //null for contextType indicates listener is for all contexts
+    contextType: string | string[] | null; //null for contextType indicates listener is for all contexts
     listenerUUID: string;
     source: FullyQualifiedAppIdentifier;
 };
@@ -417,6 +417,27 @@ export class ChannelMessageHandler {
         requestMessage: BrowserTypes.AddContextListenerRequest,
         source: FullyQualifiedAppIdentifier,
     ): void {
+        const { contextType: singleType, contextTypes } = requestMessage.payload;
+        if (
+            (singleType !== undefined) === (contextTypes !== undefined) ||
+            (contextTypes !== undefined &&
+                (!Array.isArray(contextTypes) ||
+                    contextTypes.length === 0 ||
+                    contextTypes.some(type => typeof type !== 'string'))) ||
+            (singleType !== undefined && singleType !== null && typeof singleType !== 'string')
+        ) {
+            this.messagingProvider.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddContextListenerResponse>(
+                    'addContextListenerResponse',
+                    { error: ResolveError.InvalidArguments },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
+        }
+        const contextType = contextTypes !== undefined ? [...new Set(contextTypes)] : (singleType ?? null);
         const channelIdIndex = this.convertToContextListenerIndex(requestMessage.payload.channelId);
 
         //if channelId is null, then channel is user channel and so origin app is allowed to listen on it
@@ -443,7 +464,7 @@ export class ChannelMessageHandler {
         const listenerUUID = generateUUID();
 
         //add new contextListener to array of contextListeners for that channelId
-        listeners.push({ contextType: requestMessage.payload.contextType, listenerUUID, source });
+        listeners.push({ contextType, listenerUUID, source });
 
         //if channel is private channel, publish privateChannelOnAddContextListenerEvent to all apps listening for them on channel
         //if message.payload.channelId == null, it is referring to the current user channel
@@ -465,7 +486,7 @@ export class ChannelMessageHandler {
 
             this.publishPrivateChannelOnAddContextListenerEvent(
                 requestMessage.payload.channelId,
-                requestMessage.payload.contextType,
+                contextType,
                 appIdentifiers,
             );
         }
@@ -480,7 +501,9 @@ export class ChannelMessageHandler {
             source,
         );
 
-        this.onContextListenerCreation(source, requestMessage.payload.contextType);
+        for (const type of Array.isArray(contextType) ? contextType : [contextType]) {
+            this.onContextListenerCreation(source, type);
+        }
     }
 
     /**
@@ -508,21 +531,23 @@ export class ChannelMessageHandler {
      */
     private publishPrivateChannelOnAddContextListenerEvent(
         channelId: string,
-        contextType: string | null,
+        contextType: string | string[] | null,
         appIdentifiers: FullyQualifiedAppIdentifier[],
     ): void {
         //only publish privateChannelOnUnsubscribeEvent if there are any apps listening for them on given channel
         if (isNonEmptyArray(appIdentifiers)) {
-            this.messagingProvider.publishEvent(
-                createEvent<BrowserTypes.PrivateChannelOnAddContextListenerEvent>(
-                    'privateChannelOnAddContextListenerEvent',
-                    {
-                        contextType,
-                        privateChannelId: channelId,
-                    },
-                ),
-                appIdentifiers,
-            );
+            for (const type of Array.isArray(contextType) ? contextType : [contextType]) {
+                this.messagingProvider.publishEvent(
+                    createEvent<BrowserTypes.PrivateChannelOnAddContextListenerEvent>(
+                        'privateChannelOnAddContextListenerEvent',
+                        {
+                            contextType: type,
+                            privateChannelId: channelId,
+                        },
+                    ),
+                    appIdentifiers,
+                );
+            }
         }
     }
 
@@ -579,13 +604,17 @@ export class ChannelMessageHandler {
 
         //only publish privateChannelOnUnsubscribeEvent if there are any apps listening for them on given channel
         if (isNonEmptyArray(appIdentifiers)) {
-            this.messagingProvider.publishEvent(
-                createEvent<BrowserTypes.PrivateChannelOnUnsubscribeEvent>('privateChannelOnUnsubscribeEvent', {
-                    contextType: contextListener.contextType,
-                    privateChannelId: channelId,
-                }),
-                appIdentifiers,
-            );
+            for (const type of Array.isArray(contextListener.contextType)
+                ? contextListener.contextType
+                : [contextListener.contextType]) {
+                this.messagingProvider.publishEvent(
+                    createEvent<BrowserTypes.PrivateChannelOnUnsubscribeEvent>('privateChannelOnUnsubscribeEvent', {
+                        contextType: type,
+                        privateChannelId: channelId,
+                    }),
+                    appIdentifiers,
+                );
+            }
         }
     }
 
@@ -728,7 +757,10 @@ export class ChannelMessageHandler {
         source: FullyQualifiedAppIdentifier,
     ): boolean {
         return (
-            (contextListener.contextType === contextType || contextListener.contextType == null) &&
+            (contextListener.contextType == null ||
+                (Array.isArray(contextListener.contextType)
+                    ? contextListener.contextType.includes(contextType)
+                    : contextListener.contextType === contextType)) &&
             !appInstanceEquals(contextListener.source, source)
         );
     }

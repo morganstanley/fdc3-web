@@ -107,7 +107,7 @@ export class PublicChannel extends MessagingBase implements Channel {
         }
     }
 
-    public addContextListener(contextType: string | null, handler: ContextHandler): Promise<Listener> {
+    public addContextListener(contextType: string | string[] | null, handler: ContextHandler): Promise<Listener> {
         return this.contextListener.addContextListener(contextType, handler);
     }
 

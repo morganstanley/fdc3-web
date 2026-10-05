@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DesktopAgentProxy } from '../agent/desktop-agent-proxy.js';
 import type { IRootPublisher } from '../contracts.internal.js';
 import type { EventListenerLookup, IProxyIncomingMessageEnvelope, IProxyMessagingProvider } from '../contracts.js';
-import { createResponseMessage } from '../helpers/messages.helper.js';
+import { createRequestMessage, createResponseMessage } from '../helpers/messages.helper.js';
 import { ChannelMessageHandler } from './channel-message-handler.js';
 import { ChannelFactory } from './channels.factory.js';
 
@@ -55,10 +55,14 @@ function setup() {
                         return server.onLeaveCurrentChannelRequest(request, app, eventListeners);
                     case 'getCurrentChannelRequest':
                         return server.onGetCurrentChannelRequest(request, app);
-                    case 'addContextListenerRequest':
-                        return server.onAddContextListenerRequest(request, app);
                     case 'broadcastRequest':
                         return server.onBroadcastRequest(request, app);
+                    case 'addContextListenerRequest':
+                        return server.onAddContextListenerRequest(request, app);
+                    case 'contextListenerUnsubscribeRequest':
+                        return server.onContextListenerUnsubscribeRequest(request, app);
+                    case 'privateChannelDisconnectRequest':
+                        return server.onPrivateChannelDisconnectRequest(request, app);
                     case 'getCurrentContextRequest':
                         return server.onGetCurrentContextRequest(request, app);
                     case 'clearContextRequest':
@@ -109,7 +113,7 @@ function setup() {
             agent: new DesktopAgentProxy({ appIdentifier: app, messagingProvider: provider, channelFactory: factory }),
         };
     };
-    return { client, server, factory };
+    return { client, server, factory, publisher };
 }
 
 describe('context-cleared event delivery', () => {
@@ -212,5 +216,136 @@ describe('context-cleared event delivery', () => {
         await listener.unsubscribe();
         await second.clearContext();
         expect(handler).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('array context listeners', () => {
+    it('filters app-channel broadcasts, snapshots the filter and removes the whole registration', async () => {
+        const { client, publisher } = setup();
+        const published = vi.spyOn(publisher, 'publishEvent');
+        const a = client('a'),
+            b = client('b');
+        const channel = await a.agent.getOrCreateChannel('shared');
+        const remote = await b.agent.getOrCreateChannel('shared');
+        await remote.broadcast({ type: 'fdc3.contact' });
+        const handler = vi.fn();
+        const types = ['fdc3.contact', 'fdc3.instrument', 'fdc3.contact'];
+        const send = vi.spyOn(a.provider, 'sendMessage');
+        const listener = await channel.addContextListener(types, handler);
+        expect(handler).not.toHaveBeenCalled();
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                payload: expect.objectContaining({
+                    type: 'addContextListenerRequest',
+                    payload: { channelId: 'shared', contextTypes: ['fdc3.contact', 'fdc3.instrument'] },
+                }),
+            }),
+        );
+        types.push('fdc3.portfolio');
+        for (const type of ['fdc3.contact', 'fdc3.instrument', 'fdc3.portfolio']) await remote.broadcast({ type });
+        expect(handler.mock.calls.map(([context]) => context.type)).toEqual(['fdc3.contact', 'fdc3.instrument']);
+        expect(published.mock.calls.filter(([event]) => event.type === 'broadcastEvent')).toHaveLength(2);
+        await listener.unsubscribe();
+        published.mockClear();
+        await remote.broadcast({ type: 'fdc3.contact' });
+        expect(handler).toHaveBeenCalledTimes(2);
+        expect(published).not.toHaveBeenCalled();
+    });
+
+    it('replays each matching type on user-channel registration and changes, then fully unsubscribes', async () => {
+        const { client } = setup();
+        const a = client('a'),
+            b = client('b');
+        const channels = await a.agent.getUserChannels();
+        const first = await b.agent.getOrCreateChannel(channels[0].id);
+        const second = await b.agent.getOrCreateChannel(channels[1].id);
+        for (const channel of [first, second]) {
+            await channel.broadcast({ type: 'fdc3.contact' });
+            await channel.broadcast({ type: 'fdc3.instrument' });
+            await channel.broadcast({ type: 'fdc3.portfolio' });
+        }
+        await a.agent.joinUserChannel(first.id);
+        const handler = vi.fn();
+        const listener = await a.agent.addContextListener(['fdc3.contact', 'fdc3.instrument'], handler);
+        expect(handler.mock.calls.map(([context]) => context.type)).toEqual(['fdc3.contact', 'fdc3.instrument']);
+        await a.agent.joinUserChannel(second.id);
+        await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(4));
+        await first.broadcast({ type: 'fdc3.contact' });
+        await second.broadcast({ type: 'fdc3.portfolio' });
+        expect(handler).toHaveBeenCalledTimes(4);
+        await second.broadcast({ type: 'fdc3.instrument' });
+        expect(handler).toHaveBeenCalledTimes(5);
+        await listener.unsubscribe();
+        await a.agent.joinUserChannel(first.id);
+        await first.broadcast({ type: 'fdc3.contact' });
+        expect(handler).toHaveBeenCalledTimes(5);
+    });
+
+    it('reports each private-channel filter on registration, late event subscription and unsubscribe', async () => {
+        const { client } = setup();
+        const a = client('a');
+        const channel = await a.agent.createPrivateChannel();
+        const events = vi.fn();
+        await channel.addEventListener(null, events);
+        const listener = await channel.addContextListener(['fdc3.contact', 'fdc3.instrument'], vi.fn());
+        expect(events.mock.calls.map(([event]) => event.details.contextType)).toEqual([
+            'fdc3.contact',
+            'fdc3.instrument',
+        ]);
+        const lateEvents = vi.fn();
+        await channel.addEventListener('addContextListener', lateEvents);
+        expect(lateEvents.mock.calls.map(([event]) => event.details.contextType)).toEqual([
+            'fdc3.contact',
+            'fdc3.instrument',
+        ]);
+        events.mockClear();
+        await listener.unsubscribe();
+        expect(events.mock.calls.map(([event]) => [event.type, event.details.contextType])).toEqual([
+            ['unsubscribe', 'fdc3.contact'],
+            ['unsubscribe', 'fdc3.instrument'],
+        ]);
+    });
+
+    it('rejects empty arrays for the agent and channels without registering a listener', async () => {
+        const { client } = setup();
+        const a = client('a');
+        const channel = await a.agent.getOrCreateChannel('shared');
+        const send = vi.spyOn(a.provider, 'sendMessage');
+        await expect(a.agent.addContextListener([], vi.fn())).rejects.toThrow('InvalidArguments');
+        await expect(channel.addContextListener([], vi.fn())).rejects.toThrow('InvalidArguments');
+        expect(send).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid wire filters and notifies open-context waiters of each accepted type', async () => {
+        const { server, publisher, client } = setup();
+        const a = client('a');
+        const response = vi.spyOn(publisher, 'publishResponseMessage');
+        const callback = vi.fn();
+        await server.addListenerCallback('open-waiter', callback);
+        for (const filter of [{}, { contextTypes: [] }, { contextType: null, contextTypes: ['fdc3.contact'] }]) {
+            server.onAddContextListenerRequest(
+                createRequestMessage<BrowserTypes.AddContextListenerRequest>('addContextListenerRequest', a.app, {
+                    channelId: null,
+                    ...filter,
+                }),
+                a.app,
+            );
+            expect(response).toHaveBeenLastCalledWith(
+                expect.objectContaining({ payload: { error: 'InvalidArguments' } }),
+                a.app,
+            );
+        }
+        expect(callback).not.toHaveBeenCalled();
+        server.onAddContextListenerRequest(
+            createRequestMessage<BrowserTypes.AddContextListenerRequest>('addContextListenerRequest', a.app, {
+                channelId: null,
+                contextTypes: ['fdc3.contact', 'fdc3.instrument'],
+            }),
+            a.app,
+        );
+        expect(callback.mock.calls).toEqual([
+            [a.app, 'fdc3.contact'],
+            [a.app, 'fdc3.instrument'],
+        ]);
     });
 });

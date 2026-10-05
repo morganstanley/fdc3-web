@@ -155,7 +155,7 @@ export class Channels extends MessagingBase implements AgentChannels {
     }
 
     public async addContextListener(
-        contextType: ContextType | null,
+        contextType: ContextType | ContextType[] | null,
         contextHandler: ContextHandler,
     ): Promise<Listener> {
         return this._contextListener.addContextListener(contextType, contextHandler);

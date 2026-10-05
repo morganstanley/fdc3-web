@@ -510,7 +510,10 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
         return this.channels.broadcast(context, metadata);
     }
 
-    public addContextListener(contextType: ContextType | null, handler: ContextHandler): Promise<Listener> {
+    public addContextListener(
+        contextType: ContextType | ContextType[] | null,
+        handler: ContextHandler,
+    ): Promise<Listener> {
         return this.channels.addContextListener(contextType, handler);
     }
 

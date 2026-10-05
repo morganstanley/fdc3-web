@@ -2,6 +2,8 @@
 
 ### Changed
 
+- Support array context filters across agents and channels, including replay, private-channel notifications, validation and listener cleanup.
+
 - Align private-channel API event name conversions with FDC3 3.0 alpha.5 types.
 
 - Do not send a success response after closing the calling application (#407).
