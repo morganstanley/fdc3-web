@@ -6,7 +6,10 @@
         "e2e": {
             "executor": "nx:run-commands",
             "options": {
-                "command": "npm run test:e2e"
+                "command": "playwright test --config projects/test-harness-e2e/playwright.config.ts",
+                "env": {
+                    "NODE_USE_ENV_PROXY": "0"
+                }
             }
         },
         "type-check-specs": {

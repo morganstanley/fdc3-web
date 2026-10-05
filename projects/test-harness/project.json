@@ -72,6 +72,12 @@
                 "runBuildTargetDependencies": false
             }
         },
-        "build:release": {}
+        "build:release": {},
+        "e2e": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "nx e2e test-harness-e2e"
+            }
+        }
     }
 }

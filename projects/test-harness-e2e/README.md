@@ -5,13 +5,13 @@ Run from the repository root:
 ```sh
 npm ci
 npx playwright install chromium
-npm run test:e2e
+npx nx e2e test-harness-e2e
 npm run test:e2e:report
 ```
 
-Use `npm run test:e2e -- --grep 'raiseIntent'` for a subset, `--headed` to see the browser, or `npm run test:e2e:ui` for Playwright's interactive runner. `npx nx e2e test-harness-e2e` runs the same suite. Type checking: `npx tsc -p projects/test-harness-e2e/tsconfig.json`.
+Use `npx nx e2e test-harness-e2e --grep=raiseIntent` for a subset, `--headed` to see the browser, or `npm run test:e2e:ui` for Playwright's interactive runner. `npm run test:e2e` and `npx nx e2e test-harness` are shortcuts for the same target. The separate `test-harness-e2e` project owns test execution and depends on the harness; the harness target is only a convenience alias. Type checking: `npx tsc -p projects/test-harness-e2e/tsconfig.json`.
 
-The configuration starts the harness and app-directory servers, including built apps on different origins (ports 4300–4305). Ports 4200 and 4299 are also required. Outside CI an existing harness server can be reused; stop it after changing harness code so that cross-origin apps are rebuilt. Each test gets a fresh browser context and desktop agent. The suite controls the app-directory response to provide deterministic applications; it does not mock FDC3 APIs or messages. Chromium is the initial browser target. The runner sets localhost proxy bypasses before starting Node, including Node 24's native proxy support.
+The configuration starts the harness and app-directory servers, including built apps on different origins (ports 4300–4305). Ports 4200 and 4299 are also required. Outside CI an existing harness server can be reused; stop it after changing harness code so that cross-origin apps are rebuilt. Each test gets a fresh browser context and desktop agent. The suite controls the app-directory response to provide deterministic applications; it does not mock FDC3 APIs or messages. Chromium is the initial browser target. The Nx target disables Node 24's native environment proxy handling for the Playwright process (`NODE_USE_ENV_PROXY=0`). Playwright handles proxies itself, and its configuration adds localhost bypasses while preserving existing exclusions. This prevents local readiness checks being sent through the corporate proxy without a custom launcher.
 
 HTML reports contain named helper steps, exact API arguments, callbacks, and assertions. Failures retain a screenshot, video and trace in `test-results/`. Tests locate controls by `automation-id` and apps by their iframe's `data-app-url`, including an instance index for duplicate apps. They do not read arbitrary div text, use private implementation objects, or sleep to wait for message delivery.
 
