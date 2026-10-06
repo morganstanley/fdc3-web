@@ -30,8 +30,14 @@ jobs:
                   node-version: ${{ env.NODE_VERSION }}
                   registry-url: https://registry.npmjs.org/
 
-            - name: Install node modules and verify build
-              run: npm ci && npm run build:release
+            - name: Install node modules
+              run: npm ci
+
+            - name: Install Playwright Chromium
+              run: npx playwright install --with-deps chromium
+
+            - name: Verify build
+              run: npm run build:release
 
             - name: Publish FDC3 Library
               run: cd dist/fdc3-web && npm publish --provenance --access public

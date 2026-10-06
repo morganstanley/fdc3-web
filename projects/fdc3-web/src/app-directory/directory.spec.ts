@@ -1104,6 +1104,24 @@ describe(`${AppDirectory.name} (directory)`, () => {
         });
     });
 
+    it('should filter running instances by their declared result type and omit intents with no matches', async () => {
+        const instance = createInstance([mockedAppDirectoryUrl]);
+        await registerApp(instance, mockedApplicationTwo);
+        await registerApp(instance, mockedApplicationOne, 'DynamicIntent', [{ type: 'fdc3.chart' }]);
+
+        const matching = await instance.getAppIntent('ViewChart', undefined, 'fdc3.currency');
+        expect(matching.apps).toHaveLength(2);
+        expect(matching.apps).toContainEqual(
+            expect.objectContaining({ appId: mockedAppIdTwo, instanceId: 'instanceOne' }),
+        );
+        expect((await instance.getAppIntent('ViewChart', undefined, 'fdc3.contact')).apps).toEqual([]);
+        // A dynamic listener without a declared result type cannot satisfy a result-type filter.
+        expect((await instance.getAppIntent('DynamicIntent', undefined, 'fdc3.currency')).apps).toEqual([]);
+        const intents = await instance.getAppIntentsForContext({ type: 'fdc3.chart' }, 'fdc3.currency');
+        expect(intents.map(result => result.intent.name)).toEqual(['ViewChart']);
+        expect(await instance.getAppIntentsForContext({ type: 'fdc3.chart' }, 'fdc3.contact')).toEqual([]);
+    });
+
     describe(`getAppIntent`, () => {
         it('should return appIntent containing all apps that handle given intent', async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);

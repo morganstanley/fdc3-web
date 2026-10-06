@@ -801,11 +801,15 @@ export class ChannelMessageHandler {
         ];
 
         //get all appIdentifiers for contextListeners of correct context type, excluding any for origin app
-        return contextListeners
+        const targets = contextListeners
             .filter(contextListener =>
                 this.isListenerValidBroadcastTarget(contextListener, requestMessage.payload.context.type, source),
             )
             .map(contextListener => contextListener.source);
+
+        // Each proxy dispatches the event to all of its matching local listeners.
+        // Sending once per subscription would invoke those listeners multiple times.
+        return targets.filter((app, index) => targets.findIndex(other => appInstanceEquals(other, app)) === index);
     }
 
     /**

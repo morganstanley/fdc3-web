@@ -217,7 +217,13 @@ async function waitForProxyAgent(identityUrl?: string, params?: GetAgentParams):
 
     cleanUp();
 
-    return createProxyAgent(helloMessage.meta.connectionAttemptUuid, messagePort, identityUrl, params?.logLevels);
+    return createProxyAgent(
+        helloMessage.meta.connectionAttemptUuid,
+        messagePort,
+        identityUrl,
+        params?.logLevels,
+        params?.dontSetWindowFdc3,
+    );
 }
 
 /**
@@ -228,12 +234,14 @@ async function createProxyAgent(
     messagePort: MessagePort,
     identityUrl?: string,
     logLevels?: GetAgentLogLevels,
+    dontSetWindowFdc3?: boolean,
 ): Promise<DesktopAgent> {
     connectionLog(`createProxyAgent called`, LogLevel.DEBUG, { connectionAttemptUuid, identityUrl });
     const messagingProvider = new DefaultProxyMessagingProvider(messagePort);
     const appValidationResponse = await performAppValidation(messagingProvider, connectionAttemptUuid, identityUrl);
 
     const proxyAgent = new DesktopAgentFactory().createProxy({
+        dontSetWindowFdc3,
         appIdentifier: {
             appId: appValidationResponse.payload.appId,
             instanceId: appValidationResponse.payload.instanceId,

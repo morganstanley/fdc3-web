@@ -1,0 +1,23 @@
+{
+    "name": "test-harness-e2e",
+    "projectType": "application",
+    "implicitDependencies": ["test-harness"],
+    "targets": {
+        "e2e": {
+            "executor": "nx:run-commands",
+            "dependsOn": ["^build", "type-check-specs"],
+            "options": {
+                "command": "playwright test --config projects/test-harness-e2e/playwright.config.ts",
+                "env": {
+                    "NODE_USE_ENV_PROXY": "0"
+                }
+            }
+        },
+        "type-check-specs": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "tsc -p projects/test-harness-e2e/tsconfig.json"
+            }
+        }
+    }
+}

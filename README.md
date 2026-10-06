@@ -294,9 +294,56 @@ Available log levels from `@finos/fdc3` are:
 - `messaging-provider` - A messaging provider for the fdc3 library. This is an implementation of the messaging-provider interface that provides communications between frames and windows, including in other domains. This will be published for use in other applications.
 - `ui-provider` - A UI provider for the fdc3 library. This provides a Resolver and Channel Selector. This will be published for use in other applications.
 - `test-harness` - A Lit app for testing local messaging between different apps working in the same context. Will depend on `lib`.
+- `test-harness-e2e` - Playwright browser tests for the FDC3 3.0 APIs, using the test harness across application origins.
 
 For most development running `npm start` will be sufficient to test implementation and cross-frame / cross origin communication. This will build and run `test-harness`.
 
+
+### Running E2E Tests
+
+The separate `test-harness-e2e` project owns the Playwright configuration, tests and reports. It exercises the documented FDC3 3.0 APIs, including optional-parameter variations, channel and intent callbacks, app lifecycle operations and error cases. Shared helpers provide named steps in the tests and HTML reports, and harness controls have stable automation IDs.
+
+Run these commands from the repository root:
+
+```bash
+# First-time setup
+npm ci
+npx playwright install chromium
+
+# Run all browser automation tests
+npx nx e2e test-harness-e2e
+
+# Equivalent convenience commands
+npx nx e2e test-harness
+npm run test:e2e
+
+# Open the HTML report after a run
+npm run test:e2e:report
+```
+
+Playwright builds and starts the harness and app-directory servers automatically; you do not need to run `npm start` first. The suite uses Chromium and localhost ports 4200, 4299 and 4300–4305. An existing harness server can be reused outside CI; restart it after harness changes so the built apps are current.
+
+For development and debugging:
+
+```bash
+# Run tests whose names match a pattern
+npx nx e2e test-harness-e2e --grep=raiseIntent
+
+# Show the browser while tests run
+npx nx e2e test-harness-e2e --headed
+
+# Open the interactive Playwright test runner
+npx nx e2e test-harness-e2e --ui
+
+# List tests without running them
+npx nx e2e test-harness-e2e --list
+```
+
+The HTML report is written to `playwright-report/`, with JSON results in `reports/playwright-results.json`. Failures retain screenshots, videos and traces in `test-results/`. The suite includes regression tests for duplicate broadcast delivery, intent result-type filtering, rejected intent handlers, result metadata and connection options. All E2E tests run as ordinary assertions; there are no expected-failure annotations.
+
+See the [E2E suite README](./projects/test-harness-e2e/README.md) for the API coverage matrix, regression coverage and API explorer instructions. Browser tests run through the `e2e` target; `npm test` runs the unit tests.
+
+`npm run build:release` also requires the full E2E suite to pass. Nx runs the shared Playwright target once per release build, after building the harness and type-checking the browser tests. Install Chromium before your first local release build (`npx playwright install chromium`; use `--with-deps` on Linux if system dependencies are missing). Both CI workflows install Chromium and its system dependencies before running the release build.
 
 ### Running Conformance Tests
 
@@ -356,13 +403,16 @@ npm ci
 # build all projects
 npm run build
 
-# Test all projects
+# Run unit tests across projects
 npm run test
+
+# Run browser automation tests
+npx nx e2e test-harness-e2e
 
 # Checks the code for lint errors
 npm run lint 
 
-# Run a full build (Compile, Tests, Lint)
+# Run a full build (Compile, Unit Tests, E2E Tests, Lint)
 npm run build:release
 
 # test a single project

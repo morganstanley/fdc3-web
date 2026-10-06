@@ -618,6 +618,60 @@ tests.forEach(({ proxy }) => {
                 expect(mockHandler.withFunction('handler')).wasCalledOnce();
             });
 
+            it.each(['throws', 'rejects'])('should report an intent handler that %s to the agent', async mode => {
+                const instance = await createInstance();
+                const handler: IntentHandler = () => {
+                    if (mode === 'throws') throw new Error('handler failed');
+                    return Promise.reject(new Error('handler failed'));
+                };
+                const registration = instance.addIntentListener('StartChat', handler);
+                postMessage({
+                    type: 'addIntentListenerResponse',
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: { listenerUUID: 'rejecting-listener' },
+                });
+                await registration;
+                postMessage({
+                    type: 'intentEvent',
+                    meta: { eventUuid: 'failed-intent-event', timestamp: currentDate },
+                    payload: {
+                        intent: 'StartChat',
+                        context: contact,
+                        raiseIntentRequestUuid: 'original-request',
+                        metadata: { source: appIdentifier, timestamp: currentDate, traceId: 'trace' },
+                    },
+                });
+                await vi.waitFor(() => {
+                    const messages = mockMessagingProvider.functionCallLookup.sendMessage?.map(
+                        ([envelope]) => envelope.payload,
+                    );
+                    expect(messages).toContainEqual(
+                        expect.objectContaining({
+                            type: 'intentResultRequest',
+                            payload: {
+                                intentEventUuid: 'failed-intent-event',
+                                raiseIntentRequestUuid: 'original-request',
+                                intentResult: {},
+                                error: ResultError.IntentHandlerRejected,
+                            },
+                        }),
+                    );
+                });
+                postMessage({
+                    type: 'intentResultResponse',
+                    meta: {
+                        requestUuid: requestUuIdentifier,
+                        timestamp: currentDate,
+                        responseUuid: mockedResponseUuid,
+                    },
+                    payload: {},
+                });
+            });
+
             it(`when intent handler return promise resolves to a context object it should be published in an intentResultRequest message`, async () => {
                 const mockedListenerUuid: string = `mocked-listener-uuid`;
 
@@ -2787,6 +2841,7 @@ tests.forEach(({ proxy }) => {
                     });
                     const resolution = await pending;
                     postMessage({ type: 'raiseIntentResultResponse', meta, payload: { error } });
+                    await expect(resolution.getResult()).rejects.toBe(error);
                     await expect(resolution.getResultMetadata()).rejects.toBe(error);
                 },
             );
