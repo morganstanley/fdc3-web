@@ -57,6 +57,7 @@ export interface UpdateInstanceMetadataResponsePayload {
  * Local extension: the current DACP IntentResultRequest schema has no error field.
  * Successful requests retain the standard payload. Our proxy uses this field to
  * report handler failures so our agent can send a standard raiseIntentResultResponse error.
+ * Upstream protocol discussion: https://github.com/finos/FDC3/issues/2271
  */
 export type IntentResultRequest = BrowserTypes.IntentResultRequest & {
     payload: BrowserTypes.IntentResultRequestPayload & { error?: ResultError };
