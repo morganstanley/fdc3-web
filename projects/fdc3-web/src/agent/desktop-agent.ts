@@ -19,12 +19,14 @@ import {
     LogLevel,
     OpenError,
     ResolveError,
+    ResultError,
 } from '@finos/fdc3';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
 import { APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS, HEARTBEAT } from '../constants.js';
+import type { IntentResultRequest } from '../contracts.internal.js';
 import {
     IRootPublisher,
     UpdateInstanceMetadataRequest,
@@ -362,7 +364,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         context?: Context,
         timeout: number = 15000,
     ): Promise<void> {
-        const hasMatchingListener = () =>
+        const hasMatchingListener = (): boolean | undefined =>
             this.intentListeners[intent]?.some(
                 pair =>
                     appInstanceEquals(pair.appIdentifier, chosenApp) &&
@@ -514,7 +516,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
     // https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#addintentlistener
     private async onIntentResultRequest(
-        requestMessage: BrowserTypes.IntentResultRequest,
+        requestMessage: IntentResultRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         this.rootMessagePublisher.publishResponseMessage(
@@ -533,8 +535,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             requestMessage.payload.raiseIntentRequestUuid,
         );
 
+        // error is a local extension to the DACP schema (see IntentResultRequest); never forward values outside ResultError
+        const resultError = this.toResultError(requestMessage.payload.error);
+
         if (raiseIntentSource?.payload != null && isFullyQualifiedAppIdentifier(raiseIntentSource.payload)) {
-            if (requestMessage.payload.intentResult.channel != null) {
+            if (resultError == null && requestMessage.payload.intentResult.channel != null) {
                 //if intentResult is PrivateChannel, add receiving app to channel's allowedList
                 this.channelMessageHandler.addToPrivateChannelAllowedList(
                     requestMessage.payload.intentResult.channel.id,
@@ -544,16 +549,36 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
             const raiseIntentResultResponse = createResponseMessage<BrowserTypes.RaiseIntentResultResponse>(
                 'raiseIntentResultResponse',
-                {
-                    intentResult: requestMessage.payload.intentResult,
-                    resultMetadata: createContextMetadata(source, requestMessage.payload.metadata),
-                },
+                resultError != null
+                    ? { error: resultError }
+                    : {
+                          intentResult: requestMessage.payload.intentResult,
+                          resultMetadata: createContextMetadata(source, {
+                              ...requestMessage.payload.metadata,
+                              // getResultMetadata gives the agent's trace ID precedence over the handler's.
+                              // We use a fresh result trace; DACP UUIDs correlate it with the request.
+                              traceId: generateUUID(),
+                          }),
+                      },
                 raiseIntentSource.uuid,
                 raiseIntentSource.payload,
             );
 
             this.rootMessagePublisher.publishResponseMessage(raiseIntentResultResponse, raiseIntentSource.payload);
         }
+    }
+
+    /**
+     * Maps the untrusted error field of an intentResultRequest to a ResultError.
+     * Any value that is not a ResultError is reported as IntentHandlerRejected.
+     */
+    private toResultError(error: unknown): ResultError | undefined {
+        if (error == null) {
+            return undefined;
+        }
+        return (Object.values(ResultError) as unknown[]).includes(error)
+            ? (error as ResultError)
+            : ResultError.IntentHandlerRejected;
     }
 
     /**
@@ -912,9 +937,12 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return;
         }
 
-        const appIntents = await this.directory.getAppIntentsForContext(requestMessage.payload.context);
+        const appIntents = await this.directory.getAppIntentsForContext(
+            requestMessage.payload.context,
+            requestMessage.payload.resultType,
+        );
 
-        if (appIntents.length === 0 || appIntents.find(appIntent => appIntent.apps.length != 0) == null) {
+        if (appIntents.length === 0) {
             //responds with error if no intents to handle given context were found, or if no apps which resolve those intents and handle given context were found
             this.rootMessagePublisher.publishResponseMessage(
                 createResponseMessage<BrowserTypes.FindIntentsByContextResponse>(

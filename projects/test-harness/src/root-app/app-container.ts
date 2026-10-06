@@ -30,6 +30,8 @@ export class AppContainer extends LitElement {
         return html`
             <div class="border border-3 h-100 position-relative ${this.getOriginClass()}">
                 <iframe
+                    automation-id="fth-app-iframe"
+                    data-app-url=${this.details?.url}
                     ${ref(element => this.handleIframe(element as HTMLIFrameElement))}
                     src=${this.details?.url}
                     class="w-100 h-100 border-0"

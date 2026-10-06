@@ -344,6 +344,8 @@ export type RootDesktopAgentFactoryParams = {
 };
 
 export type ProxyDesktopAgentFactoryParams = {
+    /** Leave window.fdc3 unset and suppress fdc3Ready when true. */
+    dontSetWindowFdc3?: boolean;
     appIdentifier: FullyQualifiedAppIdentifier;
     messagingProviderFactory: MessagingProviderFactory<IProxyMessagingProvider>;
     logLevels?: GetAgentLogLevels;

@@ -9,10 +9,11 @@
  * and limitations under the License. */
 
 import { join } from 'path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
     test: {
+        exclude: [...configDefaults.exclude, '**/test-harness-e2e/**'],
         coverage: {
             enabled: true,
             all: true,
@@ -30,6 +31,7 @@ export default defineConfig({
                 '**/test.ts',
                 '**/test-setup.ts',
                 '**/test-harness/**',
+                '**/test-harness-e2e/**',
                 // Don't include generated files or definition files
                 '**/*.js',
                 '**/docs/**',

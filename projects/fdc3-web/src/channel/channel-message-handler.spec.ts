@@ -1331,6 +1331,31 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
     });
 
     describe(`broadcastRequest`, () => {
+        it('should send only one event per app instance with overlapping channel and current-channel listeners', () => {
+            const instance = createInstance();
+            const channelId = recommendedChannels[1].id;
+            mockJoinChannel(recommendedChannels[1], instance, sourceTwo);
+            mockAddContextListener(null, 'fdc3.contact', sourceTwo, instance);
+            mockAddContextListener(channelId, null, { ...sourceTwo }, instance);
+            mockAddContextListener(channelId, 'fdc3.contact', sourceTwo, instance);
+            mockAddContextListener(channelId, null, sourceThree, instance);
+
+            instance.onBroadcastRequest(
+                {
+                    type: 'broadcastRequest',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId, context: contact, metadata: {} },
+                },
+                source,
+            );
+
+            const broadcasts = mockRootMessagingProvider.functionCallLookup.publishEvent?.filter(
+                ([event]) => event.type === 'broadcastEvent',
+            );
+            expect(broadcasts).toHaveLength(1);
+            expect(broadcasts?.[0][1]).toEqual([sourceTwo, sourceThree]);
+        });
+
         it(`should publish broadcastResponse`, async () => {
             const instance = createInstance();
 
