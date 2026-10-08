@@ -8,11 +8,14 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { DesktopAgentProxy } from '../agent/desktop-agent-proxy.js';
 import { IMSHostManifest } from '../app-directory.contracts.js';
+import { DesktopAgentNext } from '../contracts.js';
 import {
     isChannel,
     isContext,
+    isDesktopAgentNext,
     isFullyQualifiedAppId,
     isFullyQualifiedAppIdentifier,
     isIMSHostManifest,
@@ -25,6 +28,44 @@ import {
 const defaultInvalidValues: unknown[] = ['', 'simpleString', [], {}, null, undefined];
 
 describe(`type-predicate.helper`, () => {
+    const nextAgentMethods = {
+        addIntentListenerWithContext: async () => ({ unsubscribe: async () => {} }),
+        updateInstanceMetadata: async () => {},
+        findInstances: async () => [],
+        close: async () => {},
+    } satisfies Pick<
+        DesktopAgentNext,
+        'addIntentListenerWithContext' | 'updateInstanceMetadata' | 'findInstances' | 'close'
+    >;
+
+    describe('isDesktopAgentNext', () => {
+        it('should recognize the extension methods', () => {
+            expect(isDesktopAgentNext(nextAgentMethods)).toBe(true);
+        });
+
+        it('should recognize inherited methods on desktop agent instances', () => {
+            const agent: unknown = Object.create(DesktopAgentProxy.prototype);
+
+            expect(isDesktopAgentNext(agent)).toBe(true);
+            if (isDesktopAgentNext(agent)) {
+                expectTypeOf(agent).toEqualTypeOf<DesktopAgentNext>();
+            }
+        });
+
+        it.each([...defaultInvalidValues, 0, true, Symbol('agent'), () => {}])(
+            'should return false for invalid value %s',
+            value => {
+                expect(isDesktopAgentNext(value)).toBe(false);
+            },
+        );
+
+        it.each(Object.keys(nextAgentMethods))('should require %s to be callable', method => {
+            for (const value of [undefined, null, 'notAFunction', true, 1, {}]) {
+                expect(isDesktopAgentNext({ ...nextAgentMethods, [method]: value })).toBe(false);
+            }
+        });
+    });
+
     testTypePredicate(
         isFullyQualifiedAppIdentifier,
         [{ appId: 'sample-app-id', instanceId: 'sampleInstanceID' }],
