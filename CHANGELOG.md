@@ -1,3 +1,18 @@
+## 0.18.0 (2026-10-07)
+
+### Added
+
+ * Added the exported `isDesktopAgentNext(value: unknown): value is DesktopAgentNext` type predicate. It checks that `addIntentListenerWithContext`, `updateInstanceMetadata`, `findInstances`, and `close` are callable, allowing callers to narrow an agent's type before using the extended API:
+
+```ts
+import { getAgent, isDesktopAgentNext } from "@morgan-stanley/fdc3-web";
+
+const agent = await getAgent();
+if (isDesktopAgentNext(agent)) {
+    await agent.updateInstanceMetadata({ title: "My application" });
+}
+```
+
 ## 0.17.0 (2026-07-24)
 
 ### Added

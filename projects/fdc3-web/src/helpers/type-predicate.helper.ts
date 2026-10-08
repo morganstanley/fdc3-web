@@ -11,6 +11,7 @@
 import { BrowserTypes, Context } from '@finos/fdc3';
 import { IMSHostManifest, WebAppDetails } from '../app-directory.contracts.js';
 import {
+    DesktopAgentNext,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
     ICloseApplicationStrategy,
@@ -19,6 +20,21 @@ import {
     IRootOutgoingMessageEnvelope,
     ISelectApplicationStrategy,
 } from '../contracts.js';
+
+/**
+ * Checks for the methods added or extended by DesktopAgentNext.
+ */
+export function isDesktopAgentNext(value: unknown): value is DesktopAgentNext {
+    const agent = value as DesktopAgentNext;
+
+    return (
+        agent != null &&
+        typeof agent.addIntentListenerWithContext === 'function' &&
+        typeof agent.updateInstanceMetadata === 'function' &&
+        typeof agent.findInstances === 'function' &&
+        typeof agent.close === 'function'
+    );
+}
 
 export function isFullyQualifiedAppIdentifier(value: any): value is FullyQualifiedAppIdentifier {
     const appIdentifier = value as FullyQualifiedAppIdentifier;
