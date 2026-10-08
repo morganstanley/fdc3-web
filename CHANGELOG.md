@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixed
+
+ * Fixed the app resolver displaying every instance metadata field, which could include values unsuitable for display. It now displays only `instanceMetadata.title` when present.
+
 ## 0.17.0 (2026-07-24)
 
 ### Added

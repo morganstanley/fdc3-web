@@ -472,6 +472,8 @@ function renderForContextPopup(component: AppResolverComponent): TemplateResult 
 
 function renderApp(app: AppMetadata, intent: Intent, component: AppResolverComponent): TemplateResult {
     const idAttr = unsafeStatic(component.automationIdAttribute);
+    // When this feature is added to FDC3 rather than just locally implemented title will be a defined field so will be properly typed
+    const instanceTitle = app.instanceMetadata?.title;
     return staticHtml`<div class="ms-app-display-container">
         <button
             class="ms-app-resolver-app-display-btn"
@@ -486,9 +488,7 @@ function renderApp(app: AppMetadata, intent: Intent, component: AppResolverCompo
                 >${renderAppIcon(app.icons?.find(icon => icon != null))}</span
             >
             <span class="ms-app-resolver-app-display-app-title">${app.title ?? app.name ?? app.appId}</span>
-            ${when(app.instanceId != null, () =>
-                Object.values(app.instanceMetadata ?? {}).map((metadata: unknown) => renderInstanceMetadata(metadata)),
-            )}
+            ${when(app.instanceId != null && instanceTitle != null, () => renderInstanceMetadata(instanceTitle))}
         </button>
     </div>`;
 }

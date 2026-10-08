@@ -54,6 +54,7 @@ import {
     SelectableAppsResponseContextType,
     SelectAppContextType,
 } from '../contracts.js';
+import { generateAppTitle } from '../utils/app-title.helper.js';
 import { getStandardIntents } from '../utils/fdc3.js';
 import type { SelectComponent } from '../utils/select-component.js';
 
@@ -114,6 +115,7 @@ export class DefaultApp extends LitElement {
     @state()
     private supportedRaiseIntent?: Intent[];
 
+    @state()
     private appTitle: string | undefined;
 
     @state()
@@ -584,7 +586,12 @@ export class DefaultApp extends LitElement {
 
         // gets the app info for this app
         const appMetadata = (await agent.getInfo()).appMetadata;
-        this.appTitle = appMetadata.title;
+        this.appTitle = generateAppTitle(appMetadata);
+        document.title = this.appTitle;
+
+        await (agent as DesktopAgentNext)
+            .updateInstanceMetadata({ ...appMetadata.instanceMetadata, title: this.appTitle })
+            .catch(err => this.log('Error updating instance title', err, 'error'));
 
         if (isFullyQualifiedAppIdentifier(appMetadata)) {
             this.appIdentifier = { appId: appMetadata.appId, instanceId: appMetadata.instanceId };
