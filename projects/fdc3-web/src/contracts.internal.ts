@@ -24,7 +24,7 @@ export interface IRootPublisher extends IProxyMessagingProvider {
     ): void;
 
     /**
-     * waits for the identity assigned to the assigned to the provided connection attempt uuid
+     * Waits for the application identity assigned to the provided connectionAttemptUuid
      */
     awaitAppIdentity(connectionAttemptUuid: string, app: AppDirectoryApplication): Promise<FullyQualifiedAppIdentifier>;
 }
