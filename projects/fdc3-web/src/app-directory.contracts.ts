@@ -67,7 +67,7 @@ export type LocalAppDirectory = {
     apps: AppDirectoryApplication[];
     host: string;
     /**
-     * Allows the url of an existing local app directory to be updated or for new entries to be added
+     * Supplies updated application records or new entries to add to the local app directory
      */
     updates?: AsyncIterator<AppDirectoryApplication | AppDirectoryApplication[]>;
 };

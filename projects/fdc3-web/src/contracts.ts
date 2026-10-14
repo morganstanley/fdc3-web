@@ -158,7 +158,7 @@ export type IProxyOutgoingMessageEnvelope = {
 };
 
 /**
- * A Request message sent from a proxy agent. No target information is required as all request messages go to the root
+ * A response, event or identity validation response received by a proxy agent from the root
  */
 export type IProxyIncomingMessageEnvelope = {
     payload: ResponseMessage | EventMessage | BrowserTypes.WebConnectionProtocol5ValidateAppIdentitySuccessResponse;
@@ -181,7 +181,7 @@ export interface IRootMessagingProvider<
         | BrowserTypes.WebConnectionProtocol6Goodbye = RequestMessage,
 > {
     /**
-     * Publishes a message to one of more target proxy agents
+     * Publishes a message to one or more target proxy agents
      * @param message
      */
     publish(message: IRootOutgoingMessageEnvelope): void;
@@ -332,7 +332,7 @@ export interface IUIProvider extends IAppResolver {}
 
 export type BackoffRetryParams = {
     /**
-     * The maximum number of attempts to retry the connection. This includes the first attempt.
+     * The maximum number of attempts to fetch an app directory. This includes the first attempt.
      */
     maxAttempts?: number;
     /**
@@ -426,7 +426,7 @@ export interface IOpenApplicationStrategy {
     canOpen(params: ApplicationStrategyParams): Promise<boolean>;
 
     /**
-     * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
+     * Opens a new application instance and returns a promise that resolves to its connectionAttemptUuid
      * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
      * @param params
      */
@@ -451,21 +451,20 @@ export type SelectApplicationStrategyParams = {
 export interface ISelectApplicationStrategy {
     /**
      * Used to identify the manifest key that is used to lookup the specific manifest from the appDirectory record's hostManifests
-     * The manifest identified through this key will then be passed to the open() and canOpen() functions
+     * The manifest identified through this key will then be passed to the selectApp() and canSelectApp() functions
      */
     manifestKey?: string;
 
     /**
-     * if the strategy is able to open a given application returns true
+     * Returns true if the strategy is able to select or focus the given application instance
      * If false is returned the strategy will not be used by the desktop agent and the next one will be tried
      */
 
     canSelectApp(params: SelectApplicationStrategyParams): Promise<boolean>;
 
     /**
-     * Opens a new window and returns a promise that resolves to the connectionAttemptUUid of the new window
-     * TODO: support multiple connection attempts for each window - use a callback to notify the caller of the connection attempt rather than returning a promise
-     * @param params
+     * Selects or focuses an existing application instance and returns a promise that resolves when the operation completes
+     * @param params Identifies the application instance to select and provides its strategy parameters
      */
     selectApp(params: SelectApplicationStrategyParams): Promise<void>;
 }
