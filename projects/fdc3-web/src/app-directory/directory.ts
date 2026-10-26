@@ -29,6 +29,7 @@ import {
 } from '../contracts.js';
 import {
     appIdsMatch,
+    compareUrlSpecificity,
     createLogger,
     generateUUID,
     getAppDirectoryApplications,
@@ -351,17 +352,31 @@ export class AppDirectory {
         this.log('Resolving App Identity', LogLevel.DEBUG, identityUrl);
 
         /**
-         * This is a very simple check for now that just looks for a matching url.
-         * We will need to do more complex checks in here to handle urls that do not exactly match the identity url (for example due to url parameters)
+         * Filter all web applications whose configured URL elements are contained in the candidate identityUrl,
+         * and select the most specific match (ranked by path segments, query parameters, and hash) so that
+         * query-parameter or subpath records are not shadowed by a root or origin-only record on the same host.
          */
         const matchingApp = Object.values(this.directory)
             .map(record => record?.application)
-            .filter(application => application != null)
-            .find(
-                application =>
+            .filter(
+                (application): application is AppDirectoryApplication =>
+                    application != null &&
                     isWebAppDetails(application.details) &&
                     urlContainsAllElements(application.details.url, identityUrl),
-            );
+            )
+            .reduce<AppDirectoryApplication | undefined>((bestMatch, candidate) => {
+                if (bestMatch == null) {
+                    return candidate;
+                }
+
+                if (isWebAppDetails(candidate.details) && isWebAppDetails(bestMatch.details)) {
+                    return compareUrlSpecificity(candidate.details.url, bestMatch.details.url) > 0
+                        ? candidate
+                        : bestMatch;
+                }
+
+                return bestMatch;
+            }, undefined);
 
         if (matchingApp != null) {
             return matchingApp;

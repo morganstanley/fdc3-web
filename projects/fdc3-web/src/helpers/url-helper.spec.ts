@@ -10,7 +10,13 @@
 
 import { Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeUUUrl, generateUUUrl, urlContainsAllElements } from './url-helper.js';
+import {
+    compareUrlSpecificity,
+    decodeUUUrl,
+    generateUUUrl,
+    getUrlMatchSpecificity,
+    urlContainsAllElements,
+} from './url-helper.js';
 import * as helpersImport from './uuid.helper.js';
 
 vi.mock('./uuid.helper.js', async () => {
@@ -190,5 +196,24 @@ describe(`urlContainsAllElements`, () => {
                 });
             });
         });
+    });
+});
+
+describe(`getUrlMatchSpecificity and compareUrlSpecificity`, () => {
+    it(`should compute path segment count, query param count, and hash presence`, () => {
+        expect(getUrlMatchSpecificity('https://example.com/')).toEqual([0, 0, 0]);
+        expect(getUrlMatchSpecificity('https://example.com?fdc=app1')).toEqual([0, 1, 0]);
+        expect(getUrlMatchSpecificity('https://example.com/path/subpath?a=1&b=2#section')).toEqual([2, 2, 1]);
+    });
+
+    it(`should rank URLs with query parameters above origin-only URLs with no path`, () => {
+        expect(compareUrlSpecificity('http://mydomain?fdc=app1', 'http://mydomain')).toBeGreaterThan(0);
+        expect(compareUrlSpecificity('http://mydomain', 'http://mydomain?fdc=app1')).toBeLessThan(0);
+        expect(compareUrlSpecificity('http://mydomain?fdc=app1', 'http://mydomain?fdc=app2')).toBe(0);
+    });
+
+    it(`should rank deeper paths and hash fragments higher when comparing candidate URLs`, () => {
+        expect(compareUrlSpecificity('https://example.com/path', 'https://example.com/')).toBeGreaterThan(0);
+        expect(compareUrlSpecificity('https://example.com/#hash', 'https://example.com/')).toBeGreaterThan(0);
     });
 });
