@@ -111,6 +111,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'web', details: { url: mockAppUrl }, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
+                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
                 }),
             ).toBe(true);
         });
@@ -122,6 +123,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'web', details: { url: '' }, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
+                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
                 }),
             ).toBe(false);
         });
@@ -133,6 +135,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'web', details: {} as any, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
+                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
                 }),
             ).toBe(false);
         });
@@ -144,6 +147,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'native', details: { url: mockAppUrl }, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
+                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
                 }),
             ).toBe(false);
         });
@@ -161,6 +165,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
         return {
             appDirectoryRecord,
             agent: mockDesktopAgent.mock,
+            contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
             appReadyPromise,
         };
     }

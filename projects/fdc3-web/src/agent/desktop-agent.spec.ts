@@ -401,6 +401,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 ).wasCalledOnce();
 
                 expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
+                for (const method of ['canSelectApp', 'selectApp'] as const) {
+                    expect(mockSelectStrategy.functionCallLookup[method]?.[0][0]).toMatchObject({
+                        context: contact,
+                        contextMetadata: { source },
+                    });
+                }
                 expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
             });
 
@@ -814,6 +820,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 ).wasCalledOnce();
 
                 expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
+                for (const method of ['canSelectApp', 'selectApp'] as const) {
+                    expect(mockSelectStrategy.functionCallLookup[method]?.[0][0]).toMatchObject({
+                        context: contact,
+                        contextMetadata: { source },
+                    });
+                }
                 expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
             });
 
@@ -2156,6 +2168,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         agent: instance,
                         manifest: mockedApplication.hostManifests?.['mock-application'],
                         context: contact,
+                        contextMetadata: { source },
                     }),
                 ).wasCalledOnce();
 
@@ -2169,6 +2182,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(openParams?.agent).toEqual(instance);
                 expect(openParams?.manifest).toEqual(mockedApplication.hostManifests?.['mock-application']);
                 expect(openParams?.context).toEqual(contact);
+                expect(openParams?.contextMetadata).toEqual({ source });
 
                 const resolvedApp = await mockOpenStrategy.functionCallLookup['open']?.[0][0].appReadyPromise;
 
@@ -2176,6 +2190,65 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(resolvedApp?.appId).toBe(mockedTargetAppId);
                 expect(resolvedApp?.instanceId).toBe(mockedGeneratedUuid);
             });
+
+            it.each(['raiseIntentRequest', 'raiseIntentForContextRequest'] as const)(
+                'preserves the original caller when %s launches an app and clears it after completion',
+                async type => {
+                    const target = { appId: mockedTargetAppId };
+                    mockAppDirectory.setupFunction('resolveAppForIntent', async () => target);
+                    mockAppDirectory.setupFunction('resolveAppForContext', async () => ({
+                        intent: 'StartChat',
+                        app: target,
+                    }));
+                    createInstance([mockOpenStrategy.mock]);
+                    await postRequestMessage(
+                        {
+                            type: 'addIntentListenerRequest',
+                            meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                            payload: { intent: 'StartChat' },
+                        },
+                        source,
+                    );
+                    await postRequestMessage(
+                        type === 'raiseIntentRequest'
+                            ? {
+                                  type,
+                                  meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                                  payload: { intent: 'StartChat', context: contact },
+                              }
+                            : {
+                                  type,
+                                  meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                                  payload: { context: contact },
+                              },
+                        source,
+                    );
+
+                    const request = mockRootPublisher.functionCallLookup.sendMessage?.[0][0]
+                        .payload as BrowserTypes.OpenRequest;
+                    expect(request.type).toBe('openRequest');
+                    expect(request.meta.source).toEqual(appIdentifier);
+                    await postRequestMessage(request, appIdentifier);
+                    for (const method of ['canOpen', 'open'] as const) {
+                        expect(mockOpenStrategy.functionCallLookup[method]?.[0][0]).toMatchObject({
+                            context: contact,
+                            contextMetadata: { source },
+                        });
+                    }
+
+                    await postIncomingMessage({
+                        type: 'openResponse',
+                        meta: { ...request.meta, responseUuid: mockedResponseUuid },
+                        payload: { appIdentifier: source },
+                    });
+                    // A later direct open by the root must not inherit the intent caller.
+                    await postRequestMessage({ ...request, payload: { app: target } }, appIdentifier);
+                    expect(mockOpenStrategy.functionCallLookup.open?.[1][0].contextMetadata).toEqual({
+                        source: appIdentifier,
+                    });
+                    expect(mockOpenStrategy.functionCallLookup.open?.[1][0].context).toBeUndefined();
+                },
+            );
 
             it(`should not call open on a strategy that returns false for canOpen`, async () => {
                 createInstance([mockDisabledOpenStrategy.mock, mockOpenStrategy.mock]);
