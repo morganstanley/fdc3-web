@@ -14,6 +14,7 @@ import type {
     AppMetadata,
     BrowserTypes,
     Context,
+    ContextMetadata,
     DesktopAgent,
     DesktopAgent as FinosDesktopAgent,
     FDC3Event,
@@ -377,6 +378,12 @@ export type ApplicationStrategyParams = {
      */
     manifest?: unknown;
     context?: Context;
+    /**
+     * Metadata identifying the app that initiated this request. For intent-triggered operations,
+     * source is the app that raised the intent, including when the root agent launches on its behalf.
+     * Available even when no context was supplied to open().
+     */
+    contextMetadata: ContextMetadata;
 };
 
 export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & {
@@ -441,6 +448,8 @@ export type SelectApplicationStrategyParams = {
      */
     manifest?: unknown;
     context?: Context;
+    /** Metadata identifying the app that raised the intent which triggered this selection. */
+    contextMetadata: ContextMetadata;
     appIdentifier: FullyQualifiedAppIdentifier;
 };
 
