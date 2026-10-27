@@ -29,13 +29,13 @@ export function resolveContextType(
     return { contextType, contextHandler };
 }
 
-/** Selects supplied context metadata without dropping extension fields, or identifies the request source. */
+/** Preserves supplied metadata fields while always using the source identified by the agent. */
 export function getContextMetadata(
     // FDC3 2.x request types do not declare payload metadata; allow it when supplied by an extension.
     payload: (BrowserTypes.OpenRequestPayload | BrowserTypes.RaiseIntentForContextRequestPayload) & {
-        metadata?: ContextMetadata | null;
+        metadata?: (Partial<ContextMetadata> & Record<string, unknown>) | null;
     },
     source: AppIdentifier,
 ): ContextMetadata {
-    return payload.metadata ?? { source };
+    return { ...payload.metadata, source };
 }

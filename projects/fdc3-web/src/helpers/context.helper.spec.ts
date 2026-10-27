@@ -10,9 +10,32 @@
 
 import { ContextHandler } from '@finos/fdc3';
 import { describe, expect, it } from 'vitest';
-import { resolveContextType } from './context.helper.js';
+import { getContextMetadata, resolveContextType } from './context.helper.js';
 
 describe('context.helper', () => {
+    describe('getContextMetadata', () => {
+        it.each([undefined, null])('identifies the caller when metadata is %s', metadata => {
+            const source = { appId: 'caller', instanceId: 'caller-instance' };
+            expect(getContextMetadata({ context: { type: 'fdc3.nothing' }, metadata }, source)).toEqual({ source });
+        });
+
+        it.each([undefined, { appId: 'spoofed-app', instanceId: 'spoofed-instance' }])(
+            'preserves extension fields and supplies the trusted source without mutating metadata (supplied source: %s)',
+            suppliedSource => {
+                const source = { appId: 'caller', instanceId: 'caller-instance' };
+                const metadata = Object.freeze({
+                    ...(suppliedSource ? { source: suppliedSource } : {}),
+                    traceId: 'trace-id',
+                    custom: { workspace: 'workspace-id' },
+                });
+                const result = getContextMetadata({ context: { type: 'fdc3.nothing' }, metadata }, source);
+                expect(result).toEqual({ ...metadata, source });
+                expect(result.source).toBe(source);
+                expect(metadata.source).toBe(suppliedSource);
+            },
+        );
+    });
+
     describe('resolveContextType', () => {
         it('should handle context type and handler', () => {
             const contextType = 'fdc3.contact';

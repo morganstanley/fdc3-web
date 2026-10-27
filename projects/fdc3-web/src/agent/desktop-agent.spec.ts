@@ -344,11 +344,18 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`raiseIntentRequest`, () => {
-            it.each([false, true])(
+            it.each(['absent', 'without source', 'spoofed source'] as const)(
                 `should publish IntentEvent to chosen app instance (payload metadata: %s)`,
-                async withMetadata => {
-                    const metadata = { source, traceId: 'test-trace', custom: { workspace: 'test-workspace' } };
-                    const expectedMetadata = withMetadata ? metadata : { source };
+                async metadataMode => {
+                    const withMetadata = metadataMode !== 'absent';
+                    const metadata = {
+                        ...(metadataMode === 'spoofed source'
+                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
+                            : {}),
+                        traceId: 'test-trace',
+                        custom: { workspace: 'test-workspace' },
+                    };
+                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
                     createInstance([mockSelectStrategy.mock]);
 
                     const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
@@ -415,7 +422,9 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         });
                     }
                     if (withMetadata) {
-                        expect(mockSelectStrategy.functionCallLookup.selectApp?.[0][0].contextMetadata).toBe(metadata);
+                        expect(mockSelectStrategy.functionCallLookup.selectApp?.[0][0].contextMetadata).toEqual(
+                            expectedMetadata,
+                        );
                     }
                     expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
                 },
@@ -769,11 +778,18 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`raiseIntentForContextRequest`, () => {
-            it.each([false, true])(
+            it.each(['absent', 'without source', 'spoofed source'] as const)(
                 `should publish IntentEvent to chosen app instance (payload metadata: %s)`,
-                async withMetadata => {
-                    const metadata = { source, traceId: 'test-trace', custom: { workspace: 'test-workspace' } };
-                    const expectedMetadata = withMetadata ? metadata : { source };
+                async metadataMode => {
+                    const withMetadata = metadataMode !== 'absent';
+                    const metadata = {
+                        ...(metadataMode === 'spoofed source'
+                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
+                            : {}),
+                        traceId: 'test-trace',
+                        custom: { workspace: 'test-workspace' },
+                    };
+                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
                     createInstance([mockSelectStrategy.mock]);
 
                     const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
@@ -839,7 +855,9 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         });
                     }
                     if (withMetadata) {
-                        expect(mockSelectStrategy.functionCallLookup.selectApp?.[0][0].contextMetadata).toBe(metadata);
+                        expect(mockSelectStrategy.functionCallLookup.selectApp?.[0][0].contextMetadata).toEqual(
+                            expectedMetadata,
+                        );
                     }
                     expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
                 },
@@ -2151,11 +2169,18 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 );
             });
 
-            it.each([false, true])(
+            it.each(['absent', 'without source', 'spoofed source'] as const)(
                 `should open app using IOpenApplicationStrategy if applicable one is provided (payload metadata: %s)`,
-                async withMetadata => {
-                    const metadata = { source, traceId: 'test-trace', custom: { workspace: 'test-workspace' } };
-                    const expectedMetadata = withMetadata ? metadata : { source };
+                async metadataMode => {
+                    const withMetadata = metadataMode !== 'absent';
+                    const metadata = {
+                        ...(metadataMode === 'spoofed source'
+                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
+                            : {}),
+                        traceId: 'test-trace',
+                        custom: { workspace: 'test-workspace' },
+                    };
+                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
                     const instance = createInstance([mockOpenStrategy.mock]);
 
                     const openMessage: BrowserTypes.OpenRequest = {
@@ -2211,14 +2236,23 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
             it.each(
                 (['raiseIntentRequest', 'raiseIntentForContextRequest'] as const).flatMap(type =>
-                    [false, true].map(withMetadata => [type, withMetadata] as const),
+                    (['absent', 'without source', 'spoofed source'] as const).map(
+                        metadataMode => [type, metadataMode] as const,
+                    ),
                 ),
             )(
                 'preserves metadata when %s launches an app without leaking it to later opens (payload metadata: %s)',
-                async (type, withMetadata) => {
-                    const metadata = { source, traceId: 'intent-trace', custom: { workspace: 'intent-workspace' } };
+                async (type, metadataMode) => {
+                    const withMetadata = metadataMode !== 'absent';
+                    const metadata = {
+                        ...(metadataMode === 'spoofed source'
+                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
+                            : {}),
+                        traceId: 'intent-trace',
+                        custom: { workspace: 'intent-workspace' },
+                    };
                     const metadataPayload = withMetadata ? { metadata } : {};
-                    const expectedMetadata = withMetadata ? metadata : { source };
+                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
                     mockRootPublisher.setupFunction('awaitAppIdentity', async () => source);
                     const target = { appId: mockedTargetAppId };
                     mockAppDirectory.setupFunction('resolveAppForIntent', async () => target);

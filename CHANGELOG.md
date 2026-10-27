@@ -2,7 +2,7 @@
 
 ### 🚀 Features
 
-- Added `contextMetadata` to the parameters received by application strategies in `canOpen`, `open`, `canSelectApp`, and `selectApp`. Supplied payload metadata is preserved, including extension fields; when absent, the agent constructs `{ source }`. Intent-triggered launches and selections retain the original intent caller's metadata. Metadata is available even when `open()` is called without context. ([#443](https://github.com/morganstanley/fdc3-web/pull/443))
+- Added `contextMetadata` to the parameters received by application strategies in `canOpen`, `open`, `canSelectApp`, and `selectApp`. Supplied payload metadata fields are preserved, including extension fields, while `source` is always set to the caller identity determined by the agent. When metadata is absent, the agent constructs `{ source }`. Intent-triggered launches and selections retain the original intent caller's metadata. Metadata is available even when `open()` is called without context. ([#443](https://github.com/morganstanley/fdc3-web/pull/443))
 - Selection strategies now receive the context supplied with the intent, alongside its metadata.
 
 ### ❤️ Thank You
