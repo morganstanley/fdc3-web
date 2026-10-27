@@ -161,10 +161,6 @@ export class DesktopAgentProxy extends MessagingBase implements DesktopAgentNext
             context,
         });
 
-        return this.sendOpenRequest(message);
-    }
-
-    protected async sendOpenRequest(message: BrowserTypes.OpenRequest): Promise<AppIdentifier> {
         const response = await this.getResponse(message, isOpenResponse);
 
         if (response.payload.error != null) {

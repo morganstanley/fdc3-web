@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { ContextHandler, ContextType } from '@finos/fdc3';
+import type { AppIdentifier, BrowserTypes, ContextHandler, ContextMetadata, ContextType } from '@finos/fdc3';
 
 /**
  * Converts implementation addContextListener parameters to those required by fdc3 addContextListener method
@@ -27,4 +27,15 @@ export function resolveContextType(
         throw new Error('Context handler must be defined');
     }
     return { contextType, contextHandler };
+}
+
+/** Selects supplied context metadata without dropping extension fields, or identifies the request source. */
+export function getContextMetadata(
+    // FDC3 2.x request types do not declare payload metadata; allow it when supplied by an extension.
+    payload: (BrowserTypes.OpenRequestPayload | BrowserTypes.RaiseIntentForContextRequestPayload) & {
+        metadata?: ContextMetadata | null;
+    },
+    source: AppIdentifier,
+): ContextMetadata {
+    return payload.metadata ?? { source };
 }
