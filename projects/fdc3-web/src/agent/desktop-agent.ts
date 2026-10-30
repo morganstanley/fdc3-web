@@ -1123,7 +1123,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         const candidates = await Promise.all(
             this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => ({
                 strategy,
-                canOpen: await this.canStrategyOpenApp(application, strategy, context, contextMetadata).catch(() => false),
+                canOpen: await this.canStrategyOpenApp(application, strategy, context, contextMetadata).catch(
+                    () => false,
+                ),
             })),
         );
         return candidates.find(candidate => candidate.canOpen)?.strategy;
