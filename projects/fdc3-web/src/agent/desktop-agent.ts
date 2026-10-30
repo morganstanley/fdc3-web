@@ -253,6 +253,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         requestMessage: BrowserTypes.RaiseIntentRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
+        const contextMetadata = createContextMetadata(source, requestMessage.payload.metadata);
         //check if context argument is invalid
         if (requestMessage.payload.context != null && !isContext(requestMessage.payload.context)) {
             this.rootMessagePublisher.publishResponseMessage(
@@ -291,6 +292,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
                 appIdentifier,
                 requestMessage.payload.context,
+                contextMetadata,
             );
 
             //wait for intentListener of correct intent type on chosen app to be added
@@ -328,7 +330,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             if (isFullyQualifiedAppIdentifier(appIdentifier)) {
                 // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
                 // try and select the existing application
-                this.tryToSelectApp(fullyQualifiedAppIdentifier);
+                this.tryToSelectApp(fullyQualifiedAppIdentifier, requestMessage.payload.context, contextMetadata);
             }
         } else {
             const error = isFindInstancesErrors(resolveError) ? resolveError : ResolveError.NoAppsFound;
@@ -401,6 +403,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         requestMessage: BrowserTypes.RaiseIntentForContextRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
+        const contextMetadata = createContextMetadata(source, requestMessage.payload.metadata);
         //check if context argument is invalid
         if (requestMessage.payload.context != null && !isContext(requestMessage.payload.context)) {
             this.rootMessagePublisher.publishResponseMessage(
@@ -444,6 +447,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             const fullyQualifiedAppIdentifier = await this.returnOrLaunchAppInstance(
                 resolutionResponse.app,
                 requestMessage.payload.context,
+                contextMetadata,
             );
 
             let resolveError: any;
@@ -485,7 +489,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             if (isFullyQualifiedAppIdentifier(resolutionResponse.app)) {
                 // If the app returned from directory (in turn from App Resolver) is already fully qualified this is an existing application
                 // try and select the existing application
-                this.tryToSelectApp(fullyQualifiedAppIdentifier);
+                this.tryToSelectApp(fullyQualifiedAppIdentifier, requestMessage.payload.context, contextMetadata);
             }
 
             this.rootMessagePublisher.publishResponseMessage(
@@ -1010,10 +1014,18 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         }
         this.proxyLog('OpenRequest application resolved', LogLevel.DEBUG, { application, source });
 
-        const strategy = await this.resolveOpenStrategy(application, requestMessage.payload.context);
+        const contextMetadata = createContextMetadata(source, requestMessage.payload.metadata);
+        const strategy = await this.resolveOpenStrategy(application, requestMessage.payload.context, contextMetadata);
 
         if (strategy != null) {
-            this.openAppWithStrategy(strategy, application, requestMessage, source, requestMessage.payload.context);
+            this.openAppWithStrategy(
+                strategy,
+                application,
+                requestMessage,
+                source,
+                contextMetadata,
+                requestMessage.payload.context,
+            );
         } else {
             this.proxyLog('OpenRequest no opening strategies found', LogLevel.ERROR, { source });
 
@@ -1034,10 +1046,17 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         application: AppDirectoryApplication,
         requestMessage: BrowserTypes.OpenRequest,
         source: FullyQualifiedAppIdentifier,
+        contextMetadata: BrowserTypes.ContextMetadata,
         context?: BrowserTypes.Context,
     ): Promise<void> {
         try {
-            const appIdentifier = await this.launchApplicationInstance(strategy, application, source, context);
+            const appIdentifier = await this.launchApplicationInstance(
+                strategy,
+                application,
+                source,
+                contextMetadata,
+                context,
+            );
 
             this.proxyLog('OpenRequest appIdentifier resolved', LogLevel.DEBUG, { appIdentifier, source });
 
@@ -1080,7 +1099,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
             //pass given context object to opened application via contextListener
             if (context != null) {
-                this.publishOpenAppContextBroadcast(context, source, appIdentifier, requestMessage.payload.metadata);
+                this.publishOpenAppContextBroadcast(context, contextMetadata, appIdentifier);
             }
         } catch (err) {
             this.proxyLog('OpenRequest error opening application', LogLevel.ERROR, { application, source, err });
@@ -1098,12 +1117,13 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
     private async resolveOpenStrategy(
         application: AppDirectoryApplication,
-        context?: BrowserTypes.Context,
+        context: BrowserTypes.Context | undefined,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<IOpenApplicationStrategy | undefined> {
         const candidates = await Promise.all(
             this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => ({
                 strategy,
-                canOpen: await this.canStrategyOpenApp(application, strategy, context).catch(() => false),
+                canOpen: await this.canStrategyOpenApp(application, strategy, context, contextMetadata).catch(() => false),
             })),
         );
         return candidates.find(candidate => candidate.canOpen)?.strategy;
@@ -1127,6 +1147,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         strategy: IOpenApplicationStrategy,
         application: AppDirectoryApplication,
         source: FullyQualifiedAppIdentifier,
+        contextMetadata: BrowserTypes.ContextMetadata,
         context?: BrowserTypes.Context,
     ): Promise<FullyQualifiedAppIdentifier> {
         const { hostManifests, ...noManifests } = application;
@@ -1145,6 +1166,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             agent: this,
             manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err => console.error(err)),
             context,
+            contextMetadata,
             appReadyPromise,
         });
 
@@ -1187,7 +1209,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private async canStrategyOpenApp(
         application: AppDirectoryApplication,
         strategy: IOpenApplicationStrategy,
-        context?: BrowserTypes.Context,
+        context: BrowserTypes.Context | undefined,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<boolean> {
         const manifest = await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
             console.error(err),
@@ -1195,7 +1218,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         const { hostManifests, ...appDirectoryRecord } = application;
 
-        const canOpen = await strategy.canOpen({ agent: this, appDirectoryRecord, manifest, context });
+        const canOpen = await strategy.canOpen({ agent: this, appDirectoryRecord, manifest, context, contextMetadata });
 
         if (canOpen) {
             return true;
@@ -1235,15 +1258,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
     private publishOpenAppContextBroadcast(
         context: BrowserTypes.Context,
-        source: FullyQualifiedAppIdentifier,
+        metadata: BrowserTypes.ContextMetadata,
         fullyQualifiedAppIdentifier: FullyQualifiedAppIdentifier,
-        metadata?: BrowserTypes.AppProvidableContextMetadata,
     ): void {
         this.rootMessagePublisher.publishEvent(
             createEvent<BrowserTypes.BroadcastEvent>('broadcastEvent', {
                 channelId: null,
                 context,
-                metadata: createContextMetadata(source, metadata),
+                metadata,
             }),
             [fullyQualifiedAppIdentifier],
         );
@@ -1548,15 +1570,23 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      * @param appIdentifier
      * @returns
      */
-    private async tryToSelectApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<void> {
+    private async tryToSelectApp(
+        appIdentifier: FullyQualifiedAppIdentifier,
+        context: Context,
+        contextMetadata: BrowserTypes.ContextMetadata,
+    ): Promise<void> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
         const strategyCanSelectResults = (
             await Promise.all(
                 this.applicationStrategies.filter(isSelectApplicationStrategy).map(async strategy => {
-                    const canSelect = await this.canStrategySelectApp(appIdentifier, strategy, application).catch(
-                        () => false,
-                    );
+                    const canSelect = await this.canStrategySelectApp(
+                        appIdentifier,
+                        strategy,
+                        application,
+                        context,
+                        contextMetadata,
+                    ).catch(() => false);
                     return canSelect ? strategy : undefined;
                 }),
             )
@@ -1564,20 +1594,24 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         if (strategyCanSelectResults.length > 0) {
             const strategy = strategyCanSelectResults[0];
-            await this.selectAppWithStrategy(appIdentifier, strategy, application);
+            await this.selectAppWithStrategy(appIdentifier, strategy, application, context, contextMetadata);
         }
     }
 
     private async canStrategySelectApp(
         appIdentifier: FullyQualifiedAppIdentifier,
         strategy: ISelectApplicationStrategy,
-        application?: AppDirectoryApplication,
+        application: AppDirectoryApplication | undefined,
+        context: Context,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<boolean> {
         const manifest = await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
             console.error(err),
         );
 
         return strategy.canSelectApp({
+            context,
+            contextMetadata,
             agent: this,
             appDirectoryRecord: removeHostManifests(application),
             manifest,
@@ -1588,10 +1622,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private async selectAppWithStrategy(
         appIdentifier: FullyQualifiedAppIdentifier,
         strategy: ISelectApplicationStrategy,
-        application?: AppDirectoryApplication,
+        application: AppDirectoryApplication | undefined,
+        context: Context,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<void> {
         await strategy
             .selectApp({
+                context,
+                contextMetadata,
                 appIdentifier,
                 appDirectoryRecord: removeHostManifests(application),
                 agent: this,
@@ -1619,7 +1657,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      */
     private async returnOrLaunchAppInstance(
         app: AppIdentifier,
-        context?: Context,
+        context: Context,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<FullyQualifiedAppIdentifier> {
         if (isFullyQualifiedAppIdentifier(app)) {
             return app;
@@ -1631,13 +1670,13 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return Promise.reject(OpenError.AppNotFound);
         }
 
-        const strategy = await this.resolveOpenStrategy(application, context);
+        const strategy = await this.resolveOpenStrategy(application, context, contextMetadata);
 
         if (strategy == null) {
             return Promise.reject(OpenError.ErrorOnLaunch);
         }
 
-        return this.launchApplicationInstance(strategy, application, this.appIdentifier, context);
+        return this.launchApplicationInstance(strategy, application, this.appIdentifier, contextMetadata, context);
     }
 }
 

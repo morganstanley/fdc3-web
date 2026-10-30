@@ -2401,6 +2401,11 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 await postRequestMessage(openMessage, source);
 
+                const expectedContextMetadata = {
+                    source,
+                    timestamp: currentDate,
+                    traceId: mockedGeneratedUuid,
+                };
                 const recordWithNoManifests = { ...mockedApplication };
                 delete recordWithNoManifests.hostManifests;
 
@@ -2410,6 +2415,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         agent: instance,
                         manifest: mockedApplication.hostManifests?.['mock-application'],
                         context: contact,
+                        contextMetadata: expectedContextMetadata,
                     }),
                 ).wasCalledOnce();
 
@@ -2423,6 +2429,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(openParams?.agent).toEqual(instance);
                 expect(openParams?.manifest).toEqual(mockedApplication.hostManifests?.['mock-application']);
                 expect(openParams?.context).toEqual(contact);
+                expect(openParams?.contextMetadata).toEqual(expectedContextMetadata);
 
                 const resolvedApp = await mockOpenStrategy.functionCallLookup['open']?.[0][0].appReadyPromise;
 

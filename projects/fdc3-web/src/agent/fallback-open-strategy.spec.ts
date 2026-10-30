@@ -34,6 +34,11 @@ vi.mock('../helpers/index.js', async () => {
     return proxyModule(actual);
 });
 
+const testContextMetadata = {
+    source: { appId: 'source-app', instanceId: 'source-instance' },
+    timestamp: new Date('2024-01-31T00:00:00.000Z'),
+    traceId: 'test-trace-id',
+};
 const mockAppUrl = 'mock-app-url';
 const incorrectMockAppUrl = 'incorrect-mock-app-url';
 const mockedGeneratedUuid = `mocked-generated-Uuid`;
@@ -111,7 +116,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'web', details: { url: mockAppUrl }, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
-                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
+                    contextMetadata: testContextMetadata,
                 }),
             ).toBe(true);
         });
@@ -123,7 +128,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'web', details: { url: '' }, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
-                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
+                    contextMetadata: testContextMetadata,
                 }),
             ).toBe(false);
         });
@@ -135,7 +140,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'web', details: {} as any, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
-                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
+                    contextMetadata: testContextMetadata,
                 }),
             ).toBe(false);
         });
@@ -147,7 +152,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
                 await instance.canOpen({
                     appDirectoryRecord: { type: 'native', details: { url: mockAppUrl }, appId: '', title: '' },
                     agent: mockDesktopAgent.mock,
-                    contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
+                    contextMetadata: testContextMetadata,
                 }),
             ).toBe(false);
         });
@@ -165,7 +170,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
         return {
             appDirectoryRecord,
             agent: mockDesktopAgent.mock,
-            contextMetadata: { source: { appId: 'source-app', instanceId: 'source-instance' } },
+            contextMetadata: testContextMetadata,
             appReadyPromise,
         };
     }
