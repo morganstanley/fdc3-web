@@ -70,11 +70,13 @@ describe(`${ContextListener.name} (context-listener)`, () => {
     let publishCallbacks: ((message: IProxyOutgoingMessageEnvelope) => void)[];
     let currentDate: Date;
     let contact: Contact;
+    let expectedMetadata: BrowserTypes.ContextMetadata;
 
     beforeEach(() => {
         publishCallbacks = [];
         currentDate = new Date(2024, 1, 0, 0, 0, 0);
         appIdentifier = { appId: mockedAppId, instanceId: mockedInstanceId };
+        expectedMetadata = { source: appIdentifier, timestamp: currentDate, traceId: 'mocked-trace-id' };
 
         mockMessagingProvider = Mock.create<IProxyMessagingProvider>().setup(
             setupFunction('sendMessage', message =>
@@ -87,8 +89,9 @@ describe(`${ContextListener.name} (context-listener)`, () => {
             setupFunction('createPublicChannel', channel => createMockChannel(channel).mock),
         );
 
+        let callbackUuid = 0;
         mockedHelpers = Mock.create<typeof helpersImport>().setup(
-            setupFunction('generateUUID', () => mockedRequestUuid),
+            setupFunction('generateUUID', () => `callback-${callbackUuid++}`),
             setupFunction('getTimestamp', () => currentDate),
             setupFunction(
                 'createRequestMessage',
@@ -250,7 +253,9 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                             .withFunction('sendMessage')
                             .withParametersEqualTo({ payload: expectedMessage }),
                     ).wasCalledOnce();
-                    expect(mockHandler.withFunction('handler').withParameters(contact)).wasCalledOnce();
+                    expect(
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
+                    ).wasCalledOnce();
                 });
 
                 it(`should not request latest context for channel if no channel is selected`, async () => {
@@ -322,6 +327,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                         meta: createExpectedRequestMeta(),
                         payload: {
                             type: 'USER_CHANNEL_CHANGED',
+                            channelId: null,
                         },
                         type: 'addEventListenerRequest',
                     };
@@ -335,47 +341,50 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     ).wasCalledOnce();
                 });
 
-                it(`should request latest context for channel and pass it to listener when app joins new channel`, async () => {
-                    const instance = await createInstance(details);
+                it.each([{ currentChannelId: mockedChannelId }, { newChannelId: mockedChannelId }])(
+                    'replays context when app joins a channel with %j',
+                    async payload => {
+                        const instance = await createInstance(details);
 
-                    setupContextListenerResponse();
-                    setupAddEventListenerResponse();
-                    mockChannelSelection();
-                    setupGetCurrentContextResponse(contact);
+                        setupContextListenerResponse();
+                        setupAddEventListenerResponse();
+                        mockChannelSelection();
+                        setupGetCurrentContextResponse(contact);
 
-                    await instance.addContextListener('fdc3.contact', mockHandler.mock.handler);
+                        await instance.addContextListener('fdc3.contact', mockHandler.mock.handler);
 
-                    setupGetCurrentContextResponse(contact);
-                    mockChannelSelection(mockedChannelId);
+                        setupGetCurrentContextResponse(contact);
+                        mockChannelSelection(mockedChannelId);
 
-                    const userChannelChangedEvent: BrowserTypes.ChannelChangedEvent = {
-                        meta: { timestamp: currentDate, eventUuid: `mocked-event-uuid` },
-                        payload: {
-                            newChannelId: mockedChannelId,
-                        },
-                        type: 'channelChangedEvent',
-                    };
+                        const userChannelChangedEvent: BrowserTypes.ChannelChangedEvent = {
+                            meta: { timestamp: currentDate, eventUuid: `mocked-event-uuid` },
+                            payload,
+                            type: 'channelChangedEvent',
+                        };
 
-                    postMessage(userChannelChangedEvent);
+                        postMessage(userChannelChangedEvent);
 
-                    const expectedMessage: BrowserTypes.GetCurrentContextRequest = {
-                        meta: createExpectedRequestMeta(),
-                        payload: {
-                            channelId: mockedChannelId,
-                            contextType: 'fdc3.contact',
-                        },
-                        type: 'getCurrentContextRequest',
-                    };
+                        const expectedMessage: BrowserTypes.GetCurrentContextRequest = {
+                            meta: createExpectedRequestMeta(),
+                            payload: {
+                                channelId: mockedChannelId,
+                                contextType: 'fdc3.contact',
+                            },
+                            type: 'getCurrentContextRequest',
+                        };
 
-                    await wait();
+                        await wait();
 
-                    expect(
-                        mockMessagingProvider
-                            .withFunction('sendMessage')
-                            .withParametersEqualTo({ payload: expectedMessage }),
-                    ).wasCalledOnce();
-                    expect(mockHandler.withFunction('handler').withParameters(contact)).wasCalledOnce();
-                });
+                        expect(
+                            mockMessagingProvider
+                                .withFunction('sendMessage')
+                                .withParametersEqualTo({ payload: expectedMessage }),
+                        ).wasCalledOnce();
+                        expect(
+                            mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
+                        ).wasCalledOnce();
+                    },
+                );
             }
 
             it('should return promise that resolves to added context listener', async () => {
@@ -426,7 +435,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                 await postBroadcastMessage(mockedChannelId, contact);
 
                 expect(
-                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                 ).wasCalledOnce();
             });
 
@@ -445,7 +454,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                 await postBroadcastMessage(mockedChannelId, contact);
 
                 expect(
-                    mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                    mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                 ).wasCalledOnce();
             });
 
@@ -471,7 +480,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage(mockedChannelId, contact);
 
                     expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                     ).wasCalledOnce();
 
                     //reset function call counts
@@ -487,9 +496,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage('new-channel-id', newContact);
 
                     expect(
-                        mockHandler
-                            .withFunction('handler')
-                            .withParametersEqualTo(newContact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(newContact, expectedMetadata),
                     ).wasCalledOnce();
                 });
 
@@ -506,7 +513,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage(mockedChannelId, contact);
 
                     expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                     ).wasCalledOnce();
 
                     mockChannelSelection(`mocked-channel-id-two`);
@@ -514,12 +521,12 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     await postBroadcastMessage(`mocked-channel-id-two`, contact);
 
                     expect(
-                        mockHandler.withFunction('handler').withParametersEqualTo(contact, { source: appIdentifier }),
+                        mockHandler.withFunction('handler').withParametersEqualTo(contact, expectedMetadata),
                     ).wasCalledOnce();
                 });
             }
 
-            it('should call ContextHandler function when BroadcastEvent is received without originatingApp', async () => {
+            it('should call ContextHandler function when BroadcastEvent is received without metadata', async () => {
                 const instance = await createInstance(details);
 
                 setupContextListenerResponse();
@@ -536,14 +543,19 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     payload: {
                         context: contact,
                         channelId: mockedChannelId,
-                    },
+                        // metadata intentionally omitted to verify the handler still receives the context
+                    } as BrowserTypes.BroadcastEventPayload,
                     type: 'broadcastEvent',
                 };
                 postMessage(broadcastEvent);
 
                 await wait();
 
-                expect(mockHandler.withFunction('handler').withParametersEqualTo(contact, undefined)).wasCalledOnce();
+                expect(
+                    mockHandler
+                        .withFunction('handler')
+                        .withParametersEqualTo(contact, undefined as unknown as BrowserTypes.ContextMetadata),
+                ).wasCalledOnce();
             });
 
             it('should not call ContextHandler function when BroadcastRequest with incorrect channelId is received', async () => {
@@ -771,6 +783,48 @@ describe(`${ContextListener.name} (context-listener)`, () => {
             expect(context).toBeNull();
         });
 
+        it('should return context and metadata from getCurrentContextWithMetadata', async () => {
+            const instance = await createInstance(details);
+
+            setupGetCurrentContextResponse(contact);
+
+            await expect(instance.getCurrentContextWithMetadata('fdc3.contact')).resolves.toEqual({
+                context: contact,
+                metadata: expectedMetadata,
+            });
+        });
+
+        it('should return null from getCurrentContextWithMetadata for an empty channel', async () => {
+            const instance = await createInstance(details);
+
+            setupGetCurrentContextResponse(null);
+
+            await expect(instance.getCurrentContextWithMetadata('fdc3.contact')).resolves.toBeNull();
+        });
+
+        it.each([
+            ['getCurrentContext', (instance: ContextListener) => instance.getCurrentContext('fdc3.contact')],
+            [
+                'getCurrentContextWithMetadata',
+                (instance: ContextListener) => instance.getCurrentContextWithMetadata('fdc3.contact'),
+            ],
+        ])('should reject malformed context/metadata pairs from %s', async (_method, invoke) => {
+            const malformedPayloads: BrowserTypes.GetCurrentContextResponsePayload[] = [
+                { context: null },
+                { context: null, metadata: expectedMetadata },
+                { context: contact, metadata: null },
+                { context: contact },
+                { metadata: expectedMetadata },
+            ];
+
+            for (const payload of malformedPayloads) {
+                const instance = await createInstance(details);
+                setupGetCurrentContextPayload(payload);
+
+                await expect(invoke(instance)).rejects.toThrow(ChannelError.MalformedContext);
+            }
+        });
+
         it('should not return Context object or null when non-matching requestUuid is passed', async () => {
             const instance = await createInstance(details);
 
@@ -939,7 +993,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
             payload: {
                 context,
                 channelId,
-                originatingApp: appIdentifier,
+                metadata: expectedMetadata,
             },
             type: 'broadcastEvent',
         };
@@ -952,7 +1006,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
         const eventListenerEvent: BrowserTypes.ChannelChangedEvent = {
             meta: { eventUuid: 'add-event-listener-event-uuid', timestamp: currentDate },
             payload: {
-                newChannelId: channelId,
+                currentChannelId: channelId,
             },
             type: 'channelChangedEvent',
         };
@@ -1014,6 +1068,13 @@ describe(`${ContextListener.name} (context-listener)`, () => {
     }
 
     function setupGetCurrentContextResponse(context: Context | null) {
+        setupGetCurrentContextPayload({
+            context,
+            metadata: context != null ? expectedMetadata : null,
+        });
+    }
+
+    function setupGetCurrentContextPayload(payload: BrowserTypes.GetCurrentContextResponsePayload) {
         awaitMessage(isGetCurrentContextRequest).then(() => {
             const responseMessage: BrowserTypes.GetCurrentContextResponse = {
                 meta: {
@@ -1021,9 +1082,7 @@ describe(`${ContextListener.name} (context-listener)`, () => {
                     timestamp: currentDate,
                     responseUuid: mockedResponseUuid,
                 },
-                payload: {
-                    context,
-                },
+                payload,
                 type: 'getCurrentContextResponse',
             };
 

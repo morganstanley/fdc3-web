@@ -357,6 +357,7 @@ describe('RootMessagePublisher', () => {
                 context: { type: 'sample.context' },
                 intent: 'startCall',
                 raiseIntentRequestUuid: 'raise-intent-request-uuid',
+                metadata: { source: rootAppIdentity, timestamp: mockedDate, traceId: 'trace-id' },
             },
             type: 'intentEvent',
         };
@@ -483,7 +484,6 @@ describe('RootMessagePublisher', () => {
                     fdc3Version: FDC3_VERSION,
                     provider: FDC3_PROVIDER,
                     optionalFeatures: {
-                        OriginatingAppMetadata: true,
                         UserChannelMembershipAPIs: true,
                         DesktopAgentBridging: false,
                     },

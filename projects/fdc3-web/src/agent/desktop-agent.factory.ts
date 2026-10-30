@@ -109,7 +109,9 @@ export class DesktopAgentFactory {
             logLevels: factoryParams.logLevels,
         });
 
-        this.updateWindow(agent);
+        if (!factoryParams.dontSetWindowFdc3) {
+            this.updateWindow(agent);
+        }
 
         return agent;
     }

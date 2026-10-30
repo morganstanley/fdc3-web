@@ -9,6 +9,7 @@
  * and limitations under the License. */
 
 import type {
+    AppProvidableContextMetadata,
     BrowserTypes,
     Channel,
     Context,
@@ -31,7 +32,7 @@ import { MessagingBase } from '../messaging/index.js';
 import { ContextListener, IChannelFactory } from './channel.contracts.js';
 
 /**
- * addContextListener is omitted from this list so that we don't have to implement the deprecated function overload
+ * Context listener registration is delegated to ContextListener separately.
  */
 type AgentChannels = Pick<
     DesktopAgent,
@@ -147,14 +148,14 @@ export class Channels extends MessagingBase implements AgentChannels {
         return Promise.resolve();
     }
 
-    public async broadcast(context: Context): Promise<void> {
+    public async broadcast(context: Context, metadata?: AppProvidableContextMetadata): Promise<void> {
         const currentChannel = await this.getCurrentChannel();
 
-        currentChannel?.broadcast(context);
+        return currentChannel?.broadcast(context, metadata);
     }
 
     public async addContextListener(
-        contextType: ContextType | null,
+        contextType: ContextType | ContextType[] | null,
         contextHandler: ContextHandler,
     ): Promise<Listener> {
         return this._contextListener.addContextListener(contextType, contextHandler);

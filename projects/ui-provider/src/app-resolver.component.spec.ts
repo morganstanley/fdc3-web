@@ -61,6 +61,63 @@ describe(`${AppResolverComponent.name} (app-resolver.component)`, () => {
         return identifier;
     }
 
+    describe.each(['intent', 'context'] as const)('instance preference for %s resolution', mode => {
+        function resolve(
+            apps: AppIdentifier[],
+            newInstance?: boolean,
+            target?: AppIdentifier,
+            appManifests: AppHostManifestLookup = {},
+        ) {
+            const component = createInstance();
+            const appIntent: AppIntent = { intent: { name: 'StartChat' }, apps };
+            const payload = { context: { type: 'fdc3.contact' }, appIdentifier: target, newInstance, appManifests };
+            return mode === 'intent'
+                ? component.resolveAppForIntent({ ...payload, intent: 'StartChat', appIntent })
+                : component.resolveAppForContext({ ...payload, appIntents: [appIntent] }).then(result => result.app);
+        }
+
+        it.each([false, true])('selects the requested instance kind for newInstance=%s', async newInstance => {
+            const app = create(1);
+            const running = create(1, 1);
+            expect(await resolve([app, running], newInstance)).toEqual(newInstance ? app : running);
+        });
+
+        it('rejects existing-only requests when only launchable apps exist', async () => {
+            await expect(resolve([create(1)], false)).rejects.toBe(ResolveError.TargetInstanceUnavailable);
+        });
+
+        it('does not use another app when the target has no running instance', async () => {
+            await expect(resolve([create(1), create(2, 1)], false, create(1))).rejects.toBe(
+                ResolveError.TargetInstanceUnavailable,
+            );
+        });
+
+        it('filters new-instance selection to the requested application', async () => {
+            expect(await resolve([create(1), create(1, 1), create(2)], true, create(1))).toEqual(create(1));
+        });
+
+        it('ignores the targeted instance when a new instance is requested', async () => {
+            expect(await resolve([create(1), create(1, 1)], true, create(1, 99))).toEqual(create(1));
+        });
+
+        it.each([undefined, false])('retains the targeted instance with newInstance=%s', async newInstance => {
+            expect(await resolve([create(1), create(1, 1), create(1, 2)], newInstance, create(1, 2))).toEqual(
+                create(1, 2),
+            );
+        });
+
+        it('rejects a new instance when singleton policy forbids launching', async () => {
+            await expect(
+                resolve([create(1), create(1, 1)], true, undefined, { '1': { singleton: true } }),
+            ).rejects.toBe(ResolveError.NoAppsFound);
+        });
+
+        it('keeps default selection when the preference is omitted', async () => {
+            expect(await resolve([create(1)])).toEqual(create(1));
+            expect(await resolve([create(1, 1)])).toEqual(create(1, 1));
+        });
+    });
+
     type ExpectedIndexes = { active: number[]; inactive: number[] };
     type ExpectedApps = { activeInstances: AppIdentifier[]; inactiveApps: AppIdentifier[] };
 

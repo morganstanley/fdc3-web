@@ -47,6 +47,8 @@ export function isRequestMessageType(value: any): boolean {
         case 'raiseIntentForContextRequest':
         case 'raiseIntentRequest':
         case 'heartbeatAcknowledgementRequest':
+        case 'clearContextRequest':
+        case 'closeRequest':
             return true;
         default:
             return neverCheck(requestMessage); // just to ensure that we have covered all values in our switch statement
@@ -80,7 +82,9 @@ export function isAppResponseMessage(value: any): value is ResponseMessage {
     );
 }
 
-export function isAppEventMessage(value: any): value is BrowserTypes.AgentEventMessage {
+export function isAppEventMessage(
+    value: any,
+): value is BrowserTypes.AgentEventMessage | BrowserTypes.ContextClearedEvent {
     const eventMessage = value as BrowserTypes.AgentEventMessage;
     return (
         eventMessage != null &&
@@ -254,6 +258,14 @@ export function isGetCurrentContextRequest(value: any): value is BrowserTypes.Ge
     return isAppRequestMessage(value) && value.type === 'getCurrentContextRequest';
 }
 
+export function isClearContextRequest(value: any): value is BrowserTypes.ClearContextRequest {
+    return isAppRequestMessage(value) && value.type === 'clearContextRequest';
+}
+
+export function isCloseRequest(value: any): value is BrowserTypes.CloseRequest {
+    return isAppRequestMessage(value) && value.type === 'closeRequest';
+}
+
 export function isPrivateChannelDisconnectRequest(value: any): value is BrowserTypes.PrivateChannelDisconnectRequest {
     return isAppRequestMessage(value) && value.type === 'privateChannelDisconnectRequest';
 }
@@ -284,6 +296,14 @@ export function isGetOrCreateChannelResponse(value: any): value is BrowserTypes.
 
 export function isBroadcastResponse(value: any): value is BrowserTypes.BroadcastResponse {
     return isAppResponseMessage(value) && value.type === 'broadcastResponse';
+}
+
+export function isClearContextResponse(value: any): value is BrowserTypes.ClearContextResponse {
+    return isAppResponseMessage(value) && value.type === 'clearContextResponse';
+}
+
+export function isCloseResponse(value: any): value is BrowserTypes.CloseResponse {
+    return isAppResponseMessage(value) && value.type === 'closeResponse';
 }
 
 export function isJoinUserChannelResponse(value: any): value is BrowserTypes.JoinUserChannelResponse {

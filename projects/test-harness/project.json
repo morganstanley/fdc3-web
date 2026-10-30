@@ -72,6 +72,12 @@
                 "runBuildTargetDependencies": false
             }
         },
-        "build:release": {}
+        "build:release": {},
+        "e2e": {
+            "executor": "nx:noop",
+            "dependsOn": [
+                "test-harness-e2e:e2e"
+            ]
+        }
     }
 }

@@ -22,7 +22,6 @@ import { AppDirectoryApplication, LocalAppDirectory, MS_HOST_MANIFEST_KEY } from
 import {
     AppHostManifestLookup,
     BackoffRetryParams,
-    FORCE_NEW_INSTANCE,
     FullyQualifiedAppId,
     FullyQualifiedAppIdentifier,
     IAppResolver,
@@ -41,7 +40,6 @@ import {
     mapApplicationToMetadata,
     mapLocalAppDirectory,
     mapUrlToFullyQualifiedAppId,
-    resolveAppIdentifier,
     urlContainsAllElements,
 } from '../helpers/index.js';
 
@@ -50,6 +48,12 @@ type DirectoryEntry = { application?: AppDirectoryApplication; instances: string
 type IntentToContextLookup = Partial<Record<Intent, Context[]>>;
 
 export class AppDirectory {
+    private readonly dynamicIntentContexts = new Map<string, Map<string | symbol, Context[]>>();
+    private readonly originalIntentContexts = new Map<string, Context[] | undefined>();
+    private intentKey(app: FullyQualifiedAppIdentifier, intent: Intent): string {
+        return JSON.stringify([app.instanceId, intent]);
+    }
+
     private log = createLogger(AppDirectory, 'proxy');
 
     private readonly directory: Partial<Record<FullyQualifiedAppId, DirectoryEntry>> = {}; //indexed by appId
@@ -119,7 +123,7 @@ export class AppDirectory {
 
     /**
      * Returns an AppIdentifier for the app to handle the intent.
-     * If the passed in app is fully qualified that is returned.
+     * If the passed in app identifies a running instance, that is returned unless a new instance is requested.
      * Otherwise the resolver determines which app to use (usually by launching a UI element).
      * The returned AppIdentifier may or may not have an instanceId - the caller is responsible
      * for opening a new instance if needed.
@@ -127,9 +131,10 @@ export class AppDirectory {
     public async resolveAppForIntent(
         intent: Intent,
         context: Context,
-        app?: AppIdentifier | string,
+        app?: AppIdentifier,
+        newInstance?: boolean,
     ): Promise<AppIdentifier> {
-        const appIdentifier = this.getValidatedAppIdentifier(app);
+        const appIdentifier = this.getValidatedAppIdentifier(app, newInstance);
 
         if (typeof appIdentifier === 'string') {
             // if we got a resolve error return it.
@@ -137,10 +142,6 @@ export class AppDirectory {
         }
 
         if (isFullyQualifiedAppIdentifier(appIdentifier)) {
-            if (appIdentifier.instanceId === FORCE_NEW_INSTANCE) {
-                return { appId: appIdentifier.appId };
-            }
-
             const contextLookup = this.instanceLookup[appIdentifier.instanceId]?.[intent];
 
             if (
@@ -157,13 +158,17 @@ export class AppDirectory {
 
         const appIntent = await this.getAppIntent(intent, context);
 
-        return (await this.appResolverPromise).resolveAppForIntent({
+        const resolved = await (
+            await this.appResolverPromise
+        ).resolveAppForIntent({
             intent,
             appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
             context,
             appIntent,
+            ...(newInstance == null ? {} : { newInstance }),
             appManifests: this.buildAppHostManifestLookup(),
         });
+        return this.applyInstancePreference(resolved, newInstance);
     }
 
     /**
@@ -174,9 +179,10 @@ export class AppDirectory {
      */
     public async resolveAppForContext(
         context: Context,
-        app?: AppIdentifier | string,
+        app?: AppIdentifier,
+        newInstance?: boolean,
     ): Promise<ResolveForContextResponse | undefined> {
-        const appIdentifier = this.getValidatedAppIdentifier(app);
+        const appIdentifier = this.getValidatedAppIdentifier(app, newInstance);
 
         if (typeof appIdentifier === 'string') {
             return Promise.reject(appIdentifier);
@@ -184,12 +190,35 @@ export class AppDirectory {
 
         const appIntents = await this.getAppIntentsForContext(context);
 
-        return (await this.appResolverPromise).resolveAppForContext({
+        const resolved = await (
+            await this.appResolverPromise
+        ).resolveAppForContext({
             context,
-            appIdentifier: appIdentifier == null ? undefined : { appId: appIdentifier.appId },
+            appIdentifier,
+            ...(newInstance == null ? {} : { newInstance }),
             appIntents,
             appManifests: this.buildAppHostManifestLookup(),
         });
+        return resolved == null
+            ? undefined
+            : { ...resolved, app: this.applyInstancePreference(resolved.app, newInstance) };
+    }
+
+    private applyInstancePreference(app: AppIdentifier, newInstance?: boolean): AppIdentifier {
+        if (newInstance === true) {
+            return { appId: app.appId };
+        }
+        if (newInstance === false) {
+            if (app.instanceId == null) {
+                throw ResolveError.TargetInstanceUnavailable;
+            }
+            const validated = this.getValidatedAppIdentifier(app);
+            if (typeof validated === 'string') {
+                throw validated;
+            }
+            return validated;
+        }
+        return app;
     }
 
     /**
@@ -199,6 +228,7 @@ export class AppDirectory {
         app: FullyQualifiedAppIdentifier,
         intent: Intent,
         context: Context[],
+        listenerUUID: string | symbol = Symbol(),
     ): Promise<void> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
@@ -213,7 +243,44 @@ export class AppDirectory {
             return Promise.reject(ResolveError.TargetAppUnavailable);
         }
 
-        this.addNewIntentContextLookup(app.instanceId, { intent, context });
+        const key = this.intentKey(app, intent);
+        if (!this.dynamicIntentContexts.has(key)) {
+            this.originalIntentContexts.set(key, this.instanceLookup[app.instanceId]?.[intent]?.slice());
+            this.dynamicIntentContexts.set(key, new Map());
+        }
+        this.dynamicIntentContexts.get(key)!.set(listenerUUID, context);
+        this.refreshIntentContexts(app, intent);
+    }
+
+    public unregisterIntentListener(app: FullyQualifiedAppIdentifier, intent: Intent, listenerUUID: string): void {
+        const key = this.intentKey(app, intent);
+        this.dynamicIntentContexts.get(key)?.delete(listenerUUID);
+        this.refreshIntentContexts(app, intent);
+    }
+
+    private refreshIntentContexts(app: FullyQualifiedAppIdentifier, intent: Intent): void {
+        const key = this.intentKey(app, intent);
+        const registrations = this.dynamicIntentContexts.get(key);
+        const lookup = this.instanceLookup[app.instanceId];
+        if (registrations == null || lookup == null) {
+            return;
+        }
+        const original = this.originalIntentContexts.get(key);
+        const active = [...registrations.values()];
+        if (original !== undefined) {
+            active.push(original);
+        }
+        if (active.length === 0) {
+            delete lookup[intent];
+        } else {
+            lookup[intent] = active.some(contexts => contexts.length === 0)
+                ? []
+                : [...new Map(active.flat().map(context => [context.type, context])).values()];
+        }
+        if (registrations.size === 0) {
+            this.dynamicIntentContexts.delete(key);
+            this.originalIntentContexts.delete(key);
+        }
     }
 
     /**
@@ -310,17 +377,20 @@ export class AppDirectory {
      * If the directory does not know the instance or app an error message is returned
      */
     private getValidatedAppIdentifier(
-        identifier: AppIdentifier | string,
+        identifier: AppIdentifier,
+        newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | ResolveError; // TODO: sort out this return type in next PR
 
     private getValidatedAppIdentifier(
-        identifier?: AppIdentifier | string,
+        identifier?: AppIdentifier,
+        newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError;
 
     private getValidatedAppIdentifier(
-        identifier?: AppIdentifier | string,
+        identifier: AppIdentifier | undefined,
+        newInstance?: boolean,
     ): (AppIdentifier & { appId: FullyQualifiedAppId }) | undefined | ResolveError {
-        const appIdentifier = resolveAppIdentifier(identifier);
+        const appIdentifier = identifier;
 
         if (appIdentifier == null) {
             return undefined;
@@ -334,13 +404,13 @@ export class AppDirectory {
 
         if (
             appIdentifier.instanceId != null &&
-            appIdentifier.instanceId !== FORCE_NEW_INSTANCE &&
+            newInstance !== true &&
             !this.directory[fullyQualifiedAppId]?.instances.includes(appIdentifier.instanceId)
         ) {
             return ResolveError.TargetInstanceUnavailable;
         }
 
-        return { ...appIdentifier, appId: fullyQualifiedAppId };
+        return newInstance === true ? { appId: fullyQualifiedAppId } : { ...appIdentifier, appId: fullyQualifiedAppId };
     }
 
     /**
@@ -466,7 +536,7 @@ export class AppDirectory {
             }),
             {},
         );
-        return Object.values(appIntentsForContextRecord);
+        return Object.values(appIntentsForContextRecord).filter(appIntent => appIntent.apps.length > 0);
     }
 
     /**
@@ -491,7 +561,7 @@ export class AppDirectory {
                 ...Object.values(this.instanceLookup)
                     .filter(intentContextLookups => intentContextLookups != null)
                     .flatMap(intentContextLookups => Object.entries(intentContextLookups))
-                    .filter(([_, contexts]) => contexts?.some(possibleContext => possibleContext.type === context.type))
+                    .filter(([_, contexts]) => contexts != null && this.isContextInArray(contexts, context))
                     .map(([intent]) => intent),
             ]),
         ];
@@ -562,7 +632,10 @@ export class AppDirectory {
                     }
                 }
                 //this should always be true
-                if (isFullyQualifiedAppId(appId)) {
+                if (
+                    isFullyQualifiedAppId(appId) &&
+                    (resultType == null || this.doesAppReturnResultType(entry?.application, intent, resultType))
+                ) {
                     //find all entries for app instances that resolve given intent and handle given context if provided
                     apps.push(...(await this.getInstancesForIntent(appId, intent, context)));
                 }
@@ -575,13 +648,17 @@ export class AppDirectory {
     /**
      * Returns true if given application returns result of given resultType when resolving given intent, and false otherwise
      */
-    private doesAppReturnResultType(application: AppDirectoryApplication, intent: Intent, resultType: string): boolean {
+    private doesAppReturnResultType(
+        application: AppDirectoryApplication | undefined,
+        intent: Intent,
+        resultType: string,
+    ): boolean {
         if (resultType.includes('channel')) {
             //return true if application returns channel of specific type if one is given, or any channel otherwise, when resolving given intent
-            if (application.interop?.intents?.listensFor?.[intent].resultType?.includes(resultType)) {
+            if (application?.interop?.intents?.listensFor?.[intent]?.resultType?.includes(resultType)) {
                 return true;
             }
-        } else if (application.interop?.intents?.listensFor?.[intent].resultType === resultType) {
+        } else if (application?.interop?.intents?.listensFor?.[intent]?.resultType === resultType) {
             return true;
         }
         return false;
@@ -717,36 +794,6 @@ export class AppDirectory {
         }
     }
 
-    /**
-     * Add new intentContextLookup without introducing duplicates
-     * @param instanceId which is having new intentContextLookup added
-     * @param newIntentContextLookup being added
-     * @returns true if intentContextLookup was added, and false otherwise
-     */
-    private addNewIntentContextLookup(
-        instanceId: string,
-        newIntentContextLookup: { intent: Intent; context: Context[] },
-    ): boolean {
-        const lookup = this.instanceLookup[instanceId];
-        if (lookup == null) {
-            return false;
-        }
-        const existingContexts = lookup[newIntentContextLookup.intent];
-
-        if (existingContexts != null) {
-            //intent is already registered so add contexts without duplicating
-            const existingTypes = new Set(existingContexts.map(c => c.type));
-            lookup[newIntentContextLookup.intent] = [
-                ...existingContexts,
-                ...newIntentContextLookup.context.filter(c => !existingTypes.has(c.type)),
-            ];
-        } else {
-            //add completely new intent context mapping
-            lookup[newIntentContextLookup.intent] = [...newIntentContextLookup.context];
-        }
-        return true;
-    }
-
     public async getAppDirectoryApplication(appId: string): Promise<AppDirectoryApplication | undefined> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
@@ -772,6 +819,12 @@ export class AppDirectory {
     }
 
     public removeDisconnectedApp(app: FullyQualifiedAppIdentifier): void {
+        for (const key of this.dynamicIntentContexts.keys()) {
+            if (JSON.parse(key)[0] === app.instanceId) {
+                this.dynamicIntentContexts.delete(key);
+                this.originalIntentContexts.delete(key);
+            }
+        }
         delete this.instanceLookup[app.instanceId];
         delete this.instanceMetadataLookup[app.instanceId];
 

@@ -17,7 +17,6 @@ import type {
 } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
-    convertToPrivateChannelEventListenerTypes,
     convertToPrivateChannelEventMessageTypes,
     convertToPrivateChannelEventTypes,
 } from '../helpers/event-type.helper.js';
@@ -27,9 +26,6 @@ import {
     isPrivateChannelAddEventListenerResponse,
     isPrivateChannelDisconnectResponse,
     isPrivateChannelEvent,
-    isPrivateChannelOnAddContextListenerEvent,
-    isPrivateChannelOnDisconnectEvent,
-    isPrivateChannelOnUnsubscribeEvent,
     isPrivateChannelUnsubscribeEventListenerResponse,
 } from '../helpers/index.js';
 import { ContextListener } from './channel.contracts.js';
@@ -51,45 +47,6 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
         contextListener: ContextListener,
     ) {
         super(channelDetails, appIdentifier, messagingProvider, contextListener);
-    }
-
-    //DEPRECATED
-    public onAddContextListener(handler: (contextType?: string) => void): Listener {
-        const listenerUUID = generateUUID();
-
-        this.addMessageCallback(listenerUUID, message => {
-            if (isPrivateChannelOnAddContextListenerEvent(message) && message.payload.privateChannelId === this.id) {
-                handler(message.payload.contextType ?? undefined);
-            }
-        });
-
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
-    }
-
-    //DEPRECATED
-    public onUnsubscribe(handler: (contextType?: string) => void): Listener {
-        const listenerUUID = generateUUID();
-
-        this.addMessageCallback(listenerUUID, message => {
-            if (isPrivateChannelOnUnsubscribeEvent(message) && message.payload.privateChannelId === this.id) {
-                handler(message.payload.contextType ?? undefined);
-            }
-        });
-
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
-    }
-
-    //DEPRECATED
-    public onDisconnect(handler: () => void): Listener {
-        const listenerUUID = generateUUID();
-
-        this.addMessageCallback(listenerUUID, message => {
-            if (isPrivateChannelOnDisconnectEvent(message) && message.payload.privateChannelId === this.id) {
-                handler();
-            }
-        });
-
-        return { unsubscribe: () => this.removeMessageCallback(listenerUUID) };
     }
 
     /**
@@ -116,34 +73,42 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
      * @param handler is the handler the events received will be passed to
      * @returns a listener for the specified PrivateChannelEventTypes
      */
-    public async addEventListener(type: PrivateChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
-        //TODO: Fix PrivateChannelEvents typing conflict between FDC3 spec and Browser Types
-        //currently does not accept null in PrivateChannelAddEventListenerRequestPayload
-        if (type == null) {
-            return Promise.reject('Currently cannot listen for all events');
+    public override async addEventListener(
+        type: PrivateChannelEventTypes | null,
+        handler: EventHandler,
+    ): Promise<Listener> {
+        if (type === 'contextCleared') return super.addEventListener(type, handler);
+        const cleared = type == null ? await super.addEventListener(null, handler) : undefined;
+        try {
+            const events = await this.registerPrivateEventListener(type, handler);
+            return {
+                unsubscribe: async () => {
+                    await events.unsubscribe();
+                    await cleared?.unsubscribe();
+                },
+            };
+        } catch (error) {
+            await cleared?.unsubscribe();
+            throw error;
         }
+    }
 
+    private async registerPrivateEventListener(
+        type: Exclude<PrivateChannelEventTypes, 'contextCleared'> | null,
+        handler: EventHandler,
+    ): Promise<Listener> {
         const requestMessage = createRequestMessage<BrowserTypes.PrivateChannelAddEventListenerRequest>(
             'privateChannelAddEventListenerRequest',
             this.appIdentifier,
-            { listenerType: convertToPrivateChannelEventListenerTypes(type), privateChannelId: this.id },
+            { listenerType: type, privateChannelId: this.id },
         );
 
-        const response = await this.getResponse(requestMessage, isPrivateChannelAddEventListenerResponse);
-
-        const listenerUUID = response.payload.listenerUUID;
-        if (response.payload.error != null) {
-            return Promise.reject(response.payload.error);
-        } else if (listenerUUID == null) {
-            //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
-            return Promise.reject('listenerUUID is null');
-        }
-
-        this.addMessageCallback(listenerUUID, message => {
+        const callbackUUID = `private-event-${generateUUID()}`;
+        this.addMessageCallback(callbackUUID, message => {
             //convert between EventMessageType and PrivateChannelEventTypes
             if (isPrivateChannelEvent(message)) {
-                const eventType = convertToPrivateChannelEventMessageTypes(type);
-                if (message.type === eventType) {
+                const eventType = type == null ? null : convertToPrivateChannelEventMessageTypes(type);
+                if (type == null || message.type === eventType) {
                     //only passes PrivateChannelEvents to handler if they are on correct Private Channel
                     if (message.payload.privateChannelId === this.id) {
                         this.convertEventPayload(message, handler);
@@ -151,6 +116,18 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
                 }
             }
         });
+
+        const response = await this.getResponse(requestMessage, isPrivateChannelAddEventListenerResponse);
+
+        const listenerUUID = response.payload.listenerUUID;
+        if (response.payload.error != null) {
+            await this.removeMessageCallback(callbackUUID);
+            return Promise.reject(response.payload.error);
+        } else if (listenerUUID == null) {
+            //this should not happen - there should be no situation where both listenerUUID and error are undefined in response payload
+            await this.removeMessageCallback(callbackUUID);
+            return Promise.reject('listenerUUID is null');
+        }
 
         const unsubscribe: () => Promise<void> = async () => {
             const eventListenerUnsubscribeRequest =
@@ -162,7 +139,7 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
 
             await this.getResponse(eventListenerUnsubscribeRequest, isPrivateChannelUnsubscribeEventListenerResponse);
 
-            this.removeMessageCallback(listenerUUID);
+            this.removeMessageCallback(callbackUUID);
         };
         return { unsubscribe };
     }
@@ -179,11 +156,17 @@ export class PrivateChannel extends PublicChannel implements FDC3PrivateChannel 
             case 'privateChannelOnUnsubscribeEvent':
                 handler({
                     type: convertToPrivateChannelEventTypes(message.type),
-                    details: { contextType: message.payload.contextType },
+                    details: {
+                        channelId: message.payload.privateChannelId,
+                        contextType: message.payload.contextType ?? null,
+                    },
                 });
                 break;
             case 'privateChannelOnDisconnectEvent':
-                handler({ type: convertToPrivateChannelEventTypes(message.type), details: null });
+                handler({
+                    type: convertToPrivateChannelEventTypes(message.type),
+                    details: { channelId: message.payload.privateChannelId },
+                });
                 break;
         }
     }

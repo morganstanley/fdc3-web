@@ -8,9 +8,29 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { BrowserTypes, Channel, Context, ContextHandler, DisplayMetadata, Listener } from '@finos/fdc3';
+import type {
+    AppProvidableContextMetadata,
+    BrowserTypes,
+    Channel,
+    ChannelEventTypes,
+    Context,
+    ContextHandler,
+    ContextWithMetadata,
+    DisplayMetadata,
+    EventHandler,
+    Listener,
+} from '@finos/fdc3';
+import { ResolveError } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
-import { createRequestMessage, isBroadcastResponse, resolveContextType } from '../helpers/index.js';
+import {
+    createRequestMessage,
+    generateUUID,
+    isAddEventListenerResponse,
+    isAppEventMessage,
+    isBroadcastResponse,
+    isClearContextResponse,
+    isEventListenerUnsubscribeResponse,
+} from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { ContextListener } from './channel.contracts.js';
 
@@ -50,10 +70,11 @@ export class PublicChannel extends MessagingBase implements Channel {
         return this._displayMetadata;
     }
 
-    public async broadcast(context: Context): Promise<void> {
+    public async broadcast(context: Context, metadata?: AppProvidableContextMetadata): Promise<void> {
         const message = createRequestMessage<BrowserTypes.BroadcastRequest>('broadcastRequest', this.appIdentifier, {
             channelId: this.id,
             context: context,
+            metadata: metadata ?? {},
         });
 
         const response = await this.getResponse(message, isBroadcastResponse);
@@ -69,14 +90,78 @@ export class PublicChannel extends MessagingBase implements Channel {
         return this.contextListener.getCurrentContext(contextType);
     }
 
-    public addContextListener(contextType: string | null, handler: ContextHandler): Promise<Listener>;
-    public addContextListener(handler: ContextHandler): Promise<Listener>;
-    public async addContextListener(
-        handlerOrContextType: string | null | ContextHandler,
-        optionalContextHandler?: ContextHandler,
-    ): Promise<Listener> {
-        const { contextType, contextHandler } = resolveContextType(handlerOrContextType, optionalContextHandler);
+    public getCurrentContextWithMetadata(contextType?: string | undefined): Promise<ContextWithMetadata | null> {
+        return this.contextListener.getCurrentContextWithMetadata(contextType);
+    }
 
-        return this.contextListener.addContextListener(contextType, contextHandler);
+    public async clearContext(contextType?: string | undefined): Promise<void> {
+        const message = createRequestMessage<BrowserTypes.ClearContextRequest>(
+            'clearContextRequest',
+            this.appIdentifier,
+            { channelId: this.id, contextType: contextType ?? null },
+        );
+
+        const response = await this.getResponse(message, isClearContextResponse);
+
+        if (response.payload.error != null) {
+            return Promise.reject(response.payload.error);
+        } else {
+            return Promise.resolve();
+        }
+    }
+
+    public addContextListener(contextType: string | string[] | null, handler: ContextHandler): Promise<Listener> {
+        return this.contextListener.addContextListener(contextType, handler);
+    }
+
+    public async addEventListener(type: ChannelEventTypes | null, handler: EventHandler): Promise<Listener> {
+        if (type !== null && type !== 'contextCleared') throw new Error(ResolveError.InvalidArguments);
+        const listenerUUID = generateUUID();
+        await this.addMessageCallback(listenerUUID, message => {
+            if (
+                isAppEventMessage(message) &&
+                message.type === 'contextClearedEvent' &&
+                message.payload.channelId === this.id &&
+                (type == null || type === 'contextCleared')
+            ) {
+                handler({
+                    type: 'contextCleared',
+                    details: {
+                        channelId: message.payload.channelId,
+                        contextType: message.payload.contextType,
+                    },
+                });
+            }
+        });
+        try {
+            const response = await this.getResponse(
+                createRequestMessage<BrowserTypes.AddEventListenerRequest>(
+                    'addEventListenerRequest',
+                    this.appIdentifier,
+                    { type: type === 'contextCleared' ? 'CONTEXT_CLEARED' : null, channelId: this.id },
+                ),
+                isAddEventListenerResponse,
+            );
+            if (response.payload.error != null) throw new Error(response.payload.error);
+            const registeredUUID = response.payload.listenerUUID;
+            if (registeredUUID == null) throw new Error('listenerUUID is null');
+            return {
+                unsubscribe: async () => {
+                    const result = await this.getResponse(
+                        createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
+                            'eventListenerUnsubscribeRequest',
+                            this.appIdentifier,
+                            { listenerUUID: registeredUUID },
+                        ),
+                        isEventListenerUnsubscribeResponse,
+                    );
+                    if (result.payload.error != null) throw new Error(result.payload.error);
+                    await this.removeMessageCallback(listenerUUID);
+                },
+            };
+        } catch (error) {
+            await this.removeMessageCallback(listenerUUID);
+            throw error;
+        }
     }
 }

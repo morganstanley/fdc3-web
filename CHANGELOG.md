@@ -27,21 +27,42 @@ if (isDesktopAgentNext(agent)) {
 
  * Fixed the app resolver displaying every instance metadata field, which could include values unsuitable for display. It now displays only `instanceMetadata.title` when present.
 
+## Unreleased
+
+### Changed
+
+- Expose `currentChannelId` in user-channel change event details, including `null` when leaving a channel.
+
+- Register channel-scoped context-cleared events over DACP, honor subscription scope and unsubscribe, and exclude the clearing app from delivery.
+
+- Support array context filters across agents and channels, including replay, private-channel notifications, validation and listener cleanup.
+
+- Align private-channel API event name conversions with FDC3 3.0 alpha.5 types.
+
+- Do not send a success response after closing the calling application (#407).
+- Include `channelId` in private-channel listener and disconnect event details (#406).
+- Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
+- Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
+- Accept null instance preferences, omit default preferences on the wire, and expose existing-instance failures as Error objects (#408).
+- Reject conflicting intent listeners, allow disjoint filters, and remove dynamic resolution mappings on unsubscribe (#405).
+- **Breaking:** Remove FDC3 APIs deprecated in 2.x (#409). Use `getUserChannels()` and `joinUserChannel()` instead of the system-channel aliases; pass `null` explicitly to unfiltered `addContextListener(null, handler)` calls; use `{ appId }` instead of string targets for `open` and intent APIs. Replace private-channel callbacks with `await channel.addEventListener(type, handler)` and read context types from `event.details.contextType`.
+
+- Intent handler failures are reported from `DesktopAgentProxy` to `DesktopAgent` through a non-standard `error` field on `intentResultRequest`, which the DACP schema does not define. The agent only forwards `ResultError` values and maps anything else to `IntentHandlerRejected`. Handler-failure propagation requires equivalent support in both the proxy and agent. A third-party agent may reject the extended request or ignore its error and interpret an empty result as success; a third-party proxy may not send the failure at all. Standard interoperability for this failure path is not guaranteed. Upstream protocol discussion: [finos/FDC3#2271](https://github.com/finos/FDC3/issues/2271).
+- `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
+- Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.
+- Custom `IAppResolver` implementations receive `newInstance` and must honor it when offering apps and instances for selection.
+
 ## 0.17.0 (2026-07-24)
+
+### Changed
+
+
+ * Upgraded to `@finos/fdc3` 3.0. FDC3 3.0 message types, enums and APIs (`close`, `clearContext`, `getCurrentContextWithMetadata`, context `metadata`, `addIntentListenerWithContext` context types, etc.) are now consumed directly from `@finos/fdc3`, and the temporary `projects/fdc3-web/src/fdc3-next` staging folder has been removed.
+ * Context and intent events now carry a `ContextMetadata` object (`metadata`) in place of the previous `originatingApp` field, and `broadcast`/`open`/`raiseIntent`/`raiseIntentForContext` accept optional `AppProvidableContextMetadata`.
 
 ### Added
 
- * Added a `close()` implementation allowing an app to request that its own window or frame be closed (`fdc3.close()`). This feature is planned for FDC3 3.0 but is not yet available from `@finos/fdc3`, so the supporting `closeRequest`/`closeResponse` DACP message types and the `CloseError` enumeration are temporarily maintained in this library under `projects/fdc3-web/src/fdc3-next` and will be removed once FDC3 3.0 can be installed. To call `close()` the agent must be typed as `DesktopAgentNext`:
-
- ```ts
-import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
-
- const agent = await getAgent();
-
- await (agent as DesktopAgentNext).close();
-```
-
- Closing of the app's window or frame is delegated to an `ICloseApplicationStrategy`, following the same pattern as the existing open and select strategies. A default strategy is always provided that tracks and closes windows opened by the agent itself; consumers that open apps in their own windows or iframes should provide a matching `ICloseApplicationStrategy`.
+ * Added a `close()` implementation allowing an app to request that its own window or frame be closed (`fdc3.close()`). `close()` is now part of the base FDC3 `DesktopAgent` interface. Closing of the app's window or frame is delegated to an `ICloseApplicationStrategy`, following the same pattern as the existing open and select strategies. A default strategy is always provided that tracks and closes windows opened by the agent itself; consumers that open apps in their own windows or iframes should provide a matching `ICloseApplicationStrategy`.
 
  Feature issue: https://github.com/finos/FDC3/issues/1809
 
@@ -175,6 +196,7 @@ import { DesktopAgentNext } from "@morgan-stanley/fdc3-web";
 
 ### Changed
 
+
  * Make `appDirectoryRecord` optional in `ISelectApplicationStrategy` function calls
 
  ### Fixed
@@ -257,6 +279,7 @@ export interface ISelectApplicationStrategy {
  ```
 
  ### Changed
+
 
   * IAppResolver  implementations no longer have to return an `FullyQualifiedAppIdentifier`. Instead they can just return an `AppIdentifier`. If a non-qualified identifier is returned the Desktop Agent will handle the responsibility of opening a new instance of that app.
 
@@ -381,6 +404,7 @@ getAgent({
 ```
 
 ### Changed
+
 
 Implemented a better url comparison function for verifying app identity against app directory. This function now considers all aspects of the url including query params, hash and path segments. This allows apps on the same host to be differentiated:
 

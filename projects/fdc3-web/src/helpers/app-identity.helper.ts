@@ -9,7 +9,6 @@
  * and limitations under the License. */
 
 import type { AppIdentifier } from '@finos/fdc3';
-import { FullyQualifiedAppIdentifier } from '../contracts.js';
 import { isFullyQualifiedAppId } from './type-predicate.helper.js';
 
 /**
@@ -17,38 +16,6 @@ import { isFullyQualifiedAppId } from './type-predicate.helper.js';
  */
 export function appInstanceEquals(appOne: AppIdentifier, appTwo: AppIdentifier): boolean {
     return appOne.appId === appTwo.appId && appOne.instanceId != null && appOne.instanceId === appTwo.instanceId;
-}
-
-/**
- * takes an appIdentifier or a string and returns an AppIdentifier
- * if an instanceId function is provided will populate the instanceId of the returned identifier
- */
-export function resolveAppIdentifier(app: AppIdentifier): AppIdentifier;
-export function resolveAppIdentifier(app: string | AppIdentifier): AppIdentifier;
-export function resolveAppIdentifier(
-    app: string | AppIdentifier,
-    instanceId: () => string,
-): FullyQualifiedAppIdentifier;
-export function resolveAppIdentifier(app?: AppIdentifier): AppIdentifier | undefined;
-export function resolveAppIdentifier(
-    app?: string | AppIdentifier,
-    instanceId?: () => string,
-): AppIdentifier | undefined;
-export function resolveAppIdentifier(
-    app?: AppIdentifier | string,
-    instanceId?: () => string,
-): AppIdentifier | undefined {
-    if (typeof app === 'object') {
-        return app;
-    } else {
-        let identifier: AppIdentifier | undefined = app != null ? { appId: app } : undefined;
-
-        if (instanceId != null && identifier! != null) {
-            identifier = { ...identifier, instanceId: instanceId() };
-        }
-
-        return identifier;
-    }
 }
 
 export function toUnqualifiedAppId(appId: string): string {

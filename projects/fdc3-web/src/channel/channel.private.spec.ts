@@ -8,7 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { BrowserTypes, EventHandler, Listener, PrivateChannel as FDC3PrivateChannel } from '@finos/fdc3';
+import type { BrowserTypes, EventHandler, Listener } from '@finos/fdc3';
 import { IMocked, Mock, proxyModule, registerMock, setupFunction } from '@morgan-stanley/ts-mocking-bird';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -73,10 +73,14 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
         registerMock(helpersImport, mockedHelpers.mock);
     });
 
-    async function createInstance(channel?: BrowserTypes.Channel): Promise<FDC3PrivateChannel> {
+    async function createInstance(channel?: BrowserTypes.Channel): Promise<PrivateChannel> {
         channel = channel ?? { id: mockedChannelId, type: 'private' };
 
-        const instance = new ChannelFactory().createPrivateChannel(channel, appIdentifier, mockMessagingProvider.mock);
+        const instance = new ChannelFactory().createPrivateChannel(
+            channel,
+            appIdentifier,
+            mockMessagingProvider.mock,
+        ) as PrivateChannel;
 
         await wait();
 
@@ -87,6 +91,38 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
         const instance = await createInstance();
         expect(instance).toBeInstanceOf(PublicChannel);
     });
+
+    it.each(['addContextListener', 'unsubscribe'] as const)(
+        'includes channelId and null contextType in %s events',
+        async type => {
+            const instance = await createInstance();
+            const handler = vi.fn();
+            const registration = instance.addEventListener(type, handler);
+            postMessage({
+                type: 'privateChannelAddEventListenerResponse',
+                meta: { requestUuid: mockedRequestUuid, responseUuid: mockedResponseUuid, timestamp: currentDate },
+                payload: { listenerUUID: 'event-listener' },
+            });
+            await registration;
+            const event:
+                BrowserTypes.PrivateChannelOnAddContextListenerEvent | BrowserTypes.PrivateChannelOnUnsubscribeEvent = {
+                type:
+                    type === 'addContextListener'
+                        ? 'privateChannelOnAddContextListenerEvent'
+                        : 'privateChannelOnUnsubscribeEvent',
+                meta: { eventUuid: mockedEventUuid, timestamp: currentDate },
+                payload: { privateChannelId: 'other-channel', contextType: null },
+            };
+            postMessage(event);
+            expect(handler).not.toHaveBeenCalled();
+            event.payload.privateChannelId = mockedChannelId;
+            postMessage(event);
+            expect(handler).toHaveBeenCalledExactlyOnceWith({
+                type,
+                details: { channelId: mockedChannelId, contextType: null },
+            });
+        },
+    );
 
     //https://fdc3.finos.org/docs/api/ref/PrivateChannel#disconnect
     describe('disconnect', () => {
@@ -108,195 +144,6 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
             expect(
                 mockMessagingProvider.withFunction('sendMessage').withParametersEqualTo({ payload: expectedMessage }),
             ).wasCalledOnce();
-        });
-    });
-
-    //https://fdc3.finos.org/docs/api/ref/PrivateChannel#ondisconnect
-    describe('onDisconnect', () => {
-        let mockHandler: IMocked<{ handler: () => void }>;
-
-        beforeEach(() => {
-            mockHandler = Mock.create<{ handler: () => void }>().setup(setupFunction('handler'));
-        });
-
-        it('should return listener that will be called each time the remote app invokes disconnect on this channel', async () => {
-            const instance = await createInstance();
-
-            const listener = instance.onDisconnect(mockHandler.mock.handler);
-
-            expect(typeof listener.unsubscribe).toBe('function');
-        });
-
-        it('should call handler on receipt of PrivateChannelOnDisconnectEvent', async () => {
-            const instance = await createInstance();
-
-            instance.onDisconnect(mockHandler.mock.handler);
-
-            const eventMessage: BrowserTypes.PrivateChannelOnDisconnectEvent = {
-                meta: {
-                    eventUuid: mockedEventUuid,
-                    timestamp: currentDate,
-                },
-                payload: {
-                    privateChannelId: mockedChannelId,
-                },
-                type: 'privateChannelOnDisconnectEvent',
-            };
-
-            postMessage(eventMessage);
-
-            expect(mockHandler.withFunction('handler')).wasCalledOnce();
-        });
-
-        it('should not call handler after unsubscribe has been called', async () => {
-            const instance = await createInstance();
-
-            const listener = instance.onDisconnect(mockHandler.mock.handler);
-
-            listener.unsubscribe();
-
-            const eventMessage: BrowserTypes.PrivateChannelOnDisconnectEvent = {
-                meta: {
-                    eventUuid: mockedEventUuid,
-                    timestamp: currentDate,
-                },
-                payload: {
-                    privateChannelId: mockedChannelId,
-                },
-                type: 'privateChannelOnDisconnectEvent',
-            };
-
-            postMessage(eventMessage);
-
-            await wait();
-
-            expect(mockHandler.withFunction('handler')).wasNotCalled();
-        });
-    });
-
-    // https://fdc3.finos.org/docs/api/ref/PrivateChannel#onunsubscribe
-    describe('onUnsubscribe', () => {
-        let mockHandler: IMocked<{ handler: (contextType?: string) => void }>;
-
-        beforeEach(() => {
-            mockHandler = Mock.create<{ handler: (contextType?: string) => void }>().setup(setupFunction('handler'));
-        });
-
-        it('should return listener that will be called each time the remote app invokes unsubscribe on this channel', async () => {
-            const instance = await createInstance();
-
-            const listener = instance.onUnsubscribe(mockHandler.mock.handler);
-
-            expect(typeof listener.unsubscribe).toBe('function');
-        });
-
-        it('should call handler on receipt of PrivateChannelOnUnsubscribeEvent', async () => {
-            const instance = await createInstance();
-
-            instance.onUnsubscribe(mockHandler.mock.handler);
-
-            const eventMessage: BrowserTypes.PrivateChannelOnUnsubscribeEvent = {
-                meta: {
-                    eventUuid: mockedEventUuid,
-                    timestamp: currentDate,
-                },
-                payload: {
-                    contextType: 'fdc3.contact',
-                    privateChannelId: mockedChannelId,
-                },
-                type: 'privateChannelOnUnsubscribeEvent',
-            };
-
-            postMessage(eventMessage);
-
-            expect(mockHandler.withFunction('handler')).wasCalledOnce();
-        });
-
-        it('should not call handler after unsubscribe has been called', async () => {
-            const instance = await createInstance();
-
-            const listener = instance.onUnsubscribe(mockHandler.mock.handler);
-
-            listener.unsubscribe();
-
-            const eventMessage: BrowserTypes.PrivateChannelOnUnsubscribeEvent = {
-                meta: {
-                    eventUuid: mockedEventUuid,
-                    timestamp: currentDate,
-                },
-                payload: {
-                    contextType: 'fdc3.contact',
-                    privateChannelId: mockedChannelId,
-                },
-                type: 'privateChannelOnUnsubscribeEvent',
-            };
-
-            postMessage(eventMessage);
-
-            expect(mockHandler.withFunction('handler')).wasNotCalled();
-        });
-    });
-
-    // https://fdc3.finos.org/docs/api/ref/PrivateChannel#onaddcontextlistener
-    describe('onAddContextListener', () => {
-        let mockHandler: IMocked<{ handler: (contextType?: string) => void }>;
-
-        beforeEach(() => {
-            mockHandler = Mock.create<{ handler: (contextType?: string) => void }>().setup(setupFunction('handler'));
-        });
-
-        it('should return listener that will be called each time the remote app invokes addContextListener on this channel', async () => {
-            const instance = await createInstance();
-
-            const listener = instance.onAddContextListener(mockHandler.mock.handler);
-
-            expect(typeof listener.unsubscribe).toBe('function');
-        });
-
-        it('should call handler on receipt of PrivateChannelOnAddContextListenerEvent', async () => {
-            const instance = await createInstance();
-
-            instance.onAddContextListener(mockHandler.mock.handler);
-
-            const eventMessage: BrowserTypes.PrivateChannelOnAddContextListenerEvent = {
-                meta: {
-                    eventUuid: mockedEventUuid,
-                    timestamp: currentDate,
-                },
-                payload: {
-                    contextType: 'fdc3.contact',
-                    privateChannelId: mockedChannelId,
-                },
-                type: 'privateChannelOnAddContextListenerEvent',
-            };
-
-            postMessage(eventMessage);
-
-            expect(mockHandler.withFunction('handler')).wasCalledOnce();
-        });
-
-        it('should not call handler after unsubscribe has been called', async () => {
-            const instance = await createInstance();
-
-            const listener = instance.onAddContextListener(mockHandler.mock.handler);
-
-            listener.unsubscribe();
-
-            const eventMessage: BrowserTypes.PrivateChannelOnAddContextListenerEvent = {
-                meta: {
-                    eventUuid: mockedEventUuid,
-                    timestamp: currentDate,
-                },
-                payload: {
-                    contextType: 'fdc3.contact',
-                    privateChannelId: mockedChannelId,
-                },
-                type: 'privateChannelOnAddContextListenerEvent',
-            };
-
-            postMessage(eventMessage);
-
-            expect(mockHandler.withFunction('handler')).wasNotCalled();
         });
     });
 
@@ -393,7 +240,7 @@ describe(`${PrivateChannel.name} (channel.private)`, () => {
             expect(
                 mockHandler.withFunction('handler').withParametersEqualTo({
                     type: 'disconnect',
-                    details: null,
+                    details: { channelId: mockedChannelId },
                 }),
             ).wasCalledOnce();
         });

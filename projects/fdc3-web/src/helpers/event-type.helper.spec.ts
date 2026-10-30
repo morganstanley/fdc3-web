@@ -9,7 +9,12 @@
  * and limitations under the License. */
 
 import { describe, expect, it } from 'vitest';
-import { convertToEventListenerIndex, convertToFDC3EventTypes } from './event-type.helper.js';
+import {
+    convertToEventListenerIndex,
+    convertToFDC3EventTypes,
+    convertToPrivateChannelEventMessageTypes,
+    convertToPrivateChannelEventTypes,
+} from './event-type.helper.js';
 
 describe(`event-type.helper`, () => {
     describe(`${convertToFDC3EventTypes.name} (event-type.helper)`, () => {
@@ -18,7 +23,11 @@ describe(`event-type.helper`, () => {
             expect(result).toEqual('userChannelChanged');
         });
 
-        it(`should return null if type != 'channelChangedEvent'`, () => {
+        it('should convert context-cleared events', () => {
+            expect(convertToFDC3EventTypes('contextClearedEvent')).toBe('contextCleared');
+        });
+
+        it('should return null for non-API events', () => {
             const result = convertToFDC3EventTypes('broadcastEvent');
             expect(result).toBeNull();
         });
@@ -30,9 +39,32 @@ describe(`event-type.helper`, () => {
             expect(result).toEqual('userChannelChanged');
         });
 
+        it('maps CONTEXT_CLEARED to its own listener group', () => {
+            expect(convertToEventListenerIndex('CONTEXT_CLEARED')).toBe('contextCleared');
+        });
+
         it(`should return 'allEvents' if type === null`, () => {
             const result = convertToEventListenerIndex(null);
             expect(result).toEqual('allEvents');
         });
+    });
+});
+
+// API event names and wire message names have distinct conversion directions.
+describe('private channel event conversions', () => {
+    it.each([
+        ['addContextListener', 'privateChannelOnAddContextListenerEvent'],
+        ['disconnect', 'privateChannelOnDisconnectEvent'],
+        ['unsubscribe', 'privateChannelOnUnsubscribeEvent'],
+    ] as const)('converts %s and %s', (apiType, messageType) => {
+        expect(convertToPrivateChannelEventMessageTypes(apiType)).toBe(messageType);
+        expect(convertToPrivateChannelEventTypes(apiType)).toBe(apiType);
+        expect(convertToPrivateChannelEventTypes(messageType)).toBe(apiType);
+    });
+
+    it('converts context-cleared events in both directions', () => {
+        expect(convertToPrivateChannelEventMessageTypes('contextCleared')).toBe('contextClearedEvent');
+        expect(convertToPrivateChannelEventTypes('contextClearedEvent')).toBe('contextCleared');
+        expect(convertToPrivateChannelEventTypes('contextCleared')).toBe('contextCleared');
     });
 });
