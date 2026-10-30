@@ -86,3 +86,43 @@ export function urlContainsAllElements(sourceUrl: string, comparisonUrl: string)
         )
     );
 }
+
+/**
+ * Computes a specificity tuple [pathSegmentCount, searchParamCount, hashCount] for a candidate
+ * App Directory URL that matches an identityUrl via urlContainsAllElements.
+ * @param sourceUrl
+ * @returns
+ */
+export function getUrlMatchSpecificity(sourceUrl: string): [number, number, number] {
+    const source = new URL(sourceUrl);
+    const pathSegmentCount = source.pathname.split('/').filter(segment => segment.length > 0).length;
+    const searchParamCount = Array.from(source.searchParams.keys()).reduce(
+        (count, key) => count + source.searchParams.getAll(key).length,
+        0,
+    );
+    const hashCount = source.hash !== '' ? 1 : 0;
+
+    return [pathSegmentCount, searchParamCount, hashCount];
+}
+
+/**
+ * Compares the specificity of two candidate App Directory URLs.
+ * Returns a positive number if urlOne is more specific than urlTwo, a negative number if less specific, or 0 if equal.
+ * @param urlOne
+ * @param urlTwo
+ * @returns
+ */
+export function compareUrlSpecificity(urlOne: string, urlTwo: string): number {
+    const [pathOne, paramsOne, hashOne] = getUrlMatchSpecificity(urlOne);
+    const [pathTwo, paramsTwo, hashTwo] = getUrlMatchSpecificity(urlTwo);
+
+    if (pathOne !== pathTwo) {
+        return pathOne - pathTwo;
+    }
+
+    if (paramsOne !== paramsTwo) {
+        return paramsOne - paramsTwo;
+    }
+
+    return hashOne - hashTwo;
+}

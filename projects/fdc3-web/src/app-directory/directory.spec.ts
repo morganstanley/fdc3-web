@@ -1927,6 +1927,26 @@ describe(`${AppDirectory.name} (directory)`, () => {
                 'app-id-with-manifest@mock-app-directory': { singleton: true },
             });
         });
+
+        it('should prefer query-parameter apps over an origin-only app on the same host', async () => {
+            const originApp = createWebAppDirectoryEntry('origin-app', 'http://mydomain', 'Origin App');
+            const queryAppOne = createWebAppDirectoryEntry('query-app-one', 'http://mydomain?fdc=app1', 'App 1');
+            const queryAppTwo = createWebAppDirectoryEntry('query-app-two', 'http://mydomain?fdc=app2', 'App 2');
+
+            mockedHelpers.setupFunction('getAppDirectoryApplications', () =>
+                Promise.resolve([originApp, queryAppOne, queryAppTwo]),
+            );
+
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            const resolvedOne = await instance.registerNewInstance('http://mydomain?fdc=app1');
+            const resolvedTwo = await instance.registerNewInstance('http://mydomain?fdc=app2');
+            const resolvedOrigin = await instance.registerNewInstance('http://mydomain?fdc=unknown');
+
+            expect(resolvedOne.identifier.appId).toEqual('query-app-one@mock-app-directory');
+            expect(resolvedTwo.identifier.appId).toEqual('query-app-two@mock-app-directory');
+            expect(resolvedOrigin.identifier.appId).toEqual('origin-app@mock-app-directory');
+        });
     });
 
     async function registerApp(
