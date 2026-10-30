@@ -1,9 +1,8 @@
 # ARCHITECTURE
 
-This document provides an overview of the architecture for the `fdc3-web` library and its associated modules. The project is organized into three main modules:
+This document provides an overview of the architecture for the `fdc3-web` library and its associated modules. The project is organized into two main modules:
 
 - [Main Library (`lib`)](#main-library-lib)
-- [Messaging Provider (`messaging-provider`)](#messaging-provider)
 - [UI Provider (`ui-provider`)](#ui-provider)
 
 ---
@@ -26,27 +25,6 @@ package "fdc3-web" {
   [FDC3 API] --> [Intents]
   [FDC3 API] --> [Channels]
 }
-@enduml
-```
-
----
-
-## Messaging Provider
-
-The `messaging-provider` module implements the FDC3 messaging provider interface, enabling communication between browser frames and windows, including across domains. **Note:** This module is _not required_ by consuming applications, as the main library already includes a built-in WCP-based connectivity layer.
-
-- **Purpose**: To provide an alternative messaging mechanism for testing iframe connectivity.
-
-### Messaging Provider Sequence
-```plantuml
-@startuml
-actor App1
-actor App2
-participant "fdc3-web lib" as Lib
-participant "Messaging Provider" as MP
-App1 -> Lib: sendContext()
-Lib -> MP: postMessage()
-MP -> App2: deliverContext()
 @enduml
 ```
 

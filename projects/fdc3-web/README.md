@@ -14,22 +14,11 @@ The FDC3 library is a powerful tool for building interoperable financial desktop
 
 ```typescript
 import { DesktopAgentFactory } from '@morgan-stanley/fdc3-web';
-import { rootWindowMessagingProviderFactory } from '@morgan-stanley/fdc3-web-messaging-provider';
 
 const desktopAgentFactory = new DesktopAgentFactory();
 
 // If in the root window of the application create the Root Desktop Agent
-const fdc3 = desktopAgentFactory.createRoot('my-application', rootWindowMessagingProviderFactory)
-```
-
-```typescript
-import { DesktopAgentFactory } from '@morgan-stanley/fdc3-web';
-import { iframeMessagingProviderFactory } from '@morgan-stanley/fdc3-web-messaging-provider';
-
-const desktopAgentFactory = new DesktopAgentFactory();
-
-// If in the child window or Iframe of the application create a Proxy Desktop Agent
-const fdc3 = desktopAgentFactory.createProxy('my-child-application', iframeMessagingProviderFactory)
+const fdc3 = desktopAgentFactory.createRoot('my-application')
 ```
 
 ```typescript

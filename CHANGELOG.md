@@ -2,6 +2,8 @@
 
 ### Changed
 
+- **Breaking:** Removed the unused `@morgan-stanley/fdc3-web-messaging-provider` package. It was not required by consuming applications as the main library includes a built-in WCP-based connectivity layer.
+
 - Expose `currentChannelId` in user-channel change event details, including `null` when leaving a channel.
 
 - Register channel-scoped context-cleared events over DACP, honor subscription scope and unsubscribe, and exclude the clearing app from delivery.

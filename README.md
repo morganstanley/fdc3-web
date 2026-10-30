@@ -10,7 +10,6 @@
 ```shell
 npm install @morgan-stanley/fdc3-web
 npm install @morgan-stanley/fdc3-web-ui-provider
-npm install @morgan-stanley/fdc3-web-messaging-provider
 ```
 
 ## Usage
@@ -291,7 +290,6 @@ Available log levels from `@finos/fdc3` are:
 ## Development Notes
 
 - `lib` - The actual implementation of the fdc3 code. This library will be published for use in other applications.
-- `messaging-provider` - A messaging provider for the fdc3 library. This is an implementation of the messaging-provider interface that provides communications between frames and windows, including in other domains. This will be published for use in other applications.
 - `ui-provider` - A UI provider for the fdc3 library. This provides a Resolver and Channel Selector. This will be published for use in other applications.
 - `test-harness` - A Lit app for testing local messaging between different apps working in the same context. Will depend on `lib`.
 - `test-harness-e2e` - Playwright browser tests for the FDC3 3.0 APIs, using the test harness across application origins.

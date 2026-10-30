@@ -18,7 +18,6 @@ To configure the `AppResolverComponent` on the `DesktopAgent` when calling `Desk
 1. Import the necessary modules:
 ```typescript
 import { DesktopAgentFactory, DesktopAgent } from '@morgan-stanley/fdc3-web';
-import { rootWindowMessagingProviderFactory } from '@morgan-stanley/fdc3-web-messaging-provider';
 
 const desktopAgentFactory = new DesktopAgentFactory();
 ```
@@ -26,7 +25,6 @@ const desktopAgentFactory = new DesktopAgentFactory();
 2. Configure the `DesktopAgent` with the `AppResolverComponent`:
 ```typescript
 const fdc3 = desktopAgentFactory.createRoot('my-application',
-    rootWindowMessagingProviderFactory,
     (agent: DesktopAgent) => Promise.resolve(new AppResolverComponent(document, agent))
     )
 ```

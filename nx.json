@@ -86,7 +86,6 @@
             "preserveLocalDependencyProtocols": false,
             "manifestRootsToUpdate": [
                 "projects/fdc3-web/",
-                "projects/messaging-provider/",
                 "projects/ui-provider/"
             ]
         }

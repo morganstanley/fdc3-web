@@ -42,8 +42,5 @@ jobs:
             - name: Publish FDC3 Library
               run: cd dist/fdc3-web && npm publish --provenance --access public
 
-            - name: Publish Messaging Provider Library
-              run: cd dist/fdc3-web-messaging-provider && npm publish --provenance --access public
-
             - name: Publish UI Provider Library
               run: cd dist/fdc3-web-ui-provider && npm publish --provenance --access public
