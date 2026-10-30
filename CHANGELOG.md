@@ -1,3 +1,28 @@
+## 3.0.0
+
+### Changed
+
+- Expose `currentChannelId` in user-channel change event details, including `null` when leaving a channel.
+
+- Register channel-scoped context-cleared events over DACP, honor subscription scope and unsubscribe, and exclude the clearing app from delivery.
+
+- Support array context filters across agents and channels, including replay, private-channel notifications, validation and listener cleanup.
+
+- Align private-channel API event name conversions with FDC3 3.0 alpha.5 types.
+
+- Do not send a success response after closing the calling application (#407).
+- Include `channelId` in private-channel listener and disconnect event details (#406).
+- Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
+- Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
+- Accept null instance preferences, omit default preferences on the wire, and expose existing-instance failures as Error objects (#408).
+- Reject conflicting intent listeners, allow disjoint filters, and remove dynamic resolution mappings on unsubscribe (#405).
+- **Breaking:** Remove FDC3 APIs deprecated in 2.x (#409). Use `getUserChannels()` and `joinUserChannel()` instead of the system-channel aliases; pass `null` explicitly to unfiltered `addContextListener(null, handler)` calls; use `{ appId }` instead of string targets for `open` and intent APIs. Replace private-channel callbacks with `await channel.addEventListener(type, handler)` and read context types from `event.details.contextType`.
+
+- Intent handler failures are reported from `DesktopAgentProxy` to `DesktopAgent` through a non-standard `error` field on `intentResultRequest`, which the DACP schema does not define. The agent only forwards `ResultError` values and maps anything else to `IntentHandlerRejected`. Handler-failure propagation requires equivalent support in both the proxy and agent. A third-party agent may reject the extended request or ignore its error and interpret an empty result as success; a third-party proxy may not send the failure at all. Standard interoperability for this failure path is not guaranteed. Upstream protocol discussion: [finos/FDC3#2271](https://github.com/finos/FDC3/issues/2271).
+- `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
+- Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.
+- Custom `IAppResolver` implementations receive `newInstance` and must honor it when offering apps and instances for selection.
+
 ## 0.19.0 (2026-10-27)
 
 ### 🚀 Features
@@ -26,31 +51,6 @@ if (isDesktopAgentNext(agent)) {
 ### Fixed
 
  * Fixed the app resolver displaying every instance metadata field, which could include values unsuitable for display. It now displays only `instanceMetadata.title` when present.
-
-## Unreleased
-
-### Changed
-
-- Expose `currentChannelId` in user-channel change event details, including `null` when leaving a channel.
-
-- Register channel-scoped context-cleared events over DACP, honor subscription scope and unsubscribe, and exclude the clearing app from delivery.
-
-- Support array context filters across agents and channels, including replay, private-channel notifications, validation and listener cleanup.
-
-- Align private-channel API event name conversions with FDC3 3.0 alpha.5 types.
-
-- Do not send a success response after closing the calling application (#407).
-- Include `channelId` in private-channel listener and disconnect event details (#406).
-- Support omitted or null intent context by sending `fdc3.nothing` during intent resolution (#404).
-- Deliver context-cleared events for channel handles and current-user-channel agent listeners, including private channels and all-event subscriptions (#403).
-- Accept null instance preferences, omit default preferences on the wire, and expose existing-instance failures as Error objects (#408).
-- Reject conflicting intent listeners, allow disjoint filters, and remove dynamic resolution mappings on unsubscribe (#405).
-- **Breaking:** Remove FDC3 APIs deprecated in 2.x (#409). Use `getUserChannels()` and `joinUserChannel()` instead of the system-channel aliases; pass `null` explicitly to unfiltered `addContextListener(null, handler)` calls; use `{ appId }` instead of string targets for `open` and intent APIs. Replace private-channel callbacks with `await channel.addEventListener(type, handler)` and read context types from `event.details.contextType`.
-
-- Intent handler failures are reported from `DesktopAgentProxy` to `DesktopAgent` through a non-standard `error` field on `intentResultRequest`, which the DACP schema does not define. The agent only forwards `ResultError` values and maps anything else to `IntentHandlerRejected`. Handler-failure propagation requires equivalent support in both the proxy and agent. A third-party agent may reject the extended request or ignore its error and interpret an empty result as success; a third-party proxy may not send the failure at all. Standard interoperability for this failure path is not guaranteed. Upstream protocol discussion: [finos/FDC3#2271](https://github.com/finos/FDC3/issues/2271).
-- `raiseIntent(intent, context, app?, newInstance?, metadata?)` and `raiseIntentForContext(context, app?, newInstance?, metadata?)` now support the FDC3 3.0 instance preference. `true` requests a new instance; `false` requires a running instance and rejects with `TargetInstanceUnavailable` when none is suitable. Omitting the preference retains default resolution.
-- Removed `FORCE_NEW_INSTANCE`. Replace `{ appId, instanceId: FORCE_NEW_INSTANCE }` with `{ appId }` and pass `true` as `newInstance`. Existing calls that supply metadata must insert `undefined` before metadata to retain default instance selection.
-- Custom `IAppResolver` implementations receive `newInstance` and must honor it when offering apps and instances for selection.
 
 ## 0.17.0 (2026-07-24)
 
