@@ -8,9 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type { AppIdentifier } from '@finos/fdc3';
 import { describe, expect, it } from 'vitest';
-import { appIdsMatch, appInstanceEquals, resolveAppIdentifier, toUnqualifiedAppId } from './app-identity.helper.js';
+import { appIdsMatch, appInstanceEquals, toUnqualifiedAppId } from './app-identity.helper.js';
 
 describe(`app-identity.helper`, () => {
     describe(`${appInstanceEquals.name} (app-identity.helper)`, () => {
@@ -47,36 +46,6 @@ describe(`app-identity.helper`, () => {
 
         it(`should return false if instanceId is not defined`, () => {
             expect(appInstanceEquals({ appId: 'appOne' }, { appId: 'appOne' })).toBe(false);
-        });
-    });
-
-    describe(`${resolveAppIdentifier.name} (resolve-app-resolveAppIdentifier.helper)`, () => {
-        const mockedAppId: AppIdentifier = { appId: 'mocked-app-id' };
-
-        it('should return AppIdentifier if an AppIdentifier is passed to it', () => {
-            const appIdentifier = resolveAppIdentifier(mockedAppId);
-
-            expect(appIdentifier).toBe(mockedAppId);
-        });
-
-        it('should construct AppIdentifier if only string passed', () => {
-            const appIdentifier = resolveAppIdentifier('mocked-app-id');
-
-            expect(appIdentifier).toEqual(mockedAppId);
-        });
-
-        it('should construct AppIdentifier with newly generated instanceId if string passed with instanceId callback', () => {
-            const mockedInstanceId = `mocked-instance-id`;
-
-            const appIdentifier = resolveAppIdentifier('mocked-app-id', () => mockedInstanceId);
-
-            expect(appIdentifier).toEqual({ ...mockedAppId, instanceId: mockedInstanceId });
-        });
-
-        it('should return undefined if no AppIdentifier or string is passed to it', () => {
-            const appIdentifier = resolveAppIdentifier();
-
-            expect(appIdentifier).toBeUndefined();
         });
     });
 

@@ -173,7 +173,6 @@ describe('app-directory-applications.helper', () => {
                 fdc3Version: FDC3_VERSION,
                 provider: FDC3_PROVIDER,
                 optionalFeatures: {
-                    OriginatingAppMetadata: true,
                     UserChannelMembershipAPIs: true,
                     DesktopAgentBridging: false,
                 },
@@ -189,7 +188,6 @@ describe('app-directory-applications.helper', () => {
                 fdc3Version: FDC3_VERSION,
                 provider: FDC3_PROVIDER,
                 optionalFeatures: {
-                    OriginatingAppMetadata: true,
                     UserChannelMembershipAPIs: true,
                     DesktopAgentBridging: false,
                 },

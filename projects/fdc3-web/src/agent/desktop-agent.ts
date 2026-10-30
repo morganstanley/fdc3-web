@@ -11,22 +11,23 @@
 import {
     type AppIdentifier,
     BrowserTypes,
+    CloseError,
     type Context,
-    type ContextMetadata,
     GetAgentLogLevels,
     ImplementationMetadata,
     Intent,
     LogLevel,
     OpenError,
     ResolveError,
+    ResultError,
 } from '@finos/fdc3';
 import { AppDirectoryApplication } from '../app-directory.contracts.js';
 import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory } from '../channel/index.js';
-import { HEARTBEAT } from '../constants.js';
+import { APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS, HEARTBEAT } from '../constants.js';
+import type { IntentResultRequest } from '../contracts.internal.js';
 import {
-    AddIntentListenerWithContextRequest,
     IRootPublisher,
     UpdateInstanceMetadataRequest,
     UpdateInstanceMetadataResponse,
@@ -45,18 +46,15 @@ import {
     NewInstanceStrategyParams,
     RequestMessage,
 } from '../contracts.js';
-// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
-import { CloseError, CloseRequest, CloseResponsePayload, createCloseResponseMessage } from '../fdc3-next/index.js';
 import {
     appInstanceEquals,
-    convertToEventListenerIndex,
+    createContextMetadata,
     createEvent,
     createLogger,
     createResponseMessage,
     decodeUUUrl,
     generateUUID,
     generateUUUrl,
-    getContextMetadata,
     getHostManifest,
     getImplementationMetadata,
     isCloseApplicationStrategy,
@@ -96,7 +94,10 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private connectionLog: LoggerFunction;
     private proxyLog;
 
-    private readonly intentListeners: Partial<Record<Intent, AppIdentifierListenerPair[]>> = {};
+    private readonly intentListeners: Partial<
+        Record<Intent, (AppIdentifierListenerPair & { contextTypes?: string[] })[]>
+    > = {};
+
     //used when raising intents so desktop agent knows when chosen app has added required intentListener
     private readonly intentListenerCallbacks: Map<
         string,
@@ -174,16 +175,23 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             case 'findIntentRequest':
                 return this.onFindIntentRequest(requestMessage, sourceApp);
             case 'addEventListenerRequest':
-                return this.onAddEventListenerRequest(requestMessage, sourceApp);
+                return this.channelMessageHandler.onAddEventListenerRequest(
+                    requestMessage,
+                    sourceApp,
+                    this.eventListeners,
+                );
             case 'findIntentsByContextRequest':
                 return this.onFindIntentsByContextRequest(requestMessage, sourceApp);
             case 'eventListenerUnsubscribeRequest':
-                return this.onEventListenerUnsubscribeRequest(requestMessage, sourceApp);
+                return this.channelMessageHandler.onEventListenerUnsubscribeRequest(
+                    requestMessage,
+                    sourceApp,
+                    this.eventListeners,
+                );
             case 'intentListenerUnsubscribeRequest':
                 return this.onIntentListenerUnsubscribeRequest(requestMessage, sourceApp);
             case 'openRequest':
                 return this.onOpenRequest(requestMessage, sourceApp);
-            // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
             case 'closeRequest':
                 return this.onCloseRequest(requestMessage, sourceApp);
             case 'getUserChannelsRequest':
@@ -214,6 +222,8 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 return this.channelMessageHandler.onBroadcastRequest(requestMessage, sourceApp);
             case 'getCurrentContextRequest':
                 return this.channelMessageHandler.onGetCurrentContextRequest(requestMessage, sourceApp);
+            case 'clearContextRequest':
+                return this.channelMessageHandler.onClearContextRequest(requestMessage, sourceApp, this.eventListeners);
             case 'privateChannelAddEventListenerRequest':
                 return this.channelMessageHandler.onPrivateChannelAddEventListenerRequest(requestMessage, sourceApp);
             case 'privateChannelUnsubscribeEventListenerRequest':
@@ -243,7 +253,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         requestMessage: BrowserTypes.RaiseIntentRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
-        const contextMetadata = getContextMetadata(requestMessage.payload, source);
+        const contextMetadata = createContextMetadata(source, requestMessage.payload.metadata);
         //check if context argument is invalid
         if (requestMessage.payload.context != null && !isContext(requestMessage.payload.context)) {
             this.rootMessagePublisher.publishResponseMessage(
@@ -268,6 +278,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 requestMessage.payload.intent,
                 requestMessage.payload.context,
                 requestMessage.payload.app,
+                requestMessage.payload.newInstance,
             )
             .catch(err => {
                 resolveError = err;
@@ -285,7 +296,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             );
 
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(fullyQualifiedAppIdentifier, requestMessage.payload.intent).catch(error => {
+            await this.awaitIntentListener(
+                fullyQualifiedAppIdentifier,
+                requestMessage.payload.intent,
+                requestMessage.payload.context,
+            ).catch(error => {
                 resolveError = error;
 
                 this.rootMessagePublisher.publishResponseMessage(
@@ -348,13 +363,16 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private async awaitIntentListener(
         chosenApp: FullyQualifiedAppIdentifier,
         intent: string,
+        context?: Context,
         timeout: number = 15000,
     ): Promise<void> {
-        //check if intentListener of correct intent type on chosen app has already been added
-        if (
-            this.intentListeners[intent] == null ||
-            !this.intentListeners[intent]?.some(pair => appInstanceEquals(pair.appIdentifier, chosenApp))
-        ) {
+        const hasMatchingListener = (): boolean | undefined =>
+            this.intentListeners[intent]?.some(
+                pair =>
+                    appInstanceEquals(pair.appIdentifier, chosenApp) &&
+                    (pair.contextTypes == null || context == null || pair.contextTypes.includes(context.type)),
+            );
+        if (!hasMatchingListener()) {
             //wait for intentListener of correct intent type on chosen app to be added
             return new Promise<void>((resolve, reject) => {
                 const callbackUUID = generateUUID();
@@ -366,7 +384,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 }, timeout);
 
                 this.intentListenerCallbacks.set(callbackUUID, (app, listenerType) => {
-                    if (appInstanceEquals(app, chosenApp) && (listenerType == null || listenerType === intent)) {
+                    if (
+                        appInstanceEquals(app, chosenApp) &&
+                        (listenerType == null || listenerType === intent) &&
+                        hasMatchingListener()
+                    ) {
                         this.intentListenerCallbacks.delete(callbackUUID);
                         clearTimeout(timeoutId);
                         resolve();
@@ -381,7 +403,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         requestMessage: BrowserTypes.RaiseIntentForContextRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
-        const contextMetadata = getContextMetadata(requestMessage.payload, source);
+        const contextMetadata = createContextMetadata(source, requestMessage.payload.metadata);
         //check if context argument is invalid
         if (requestMessage.payload.context != null && !isContext(requestMessage.payload.context)) {
             this.rootMessagePublisher.publishResponseMessage(
@@ -403,6 +425,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             const resolutionResponse = await this.directory.resolveAppForContext(
                 requestMessage.payload.context,
                 requestMessage.payload.app,
+                requestMessage.payload.newInstance,
             );
 
             if (resolutionResponse == null) {
@@ -430,7 +453,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             let resolveError: any;
 
             //wait for intentListener of correct intent type on chosen app to be added
-            await this.awaitIntentListener(fullyQualifiedAppIdentifier, resolutionResponse.intent).catch(error => {
+            await this.awaitIntentListener(
+                fullyQualifiedAppIdentifier,
+                resolutionResponse.intent,
+                requestMessage.payload.context,
+            ).catch(error => {
                 resolveError = error;
 
                 this.rootMessagePublisher.publishResponseMessage(
@@ -493,7 +520,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
     // https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#addintentlistener
     private async onIntentResultRequest(
-        requestMessage: BrowserTypes.IntentResultRequest,
+        requestMessage: IntentResultRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         this.rootMessagePublisher.publishResponseMessage(
@@ -512,8 +539,11 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             requestMessage.payload.raiseIntentRequestUuid,
         );
 
+        // error is a local extension to the DACP schema (see IntentResultRequest); never forward values outside ResultError
+        const resultError = this.toResultError(requestMessage.payload.error);
+
         if (raiseIntentSource?.payload != null && isFullyQualifiedAppIdentifier(raiseIntentSource.payload)) {
-            if (requestMessage.payload.intentResult.channel != null) {
+            if (resultError == null && requestMessage.payload.intentResult.channel != null) {
                 //if intentResult is PrivateChannel, add receiving app to channel's allowedList
                 this.channelMessageHandler.addToPrivateChannelAllowedList(
                     requestMessage.payload.intentResult.channel.id,
@@ -523,13 +553,36 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
             const raiseIntentResultResponse = createResponseMessage<BrowserTypes.RaiseIntentResultResponse>(
                 'raiseIntentResultResponse',
-                { intentResult: requestMessage.payload.intentResult },
+                resultError != null
+                    ? { error: resultError }
+                    : {
+                          intentResult: requestMessage.payload.intentResult,
+                          resultMetadata: createContextMetadata(source, {
+                              ...requestMessage.payload.metadata,
+                              // getResultMetadata gives the agent's trace ID precedence over the handler's.
+                              // We use a fresh result trace; DACP UUIDs correlate it with the request.
+                              traceId: generateUUID(),
+                          }),
+                      },
                 raiseIntentSource.uuid,
                 raiseIntentSource.payload,
             );
 
             this.rootMessagePublisher.publishResponseMessage(raiseIntentResultResponse, raiseIntentSource.payload);
         }
+    }
+
+    /**
+     * Maps the untrusted error field of an intentResultRequest to a ResultError.
+     * Any value that is not a ResultError is reported as IntentHandlerRejected.
+     */
+    private toResultError(error: unknown): ResultError | undefined {
+        if (error == null) {
+            return undefined;
+        }
+        return (Object.values(ResultError) as unknown[]).includes(error)
+            ? (error as ResultError)
+            : ResultError.IntentHandlerRejected;
     }
 
     /**
@@ -554,7 +607,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 intent,
                 context: requestMessage.payload.context,
                 raiseIntentRequestUuid,
-                originatingApp,
+                metadata: createContextMetadata(originatingApp, requestMessage.payload.metadata),
             }),
             [fullyQualifiedApp],
         );
@@ -565,40 +618,68 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      * Registers an app as an intent listener and publishes an AddIntentListenerResponse message
      */
     private async onAddIntentListenerRequest(
-        requestMessage: AddIntentListenerWithContextRequest,
+        requestMessage: BrowserTypes.AddIntentListenerRequest,
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         const listeners =
             this.intentListeners[requestMessage.payload.intent] ??
             (this.intentListeners[requestMessage.payload.intent] = []);
 
-        //fetch context info for app and intent from app directory
-        const contexts =
-            requestMessage.payload.contextTypes?.map(context => ({
-                type: context,
-            })) ?? (await this.directory.getContextForAppIntent(source, requestMessage.payload.intent));
-
-        try {
-            //this should not occur as error should have been caught by directory.getContextForAppIntent
-            await this.directory.registerIntentListener(source, requestMessage.payload.intent, contexts ?? []);
-        } catch (error) {
-            if (error === ResolveError.TargetInstanceUnavailable) {
-                this.rootMessagePublisher.publishResponseMessage(
-                    createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
-                        'addIntentListenerResponse',
-                        { error },
-                        requestMessage.meta.requestUuid,
-                        source,
-                    ),
+        const requestedContextTypes = requestMessage.payload.contextTypes;
+        const contextTypes =
+            requestedContextTypes == null || requestedContextTypes.length === 0
+                ? undefined
+                : requestedContextTypes.slice();
+        if (
+            listeners.some(
+                existing =>
+                    appInstanceEquals(existing.appIdentifier, source) &&
+                    (existing.contextTypes == null ||
+                        contextTypes == null ||
+                        existing.contextTypes.some(type => contextTypes.includes(type))),
+            )
+        ) {
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
+                    'addIntentListenerResponse',
+                    { error: ResolveError.IntentListenerConflict },
+                    requestMessage.meta.requestUuid,
                     source,
-                );
-            }
+                ),
+                source,
+            );
             return;
         }
-
         const listenerUUID = generateUUID();
-
-        listeners.push({ appIdentifier: source, listenerUUID });
+        const registration = { appIdentifier: source, listenerUUID, contextTypes };
+        listeners.push(registration);
+        try {
+            await this.directory.registerIntentListener(
+                source,
+                requestMessage.payload.intent,
+                contextTypes?.map(type => ({ type })) ?? [],
+                listenerUUID,
+            );
+        } catch (error) {
+            this.intentListeners[requestMessage.payload.intent] = listeners.filter(
+                listener => listener !== registration,
+            );
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
+                    'addIntentListenerResponse',
+                    {
+                        error:
+                            error === ResolveError.TargetInstanceUnavailable
+                                ? error
+                                : ResolveError.TargetAppUnavailable,
+                    },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
+        }
 
         this.rootMessagePublisher.publishResponseMessage(
             createResponseMessage<BrowserTypes.AddIntentListenerResponse>(
@@ -807,61 +888,6 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
     //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
     /**
-     * Add an event listener for a given event and app, and respond with the listenerUUID
-     */
-    private onAddEventListenerRequest(
-        requestMessage: BrowserTypes.AddEventListenerRequest,
-        source: FullyQualifiedAppIdentifier,
-    ): void {
-        const eventType = convertToEventListenerIndex(requestMessage.payload.type);
-        const listeners = this.eventListeners[eventType] ?? (this.eventListeners[eventType] = []);
-
-        const listenerUUID = generateUUID();
-
-        listeners.push({ appIdentifier: source, listenerUUID });
-
-        this.rootMessagePublisher.publishResponseMessage(
-            createResponseMessage<BrowserTypes.AddEventListenerResponse>(
-                'addEventListenerResponse',
-                { listenerUUID },
-                requestMessage.meta.requestUuid,
-                source,
-            ),
-            source,
-        );
-    }
-
-    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
-    /**
-     * Remove event listener which source app has unsubscribed from
-     */
-    private onEventListenerUnsubscribeRequest(
-        requestMessage: BrowserTypes.EventListenerUnsubscribeRequest,
-        source: FullyQualifiedAppIdentifier,
-    ): void {
-        const eventType = Object.entries(this.eventListeners).find(([_, listenerPairs]) =>
-            listenerPairs.some(pair => pair.listenerUUID === requestMessage.payload.listenerUUID),
-        )?.[0] as EventListenerKey | undefined;
-
-        if (eventType != null) {
-            const listeners = this.eventListeners[eventType];
-            const newListeners = listeners?.filter(pair => pair.listenerUUID != requestMessage.payload.listenerUUID);
-            this.eventListeners[eventType] = newListeners;
-        }
-
-        this.rootMessagePublisher.publishResponseMessage(
-            createResponseMessage<BrowserTypes.EventListenerUnsubscribeResponse>(
-                'eventListenerUnsubscribeResponse',
-                {},
-                requestMessage.meta.requestUuid,
-                source,
-            ),
-            source,
-        );
-    }
-
-    //https://fdc3.finos.org/docs/api/specs/desktopAgentCommunicationProtocol#desktopagent
-    /**
      * Remove intent listener which source app has unsubscribed from
      */
     private onIntentListenerUnsubscribeRequest(
@@ -869,13 +895,18 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         source: FullyQualifiedAppIdentifier,
     ): void {
         const intent = Object.entries(this.intentListeners).find(([_, listenerPairs]) =>
-            listenerPairs?.some(pair => pair.listenerUUID === requestMessage.payload.listenerUUID),
+            listenerPairs?.some(
+                pair =>
+                    pair.listenerUUID === requestMessage.payload.listenerUUID &&
+                    appInstanceEquals(pair.appIdentifier, source),
+            ),
         )?.[0];
 
         if (intent != null) {
             const listeners = this.intentListeners[intent];
             const newListeners = listeners?.filter(pair => pair.listenerUUID != requestMessage.payload.listenerUUID);
             this.intentListeners[intent] = newListeners;
+            this.directory.unregisterIntentListener(source, intent, requestMessage.payload.listenerUUID);
         }
 
         this.rootMessagePublisher.publishResponseMessage(
@@ -910,9 +941,12 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return;
         }
 
-        const appIntents = await this.directory.getAppIntentsForContext(requestMessage.payload.context);
+        const appIntents = await this.directory.getAppIntentsForContext(
+            requestMessage.payload.context,
+            requestMessage.payload.resultType,
+        );
 
-        if (appIntents.length === 0 || appIntents.find(appIntent => appIntent.apps.length != 0) == null) {
+        if (appIntents.length === 0) {
             //responds with error if no intents to handle given context were found, or if no apps which resolve those intents and handle given context were found
             this.rootMessagePublisher.publishResponseMessage(
                 createResponseMessage<BrowserTypes.FindIntentsByContextResponse>(
@@ -945,12 +979,114 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         source: FullyQualifiedAppIdentifier,
     ): Promise<void> {
         this.proxyLog('OpenRequest', LogLevel.DEBUG, { requestMessage, source });
-        try {
-            const appIdentifier = await this.openApplication(
-                requestMessage.payload.app,
-                requestMessage.payload.context,
-                getContextMetadata(requestMessage.payload, source),
+        //check if context argument is invalid
+        if (requestMessage.payload.context != null && !isContext(requestMessage.payload.context)) {
+            this.proxyLog('OpenRequest', LogLevel.ERROR, 'MalformedContext', source);
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.OpenResponse>(
+                    'openResponse',
+                    { error: ResolveError.MalformedContext },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
             );
+
+            //don't use invalid context
+            return;
+        }
+
+        const application = await this.directory.getAppDirectoryApplication(requestMessage.payload.app.appId);
+
+        if (application == null) {
+            this.proxyLog('OpenRequest', LogLevel.ERROR, 'AppNotFound', source);
+            //app cannot be found in app directory
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.OpenResponse>(
+                    'openResponse',
+                    { error: OpenError.AppNotFound },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+            return;
+        }
+        this.proxyLog('OpenRequest application resolved', LogLevel.DEBUG, { application, source });
+
+        const contextMetadata = createContextMetadata(source, requestMessage.payload.metadata);
+        const strategy = await this.resolveOpenStrategy(application, requestMessage.payload.context, contextMetadata);
+
+        if (strategy != null) {
+            this.openAppWithStrategy(
+                strategy,
+                application,
+                requestMessage,
+                source,
+                contextMetadata,
+                requestMessage.payload.context,
+            );
+        } else {
+            this.proxyLog('OpenRequest no opening strategies found', LogLevel.ERROR, { source });
+
+            this.rootMessagePublisher.publishResponseMessage(
+                createResponseMessage<BrowserTypes.OpenResponse>(
+                    'openResponse',
+                    { error: OpenError.ErrorOnLaunch },
+                    requestMessage.meta.requestUuid,
+                    source,
+                ),
+                source,
+            );
+        }
+    }
+
+    private async openAppWithStrategy(
+        strategy: IOpenApplicationStrategy,
+        application: AppDirectoryApplication,
+        requestMessage: BrowserTypes.OpenRequest,
+        source: FullyQualifiedAppIdentifier,
+        contextMetadata: BrowserTypes.ContextMetadata,
+        context?: BrowserTypes.Context,
+    ): Promise<void> {
+        try {
+            const appIdentifier = await this.launchApplicationInstance(
+                strategy,
+                application,
+                source,
+                contextMetadata,
+                context,
+            );
+
+            this.proxyLog('OpenRequest appIdentifier resolved', LogLevel.DEBUG, { appIdentifier, source });
+
+            //if a context was provided, the app must add a context listener capable of receiving it
+            //before we can confirm success - per spec, respond with OpenError.AppTimeout if it doesn't
+            //do so within APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS (a minimum of 15 seconds)
+            if (context != null) {
+                const listenerAddedInTime = await this.waitForContextListenerOnOpenedApp(context, appIdentifier);
+
+                if (!listenerAddedInTime) {
+                    this.proxyLog('OpenRequest application failed to add context listener in time', LogLevel.WARN, {
+                        application,
+                        source,
+                        appIdentifier,
+                    });
+
+                    this.rootMessagePublisher.publishResponseMessage(
+                        createResponseMessage<BrowserTypes.OpenResponse>(
+                            'openResponse',
+                            { error: OpenError.AppTimeout },
+                            requestMessage.meta.requestUuid,
+                            source,
+                        ),
+                        source,
+                    );
+
+                    return;
+                }
+            }
+
             this.rootMessagePublisher.publishResponseMessage(
                 createResponseMessage<BrowserTypes.OpenResponse>(
                     'openResponse',
@@ -960,9 +1096,13 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
                 ),
                 source,
             );
-            await this.passContextToOpenedApp(requestMessage.payload.context, source, appIdentifier);
+
+            //pass given context object to opened application via contextListener
+            if (context != null) {
+                this.publishOpenAppContextBroadcast(context, contextMetadata, appIdentifier);
+            }
         } catch (err) {
-            this.proxyLog('OpenRequest error opening application', LogLevel.ERROR, { source, err });
+            this.proxyLog('OpenRequest error opening application', LogLevel.ERROR, { application, source, err });
             this.rootMessagePublisher.publishResponseMessage(
                 createResponseMessage<BrowserTypes.OpenResponse>(
                     'openResponse',
@@ -975,69 +1115,83 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         }
     }
 
-    private async openApplication(
-        app: AppIdentifier,
-        context: Context | undefined,
-        contextMetadata: ContextMetadata,
-    ): Promise<FullyQualifiedAppIdentifier> {
-        if (context != null && !isContext(context)) {
-            throw ResolveError.MalformedContext;
-        }
-
-        const application = await this.directory.getAppDirectoryApplication(app.appId);
-        if (application == null) {
-            throw OpenError.AppNotFound;
-        }
-
-        const strategyCanOpenResults = await Promise.all(
-            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => {
-                const canOpen = await this.canStrategyOpenApp(application, strategy, context, contextMetadata).catch(
+    private async resolveOpenStrategy(
+        application: AppDirectoryApplication,
+        context: BrowserTypes.Context | undefined,
+        contextMetadata: BrowserTypes.ContextMetadata,
+    ): Promise<IOpenApplicationStrategy | undefined> {
+        const candidates = await Promise.all(
+            this.applicationStrategies.filter(isOpenApplicationStrategy).map(async strategy => ({
+                strategy,
+                canOpen: await this.canStrategyOpenApp(application, strategy, context, contextMetadata).catch(
                     () => false,
-                );
-                return { canOpen, strategy };
-            }),
+                ),
+            })),
         );
-        const strategy = strategyCanOpenResults.find(result => result.canOpen)?.strategy;
-        if (strategy == null) {
+        return candidates.find(candidate => candidate.canOpen)?.strategy;
+    }
+
+    /**
+     * Launches (or connects to) an application instance using the given strategy, resolving once the
+     * handshake with the new instance completes and its {@link FullyQualifiedAppIdentifier} is known.
+     *
+     * This is the shared core of opening an application - it does not publish any response messages,
+     * and does not wait for (or require) the launched app to add a context listener. Rejects with an
+     * {@link OpenError} value if the application could not be launched.
+     *
+     * Used both by {@link openAppWithStrategy} (servicing `openRequest` messages from proxies, which
+     * additionally waits for a context listener per the `fdc3.open()` API contract) and by
+     * {@link returnOrLaunchAppInstance} (used internally to launch an app instance to resolve an
+     * intent, where the launched app is expected to add an intent listener rather than a context
+     * listener).
+     */
+    private async launchApplicationInstance(
+        strategy: IOpenApplicationStrategy,
+        application: AppDirectoryApplication,
+        source: FullyQualifiedAppIdentifier,
+        contextMetadata: BrowserTypes.ContextMetadata,
+        context?: BrowserTypes.Context,
+    ): Promise<FullyQualifiedAppIdentifier> {
+        const { hostManifests, ...noManifests } = application;
+
+        this.proxyLog('OpenRequest opening application', LogLevel.DEBUG, { application, source, strategy });
+
+        // Set as the resolve function of a promise so that when we have created the app Identity we can send it to the strategy
+        let resolveAppIdentity: ((appIdentifier: FullyQualifiedAppIdentifier) => void) | undefined;
+
+        const appReadyPromise = new Promise<FullyQualifiedAppIdentifier>(resolve => {
+            resolveAppIdentity = resolve;
+        });
+
+        const newAppConnectionAttemptUuid = await strategy.open({
+            appDirectoryRecord: noManifests,
+            agent: this,
+            manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err => console.error(err)),
+            context,
+            contextMetadata,
+            appReadyPromise,
+        });
+
+        if (newAppConnectionAttemptUuid == null) {
             throw OpenError.ErrorOnLaunch;
         }
 
-        return this.openAppWithStrategy(strategy, application, context, contextMetadata);
-    }
+        this.proxyLog('OpenRequest application opened', LogLevel.DEBUG, {
+            application,
+            source,
+            newAppConnectionAttemptUuid,
+        });
 
-    private async openAppWithStrategy(
-        strategy: IOpenApplicationStrategy,
-        application: AppDirectoryApplication,
-        context: Context | undefined,
-        contextMetadata: ContextMetadata,
-    ): Promise<FullyQualifiedAppIdentifier> {
-        const { hostManifests, ...noManifests } = application;
-        try {
-            let resolveAppIdentity: ((appIdentifier: FullyQualifiedAppIdentifier) => void) | undefined;
-            const appReadyPromise = new Promise<FullyQualifiedAppIdentifier>(resolve => {
-                resolveAppIdentity = resolve;
-            });
-            const newAppConnectionAttemptUuid = await strategy.open({
-                appDirectoryRecord: noManifests,
-                agent: this,
-                manifest: await getHostManifest(hostManifests, strategy.manifestKey).catch(err => console.error(err)),
-                context,
-                contextMetadata,
-                appReadyPromise,
-            });
-            if (newAppConnectionAttemptUuid == null) {
-                throw OpenError.ErrorOnLaunch;
-            }
-            const appIdentifier = await this.rootMessagePublisher.awaitAppIdentity(
-                newAppConnectionAttemptUuid,
-                application,
-            );
-            resolveAppIdentity?.(appIdentifier);
-            return appIdentifier;
-        } catch (err) {
-            this.proxyLog('Error opening application', LogLevel.ERROR, { application, err });
-            throw isOpenError(err) ? err : OpenError.ErrorOnLaunch;
+        const appIdentifier = await this.rootMessagePublisher.awaitAppIdentity(
+            newAppConnectionAttemptUuid,
+            application,
+        );
+
+        if (resolveAppIdentity != null) {
+            resolveAppIdentity(appIdentifier);
         }
+
+        return appIdentifier;
     }
 
     /**
@@ -1058,7 +1212,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         application: AppDirectoryApplication,
         strategy: IOpenApplicationStrategy,
         context: BrowserTypes.Context | undefined,
-        contextMetadata: ContextMetadata,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<boolean> {
         const manifest = await getHostManifest(application.hostManifests, strategy.manifestKey).catch(err =>
             console.error(err),
@@ -1074,59 +1228,79 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         return false;
     }
 
-    private async passContextToOpenedApp(
-        context: Context | undefined,
-        source: FullyQualifiedAppIdentifier,
+    /**
+     * Waits for the given app to add a context listener capable of receiving the given context
+     * (i.e. one listening for the context's specific type, or one listening for all context types),
+     * up to a maximum of {@link APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS}.
+     *
+     * Resolves `true` if such a listener is added in time, or `false` if the timeout elapses first.
+     */
+    private async waitForContextListenerOnOpenedApp(
+        context: BrowserTypes.Context,
         openedApp: FullyQualifiedAppIdentifier,
-    ): Promise<void> {
-        //TODO: allow 15 seconds by default for application to add necessary contextListeners
-        if (context != null) {
-            //await callback listening for creation of contextListener to know when app has added contextListener of correct context type
-            await new Promise<void>(resolve => {
-                const callbackUUID = generateUUID();
-                this.channelMessageHandler.addListenerCallback(callbackUUID, (app, listenerType) => {
-                    if (appInstanceEquals(app, openedApp) && (listenerType == null || listenerType === context.type)) {
-                        this.channelMessageHandler.removeListenerCallback(callbackUUID);
-                        resolve();
-                    }
-                });
+    ): Promise<boolean> {
+        return new Promise<boolean>(resolve => {
+            const callbackUUID = generateUUID();
+
+            const timeoutId = setTimeout(() => {
+                this.channelMessageHandler.removeListenerCallback(callbackUUID);
+                resolve(false);
+            }, APP_OPEN_CONTEXT_LISTENER_TIMEOUT_MS);
+
+            //listen for creation of contextListener to know when app has added a contextListener of the correct context type
+            this.channelMessageHandler.addListenerCallback(callbackUUID, (app, listenerType) => {
+                if (appInstanceEquals(app, openedApp) && (listenerType == null || listenerType === context.type)) {
+                    clearTimeout(timeoutId);
+                    this.channelMessageHandler.removeListenerCallback(callbackUUID);
+                    resolve(true);
+                }
             });
-            //publish broadcastEvent with provided context to opened app
-            this.publishOpenAppContextBroadcast(context, source, openedApp);
-        }
+        });
     }
 
     private publishOpenAppContextBroadcast(
         context: BrowserTypes.Context,
-        source: FullyQualifiedAppIdentifier,
+        metadata: BrowserTypes.ContextMetadata,
         fullyQualifiedAppIdentifier: FullyQualifiedAppIdentifier,
     ): void {
         this.rootMessagePublisher.publishEvent(
             createEvent<BrowserTypes.BroadcastEvent>('broadcastEvent', {
                 channelId: null,
                 context,
-                originatingApp: source,
+                metadata,
             }),
             [fullyQualifiedAppIdentifier],
         );
     }
 
     /**
-     * TEMPORARY (FDC3 3.0): handles a `closeRequest` from an app that wishes to close its own
-     * window or frame. See ../fdc3-next/close.ts
+     * Handles a `closeRequest` from an app that wishes to close its own window or frame.
      *
      * The actual closing of the window/frame is delegated to a registered
      * {@link ICloseApplicationStrategy} (a default one that closes windows opened by the agent is
      * always provided). If no strategy can close the app, or the chosen strategy throws, the app is
      * sent a `closeResponse` carrying `CloseError.ErrorOnClose`.
      */
-    private async onCloseRequest(requestMessage: CloseRequest, source: FullyQualifiedAppIdentifier): Promise<void> {
+    private async onCloseRequest(
+        requestMessage: BrowserTypes.CloseRequest,
+        source: FullyQualifiedAppIdentifier,
+    ): Promise<void> {
         this.proxyLog('CloseRequest', LogLevel.DEBUG, { requestMessage, source });
 
         const payload = await this.tryToCloseApp(source);
 
+        // Successful closure destroys the calling app; only failures have a response.
+        if (payload.error == null) {
+            return;
+        }
+
         this.rootMessagePublisher.publishResponseMessage(
-            createCloseResponseMessage(payload, requestMessage.meta.requestUuid, source),
+            createResponseMessage<BrowserTypes.CloseResponse>(
+                'closeResponse',
+                payload,
+                requestMessage.meta.requestUuid,
+                source,
+            ),
             source,
         );
     }
@@ -1137,7 +1311,9 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      * @returns the payload to send back to the requesting app: an empty payload on success or one
      * containing a `CloseError` if the app could not be closed.
      */
-    private async tryToCloseApp(appIdentifier: FullyQualifiedAppIdentifier): Promise<CloseResponsePayload> {
+    private async tryToCloseApp(
+        appIdentifier: FullyQualifiedAppIdentifier,
+    ): Promise<BrowserTypes.CloseResponsePayload> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
         const closeStrategies = (
@@ -1153,7 +1329,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
 
         if (closeStrategies.length === 0) {
             this.proxyLog('CloseRequest no closing strategies found', LogLevel.ERROR, { appIdentifier });
-            return { error: CloseError.ErrorOnClose };
+            return errorOnCloseResponsePayload();
         }
 
         try {
@@ -1161,7 +1337,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             return {};
         } catch (err) {
             this.proxyLog('CloseRequest error closing application', LogLevel.ERROR, { appIdentifier, err });
-            return { error: CloseError.ErrorOnClose };
+            return errorOnCloseResponsePayload();
         }
     }
 
@@ -1399,7 +1575,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
     private async tryToSelectApp(
         appIdentifier: FullyQualifiedAppIdentifier,
         context: Context,
-        contextMetadata: ContextMetadata,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<void> {
         const application = await this.directory.getAppDirectoryApplication(appIdentifier.appId);
 
@@ -1429,7 +1605,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         strategy: ISelectApplicationStrategy,
         application: AppDirectoryApplication | undefined,
         context: Context,
-        contextMetadata: ContextMetadata,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<boolean> {
         const manifest = await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
             console.error(err),
@@ -1450,14 +1626,14 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
         strategy: ISelectApplicationStrategy,
         application: AppDirectoryApplication | undefined,
         context: Context,
-        contextMetadata: ContextMetadata,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<void> {
         await strategy
             .selectApp({
-                appIdentifier,
-                appDirectoryRecord: removeHostManifests(application),
                 context,
                 contextMetadata,
+                appIdentifier,
+                appDirectoryRecord: removeHostManifests(application),
                 agent: this,
                 manifest: await getHostManifest(application?.hostManifests, strategy.manifestKey).catch(err =>
                     console.error(err),
@@ -1475,22 +1651,34 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
      * Ensures an AppIdentifier is fully qualified (has an instanceId).
      * If the app already has an instanceId, it is returned as-is.
      * If not, a new instance is opened.
+     *
+     * Note: unlike a genuine `fdc3.open()` call serviced by {@link onOpenRequest}, this does not wait
+     * for (or require) the launched app to add a context listener for `context` - that requirement is
+     * part of the `open()` API contract, but here the app is being launched to resolve an intent and
+     * is expected to add an intent listener instead (see {@link awaitIntentListener}).
      */
     private async returnOrLaunchAppInstance(
         app: AppIdentifier,
         context: Context,
-        contextMetadata: ContextMetadata,
+        contextMetadata: BrowserTypes.ContextMetadata,
     ): Promise<FullyQualifiedAppIdentifier> {
         if (isFullyQualifiedAppIdentifier(app)) {
             return app;
         }
 
-        const opened = await this.openApplication(app, context, contextMetadata);
-        // As with public open(), context delivery waits for a listener without delaying the launch result.
-        void this.passContextToOpenedApp(context, this.appIdentifier, opened).catch(err =>
-            this.proxyLog('Error delivering context to opened application', LogLevel.ERROR, { opened, err }),
-        );
-        return opened;
+        const application = await this.directory.getAppDirectoryApplication(app.appId);
+
+        if (application == null) {
+            return Promise.reject(OpenError.AppNotFound);
+        }
+
+        const strategy = await this.resolveOpenStrategy(application, context, contextMetadata);
+
+        if (strategy == null) {
+            return Promise.reject(OpenError.ErrorOnLaunch);
+        }
+
+        return this.launchApplicationInstance(strategy, application, this.appIdentifier, contextMetadata, context);
     }
 }
 
@@ -1504,4 +1692,16 @@ function removeHostManifests(
     const { hostManifests, ...partialAppDirectory } = application;
 
     return partialAppDirectory;
+}
+
+/**
+ * Builds a closeResponse payload carrying `CloseError.ErrorOnClose`.
+ *
+ * The @finos/fdc3-schema 3.0-alpha types `CloseResponsePayload.error` as only `'ApiTimeout'`, but
+ * the FDC3 `CloseError` enum (and the `close()` contract) also defines `ErrorOnClose`, which is the
+ * correct error to report when the Desktop Agent cannot close the app. The cast can be removed once
+ * the generated schema widens the error type.
+ */
+function errorOnCloseResponsePayload(): BrowserTypes.CloseResponsePayload {
+    return { error: CloseError.ErrorOnClose } as unknown as BrowserTypes.CloseResponsePayload;
 }

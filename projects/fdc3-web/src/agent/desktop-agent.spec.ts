@@ -12,11 +12,13 @@ import {
     AppMetadata,
     BrowserTypes,
     type Channel,
+    CloseError,
     type Contact,
     EventHandler,
     type Listener,
     OpenError,
     ResolveError,
+    ResultError,
 } from '@finos/fdc3';
 import {
     IMocked,
@@ -34,6 +36,7 @@ import { AppDirectory } from '../app-directory/index.js';
 import { ChannelMessageHandler } from '../channel/channel-message-handler.js';
 import { ChannelFactory, Channels } from '../channel/index.js';
 import { HEARTBEAT } from '../constants.js';
+import type { IntentResultRequest } from '../contracts.internal.js';
 import { UpdateInstanceMetadataRequest, UpdateInstanceMetadataResponse } from '../contracts.internal.js';
 import {
     DesktopAgentNext,
@@ -47,8 +50,6 @@ import {
     RequestMessage,
     ResponseMessage,
 } from '../contracts.js';
-// TEMPORARY (FDC3 3.0): import these from @finos/fdc3 once 3.0 is installed. See ../fdc3-next/close.ts
-import { CloseError, CloseRequest, CloseResponse } from '../fdc3-next/index.js';
 import { isFullyQualifiedAppId } from '../helpers/index.js';
 import * as helpersImport from '../helpers/index.js';
 import { RootMessagePublisher } from '../messaging/index.js';
@@ -94,6 +95,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
     let currentDate: Date;
     let contact: Contact;
 
+    // Tracks every DesktopAgentImpl created by createInstance() so we can tear down any
+    // real timers (e.g. heartbeat setInterval/setTimeout) it started. Without this, timers
+    // from one test can fire during/after later tests and trigger unhandled rejections
+    // (e.g. proxy-disconnect cleanup running against a later test's mock state).
+    const createdInstances: DesktopAgentImpl[] = [];
+
     let mockedApplication: AppDirectoryApplication;
 
     let mockWindow: IMocked<Window>;
@@ -136,6 +143,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         );
 
         mockAppDirectory = Mock.create<AppDirectory>().setup(
+            setupFunction('unregisterIntentListener'),
             setupFunction('registerIntentListener', async app => {
                 if (app.appId === 'unqualified-app-id') {
                     return Promise.reject(ResolveError.TargetInstanceUnavailable);
@@ -164,12 +172,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 if (context === mockedContextWithNoIntents) {
                     return [];
                 } else if (context === mockedContextWithNoApps) {
-                    return [
-                        {
-                            intent: { name: mockedUnresolvableIntent, displayName: mockedUnresolvableIntent },
-                            apps: [],
-                        },
-                    ];
+                    // The directory excludes intents with no matching apps.
+                    return [];
                 }
                 return [
                     {
@@ -214,7 +218,14 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             setupFunction('removeDisconnectedApp'),
             setupFunction('updateInstanceMetadata'),
         );
+        const eventChannelHandler = new ChannelMessageHandler(mockRootPublisher.mock);
         mockChannelHandler = Mock.create<ChannelMessageHandler>().setup(
+            setupFunction('onAddEventListenerRequest', (request, source, listeners) =>
+                eventChannelHandler.onAddEventListenerRequest(request, source, listeners),
+            ),
+            setupFunction('onEventListenerUnsubscribeRequest', (request, source, listeners) =>
+                eventChannelHandler.onEventListenerUnsubscribeRequest(request, source, listeners),
+            ),
             setupFunction('onGetUserChannelsRequest'),
             setupFunction('onGetCurrentChannelRequest'),
             setupFunction('onJoinUserChannelRequest'),
@@ -265,6 +276,16 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                     }) as any,
             ),
+            setupFunction(
+                'createContextMetadata',
+                (source, appMetadata) =>
+                    ({
+                        ...appMetadata,
+                        source,
+                        timestamp: mockedDate,
+                        traceId: mockedGeneratedUuid,
+                    }) as any,
+            ),
         );
         registerMock(helpersImport, mockedHelpers.mock);
 
@@ -272,10 +293,27 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         source = { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId };
         unknownSource = { appId: mockedUnqualifiedAppId, instanceId: mockedTargetInstanceId };
         currentDate = mockedDate;
+        createdInstances.length = 0;
+    });
+
+    afterEach(() => {
+        // Clear any real heartbeat timers/timeouts started by instances created in this test so
+        // they don't fire (and run proxy-disconnect cleanup) against a later test's mock state.
+        for (const instance of createdInstances) {
+            const instanceAny = instance as unknown as {
+                heartbeatTimers?: Map<unknown, ReturnType<typeof setInterval>>;
+                heartbeatTimeouts?: Map<unknown, ReturnType<typeof setTimeout>>;
+            };
+            instanceAny.heartbeatTimers?.forEach(timer => clearInterval(timer));
+            instanceAny.heartbeatTimeouts?.forEach(timer => clearTimeout(timer));
+            instanceAny.heartbeatTimers?.clear();
+            instanceAny.heartbeatTimeouts?.clear();
+        }
+        createdInstances.length = 0;
     });
 
     function createInstance(applicationStrategies?: DesktopAgentStrategies[]): DesktopAgentNext {
-        return new DesktopAgentImpl({
+        const instance = new DesktopAgentImpl({
             appIdentifier,
             rootMessagePublisher: mockRootPublisher.mock,
             directory: mockAppDirectory.mock,
@@ -287,6 +325,8 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             applicationStrategies,
             window: mockWindow.mock,
         });
+        createdInstances.push(instance);
+        return instance;
     }
 
     it(`should create`, async () => {
@@ -344,105 +384,40 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`raiseIntentRequest`, () => {
-            it.each(['absent', 'without source', 'spoofed source'] as const)(
-                `should publish IntentEvent to chosen app instance (payload metadata: %s)`,
-                async metadataMode => {
-                    const withMetadata = metadataMode !== 'absent';
-                    const metadata = {
-                        ...(metadataMode === 'spoofed source'
-                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
-                            : {}),
-                        traceId: 'test-trace',
-                        custom: { workspace: 'test-workspace' },
-                    };
-                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
-                    createInstance([mockSelectStrategy.mock]);
-
-                    const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
-                        meta: {
-                            requestUuid: mockedRequestUuid,
-                            timestamp: currentDate,
-                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                        },
-                        payload: {
-                            intent: 'StartChat',
-                        },
-                        type: 'addIntentListenerRequest',
-                    };
-
-                    await postRequestMessage(addIntentListenerRequest, {
-                        appId: mockedTargetAppId,
-                        instanceId: mockedTargetInstanceId,
-                    });
-
-                    const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
-                        meta: {
-                            requestUuid: mockedRequestUuid,
-                            timestamp: currentDate,
-                            source,
-                        },
-                        payload: {
-                            intent: 'StartChat',
-                            context: contact,
-                        },
+            it.each([undefined, false, true])(
+                'passes newInstance=%s to the directory and returns resolution errors',
+                async newInstance => {
+                    createInstance();
+                    mockAppDirectory.setupFunction('resolveAppForIntent', () =>
+                        Promise.reject(ResolveError.TargetInstanceUnavailable),
+                    );
+                    const app = { appId: mockedTargetAppId };
+                    const request: BrowserTypes.RaiseIntentRequest = {
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
                         type: 'raiseIntentRequest',
+                        payload: { intent: 'StartChat', context: contact, app, newInstance, metadata: {} },
                     };
-
-                    if (withMetadata) {
-                        Object.assign(raiseIntentRequest.payload, { metadata });
-                    }
-                    await postRequestMessage(raiseIntentRequest, source);
-
-                    const expectedEvent: BrowserTypes.IntentEvent = {
-                        meta: { timestamp: currentDate, eventUuid: mockedEventUuid },
-                        payload: {
-                            context: contact,
-                            intent: 'StartChat',
-                            originatingApp: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                            raiseIntentRequestUuid: mockedGeneratedUurl,
-                        },
-                        type: 'intentEvent',
-                    };
-
+                    await postRequestMessage(request, source);
                     expect(
-                        mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedEvent, [source]),
+                        mockAppDirectory
+                            .withFunction('resolveAppForIntent')
+                            .withParametersEqualTo('StartChat', contact, app, newInstance),
                     ).wasCalledOnce();
-
-                    await wait();
-
                     expect(
-                        mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
+                        mockRootPublisher.withFunction('publishResponseMessage').withParametersEqualTo(
+                            {
+                                type: 'raiseIntentResponse',
+                                meta: { ...request.meta, responseUuid: mockedResponseUuid },
+                                payload: { error: ResolveError.TargetInstanceUnavailable },
+                            },
+                            source,
+                        ),
                     ).wasCalledOnce();
-
-                    expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
-                    for (const method of ['canSelectApp', 'selectApp'] as const) {
-                        expect(mockSelectStrategy.functionCallLookup[method]?.[0][0]).toMatchObject({
-                            context: contact,
-                            contextMetadata: expectedMetadata,
-                        });
-                    }
-                    if (withMetadata) {
-                        expect(mockSelectStrategy.functionCallLookup.selectApp?.[0][0].contextMetadata).toEqual(
-                            expectedMetadata,
-                        );
-                    }
-                    expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
                 },
             );
 
-            it(`should open new app instance if returned result is not fully qualified`, async () => {
-                const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
-                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(unqualifiedApp));
-
-                const openStrategy = Mock.create<IOpenApplicationStrategy>().setup(
-                    setupFunction('canOpen', async () => true),
-                    setupFunction('open', async () => 'intent-connection'),
-                );
-                mockRootPublisher.setupFunction('awaitAppIdentity', async () => ({
-                    appId: mockedTargetAppId,
-                    instanceId: mockedTargetInstanceId,
-                }));
-                createInstance([openStrategy.mock]);
+            it(`should publish IntentEvent to chosen app instance`, async () => {
+                createInstance([mockSelectStrategy.mock]);
 
                 const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
                     meta: {
@@ -470,14 +445,97 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
 
                 await postRequestMessage(raiseIntentRequest, source);
 
-                expect(openStrategy.withFunction('open')).wasCalledOnce();
+                const expectedEvent: BrowserTypes.IntentEvent = {
+                    meta: { timestamp: currentDate, eventUuid: mockedEventUuid },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        metadata: {
+                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                            timestamp: mockedDate,
+                            traceId: mockedGeneratedUuid,
+                        },
+                        raiseIntentRequestUuid: mockedGeneratedUurl,
+                    },
+                    type: 'intentEvent',
+                };
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedEvent, [source]),
+                ).wasCalledOnce();
+
+                await wait();
+
+                expect(
+                    mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
+                ).wasCalledOnce();
+
+                expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
                 expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
+            });
+
+            it(`should open new app instance if returned result is not fully qualified`, async () => {
+                const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
+                mockAppDirectory.setupFunction('resolveAppForIntent', () => Promise.resolve(unqualifiedApp));
+
+                const mockOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canOpen', () => Promise.resolve(true)),
+                    setupFunction('open', () => Promise.resolve(`mock-connection-attempt-uuid`)),
+                );
+                mockRootPublisher.setupFunction('awaitAppIdentity', () =>
+                    Promise.resolve({ appId: mockedTargetAppId, instanceId: mockedGeneratedUuid }),
+                );
+
+                createInstance([mockOpenStrategy.mock]);
+
+                const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                    },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await postRequestMessage(addIntentListenerRequest, {
+                    appId: mockedTargetAppId,
+                    instanceId: mockedTargetInstanceId,
+                });
+
+                const raiseIntentRequest: BrowserTypes.RaiseIntentRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                        context: contact,
+                        metadata: {},
+                    },
+                    type: 'raiseIntentRequest',
+                };
+
+                await postRequestMessage(raiseIntentRequest, source);
+
+                //the app instance is now launched directly via the resolved IOpenApplicationStrategy rather than
+                //by round-tripping an `openRequest` message through the messaging layer
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
+
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+                expect(openParams?.appDirectoryRecord.appId).toBe(unqualifiedApp.appId);
+                expect(openParams?.context).toEqual(contact);
 
                 expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
@@ -511,6 +569,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -547,6 +606,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -575,7 +635,11 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         context: contact,
                         intent: 'StartChat',
-                        originatingApp: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                        metadata: {
+                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                            timestamp: mockedDate,
+                            traceId: mockedGeneratedUuid,
+                        },
                         raiseIntentRequestUuid: 'mocked-generated-Uurl',
                     },
                     type: 'intentEvent',
@@ -584,7 +648,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockAppDirectory
                         .withFunction('resolveAppForIntent')
-                        .withParameters('StartChat', contact, undefined),
+                        .withParameters('StartChat', contact, undefined, undefined),
                 ).wasCalledOnce();
 
                 expect(
@@ -606,6 +670,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         payload: {
                             intent: 'StartChat',
                             context: contact,
+                            metadata: {},
                         },
                         type: 'raiseIntentRequest',
                     };
@@ -683,6 +748,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -714,6 +780,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: `not-a-context` as any,
+                        metadata: {},
                     },
                     type: 'raiseIntentRequest',
                 };
@@ -747,6 +814,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         payload: {
                             intent: 'StartChat',
                             context: contact,
+                            metadata: {},
                         },
                         type: 'raiseIntentRequest',
                     };
@@ -778,105 +846,40 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`raiseIntentForContextRequest`, () => {
-            it.each(['absent', 'without source', 'spoofed source'] as const)(
-                `should publish IntentEvent to chosen app instance (payload metadata: %s)`,
-                async metadataMode => {
-                    const withMetadata = metadataMode !== 'absent';
-                    const metadata = {
-                        ...(metadataMode === 'spoofed source'
-                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
-                            : {}),
-                        traceId: 'test-trace',
-                        custom: { workspace: 'test-workspace' },
-                    };
-                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
-                    createInstance([mockSelectStrategy.mock]);
-
-                    const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
-                        meta: {
-                            requestUuid: mockedRequestUuid,
-                            timestamp: currentDate,
-                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                        },
-                        payload: {
-                            intent: 'StartChat',
-                        },
-                        type: 'addIntentListenerRequest',
-                    };
-
-                    await postRequestMessage(addIntentListenerRequest, {
-                        appId: mockedTargetAppId,
-                        instanceId: mockedTargetInstanceId,
-                    });
-
-                    const raiseIntentForContextRequest: BrowserTypes.RaiseIntentForContextRequest = {
-                        meta: {
-                            requestUuid: mockedRequestUuid,
-                            timestamp: currentDate,
-                            source,
-                        },
-                        payload: {
-                            context: contact,
-                        },
+            it.each([undefined, false, true])(
+                'passes newInstance=%s to the directory and returns resolution errors',
+                async newInstance => {
+                    createInstance();
+                    mockAppDirectory.setupFunction('resolveAppForContext', () =>
+                        Promise.reject(ResolveError.TargetInstanceUnavailable),
+                    );
+                    const app = { appId: mockedTargetAppId };
+                    const request: BrowserTypes.RaiseIntentForContextRequest = {
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
                         type: 'raiseIntentForContextRequest',
+                        payload: { context: contact, app, newInstance, metadata: {} },
                     };
-
-                    if (withMetadata) {
-                        Object.assign(raiseIntentForContextRequest.payload, { metadata });
-                    }
-                    await postRequestMessage(raiseIntentForContextRequest, source);
-
-                    const expectedEvent: BrowserTypes.IntentEvent = {
-                        meta: { timestamp: currentDate, eventUuid: mockedEventUuid },
-                        payload: {
-                            context: contact,
-                            intent: 'StartChat',
-                            originatingApp: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                            raiseIntentRequestUuid: 'mocked-generated-Uurl',
-                        },
-                        type: 'intentEvent',
-                    };
-
+                    await postRequestMessage(request, source);
                     expect(
-                        mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedEvent, [source]),
+                        mockAppDirectory
+                            .withFunction('resolveAppForContext')
+                            .withParametersEqualTo(contact, app, newInstance),
                     ).wasCalledOnce();
-
-                    await wait();
-
                     expect(
-                        mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
+                        mockRootPublisher.withFunction('publishResponseMessage').withParametersEqualTo(
+                            {
+                                type: 'raiseIntentForContextResponse',
+                                meta: { ...request.meta, responseUuid: mockedResponseUuid },
+                                payload: { error: ResolveError.TargetInstanceUnavailable },
+                            },
+                            source,
+                        ),
                     ).wasCalledOnce();
-
-                    expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
-                    for (const method of ['canSelectApp', 'selectApp'] as const) {
-                        expect(mockSelectStrategy.functionCallLookup[method]?.[0][0]).toMatchObject({
-                            context: contact,
-                            contextMetadata: expectedMetadata,
-                        });
-                    }
-                    if (withMetadata) {
-                        expect(mockSelectStrategy.functionCallLookup.selectApp?.[0][0].contextMetadata).toEqual(
-                            expectedMetadata,
-                        );
-                    }
-                    expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
                 },
             );
 
-            it(`should open new app instance if returned result is not fully qualified`, async () => {
-                const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
-                mockAppDirectory.setupFunction('resolveAppForContext', () =>
-                    Promise.resolve({ intent: 'StartChat', app: unqualifiedApp }),
-                );
-                const openStrategy = Mock.create<IOpenApplicationStrategy>().setup(
-                    setupFunction('canOpen', async () => true),
-                    setupFunction('open', async () => 'intent-connection'),
-                );
-                mockRootPublisher.setupFunction('awaitAppIdentity', async () => ({
-                    appId: mockedTargetAppId,
-                    instanceId: mockedTargetInstanceId,
-                }));
-                createInstance([openStrategy.mock]);
+            it(`should publish IntentEvent to chosen app instance`, async () => {
+                createInstance([mockSelectStrategy.mock]);
 
                 const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
                     meta: {
@@ -903,14 +906,98 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
 
                 await postRequestMessage(raiseIntentForContextRequest, source);
 
-                expect(openStrategy.withFunction('open')).wasCalledOnce();
+                const expectedEvent: BrowserTypes.IntentEvent = {
+                    meta: { timestamp: currentDate, eventUuid: mockedEventUuid },
+                    payload: {
+                        context: contact,
+                        intent: 'StartChat',
+                        metadata: {
+                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                            timestamp: mockedDate,
+                            traceId: mockedGeneratedUuid,
+                        },
+                        raiseIntentRequestUuid: 'mocked-generated-Uurl',
+                    },
+                    type: 'intentEvent',
+                };
+
+                expect(
+                    mockRootPublisher.withFunction('publishEvent').withParametersEqualTo(expectedEvent, [source]),
+                ).wasCalledOnce();
+
+                await wait();
+
+                expect(
+                    mockedHelpers.withFunction('generateUUUrl').withParametersEqualTo(source, mockedRequestUuid),
+                ).wasCalledOnce();
+
+                expect(mockSelectStrategy.withFunction('selectApp')).wasCalledOnce();
                 expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
+            });
+
+            it(`should open new app instance if returned result is not fully qualified`, async () => {
+                const unqualifiedApp = { appId: `${mockedTargetAppId}@mock-app-directory` };
+                mockAppDirectory.setupFunction('resolveAppForContext', () =>
+                    Promise.resolve({ intent: 'StartChat', app: unqualifiedApp }),
+                );
+
+                const mockOpenStrategy = Mock.create<IOpenApplicationStrategy>().setup(
+                    setupProperty('manifestKey', 'mock-application'),
+                    setupFunction('canOpen', () => Promise.resolve(true)),
+                    setupFunction('open', () => Promise.resolve(`mock-connection-attempt-uuid`)),
+                );
+                mockRootPublisher.setupFunction('awaitAppIdentity', () =>
+                    Promise.resolve({ appId: mockedTargetAppId, instanceId: mockedGeneratedUuid }),
+                );
+
+                createInstance([mockOpenStrategy.mock]);
+
+                const addIntentListenerRequest: BrowserTypes.AddIntentListenerRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        intent: 'StartChat',
+                    },
+                    type: 'addIntentListenerRequest',
+                };
+
+                await postRequestMessage(addIntentListenerRequest, {
+                    appId: mockedTargetAppId,
+                    instanceId: mockedTargetInstanceId,
+                });
+
+                const raiseIntentForContextRequest: BrowserTypes.RaiseIntentForContextRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source,
+                    },
+                    payload: {
+                        context: contact,
+                        metadata: {},
+                    },
+                    type: 'raiseIntentForContextRequest',
+                };
+
+                await postRequestMessage(raiseIntentForContextRequest, source);
+
+                //the app instance is now launched directly via the resolved IOpenApplicationStrategy rather than
+                //by round-tripping an `openRequest` message through the messaging layer
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
+
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+                expect(openParams?.appDirectoryRecord.appId).toBe(unqualifiedApp.appId);
+                expect(openParams?.context).toEqual(contact);
 
                 expect(mockSelectStrategy.withFunction('selectApp')).wasNotCalled();
             });
@@ -943,6 +1030,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -978,6 +1066,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -1006,7 +1095,11 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         context: contact,
                         intent: 'StartChat',
-                        originatingApp: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                        metadata: {
+                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                            timestamp: mockedDate,
+                            traceId: mockedGeneratedUuid,
+                        },
                         raiseIntentRequestUuid: 'mocked-generated-Uurl',
                     },
                     type: 'intentEvent',
@@ -1029,6 +1122,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         context: contact,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -1059,6 +1153,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         context: `not-a-context` as any,
+                        metadata: {},
                     },
                     type: 'raiseIntentForContextRequest',
                 };
@@ -1091,6 +1186,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         },
                         payload: {
                             context: contact,
+                            metadata: {},
                         },
                         type: 'raiseIntentForContextRequest',
                     };
@@ -1143,6 +1239,88 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 reset(mockedHelpers);
             });
 
+            it('should forward handler failures to the raiser without sharing a channel or success metadata', async () => {
+                createInstance();
+                const request: IntentResultRequest = {
+                    type: 'intentResultRequest',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: {
+                        intentEventUuid: 'failed-event',
+                        raiseIntentRequestUuid: JSON.stringify({ ...originalSource, uuid: raiseIntentRequestUuid }),
+                        intentResult: {},
+                        error: ResultError.IntentHandlerRejected,
+                    },
+                };
+                await postRequestMessage(request, source);
+                const replies = mockRootPublisher.functionCallLookup.publishResponseMessage;
+                expect(replies).toContainEqual([
+                    expect.objectContaining({
+                        type: 'raiseIntentResultResponse',
+                        payload: { error: ResultError.IntentHandlerRejected },
+                    }),
+                    originalSource,
+                ]);
+                expect(replies).toContainEqual([
+                    expect.objectContaining({ type: 'intentResultResponse', payload: {} }),
+                    source,
+                ]);
+            });
+
+            it.each([
+                ...Object.values(ResultError).map(error => ({ error, expected: error })),
+                ...['UnknownError', '', 42, false, { message: 'failure' }].map(error => ({
+                    error,
+                    expected: ResultError.IntentHandlerRejected,
+                })),
+            ])('normalizes untrusted intent-result error $error to $expected', async ({ error, expected }) => {
+                createInstance();
+                await postRequestMessage(
+                    {
+                        type: 'intentResultRequest',
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        payload: {
+                            intentEventUuid: 'failed-event',
+                            raiseIntentRequestUuid: JSON.stringify({ ...originalSource, uuid: raiseIntentRequestUuid }),
+                            intentResult: {},
+                            error,
+                        },
+                    } as IntentResultRequest,
+                    source,
+                );
+                expect(mockRootPublisher.functionCallLookup.publishResponseMessage).toContainEqual([
+                    expect.objectContaining({ type: 'raiseIntentResultResponse', payload: { error: expected } }),
+                    originalSource,
+                ]);
+            });
+
+            it('should replace result traceId while preserving custom and signed metadata', async () => {
+                createInstance();
+                const metadata = {
+                    traceId: 'handler-trace',
+                    custom: { example: true },
+                    signature: { protected: 'header', signature: 'signature' },
+                    antiReplay: { iat: 100, exp: 200, jti: 'nonce' },
+                };
+                await postRequestMessage(
+                    {
+                        type: 'intentResultRequest',
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        payload: {
+                            intentEventUuid: 'metadata-event',
+                            raiseIntentRequestUuid: JSON.stringify({ ...originalSource, uuid: raiseIntentRequestUuid }),
+                            intentResult: { context: contact },
+                            metadata,
+                        },
+                    },
+                    source,
+                );
+                expect(
+                    mockedHelpers
+                        .withFunction('createContextMetadata')
+                        .withParametersEqualTo(source, { ...metadata, traceId: mockedGeneratedUuid }),
+                ).wasCalledOnce();
+            });
+
             it(`should publish raiseIntentResultResponse to original source`, async () => {
                 createInstance();
 
@@ -1175,6 +1353,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         intentResult: {
                             context: { type: 'expected.context' },
                         },
+                        resultMetadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                     },
                     type: 'raiseIntentResultResponse',
                 };
@@ -1253,6 +1432,27 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`addIntentListenerRequest`, () => {
+            it.each([
+                [undefined, undefined],
+                [undefined, ['fdc3.contact']],
+                [['fdc3.contact'], undefined],
+                [[], undefined],
+                [undefined, []],
+                [[], ['fdc3.contact']],
+                [['fdc3.contact'], ['fdc3.contact', 'fdc3.instrument']],
+            ])('rejects conflicting wire registrations', async (first, second) => {
+                createInstance();
+                const message = (contextTypes: string[] | undefined): BrowserTypes.AddIntentListenerRequest => ({
+                    type: 'addIntentListenerRequest',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                    payload: { intent: 'StartChat', contextTypes },
+                });
+                await postRequestMessage(message(first), source);
+                await postRequestMessage(message(second), source);
+                const responses = mockRootPublisher.functionCallLookup.publishResponseMessage;
+                expect(responses?.at(-1)?.[0].payload).toEqual({ error: ResolveError.IntentListenerConflict });
+            });
+
             it(`should publish addIntentListenerResponse`, async () => {
                 createInstance();
 
@@ -1345,7 +1545,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         timestamp: currentDate,
                         source: appIdentifier,
                     },
-                    payload: { context: contact, intent: 'StartChat', app: identifier },
+                    payload: { context: contact, intent: 'StartChat', app: identifier, metadata: {} },
                     type: 'raiseIntentRequest',
                 };
 
@@ -1359,7 +1559,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: contact,
-                        originatingApp: appIdentifier,
+                        metadata: { source: appIdentifier, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                         raiseIntentRequestUuid: mockedGeneratedUurl,
                     },
                     type: 'intentEvent',
@@ -1368,18 +1568,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockAppDirectory
                         .withFunction('resolveAppForIntent')
-                        .withParameters('StartChat', contact, identifier),
+                        .withParameters('StartChat', contact, identifier, undefined),
                 ).wasCalledOnce();
                 expect(
                     mockAppDirectory
                         .withFunction('registerIntentListener')
-                        .withParametersEqualTo(qualifiedIdentifier, 'StartChat', [
-                            {
-                                type: contact.type,
-                                name: contact.name,
-                                id: contact.id,
-                            },
-                        ]),
+                        .withParametersEqualTo(qualifiedIdentifier, 'StartChat', [], mockedGeneratedUuid),
                 ).wasCalledOnce();
                 expect(
                     mockRootPublisher
@@ -1454,7 +1648,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                         timestamp: currentDate,
                         source: appIdentifier,
                     },
-                    payload: { context: contact, intent: 'StartChat', app: identifier },
+                    payload: { context: contact, intent: 'StartChat', app: identifier, metadata: {} },
                     type: 'raiseIntentRequest',
                 };
 
@@ -1468,7 +1662,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         intent: 'StartChat',
                         context: contact,
-                        originatingApp: appIdentifier,
+                        metadata: { source: appIdentifier, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                         raiseIntentRequestUuid: mockedGeneratedUurl,
                     },
                     type: 'intentEvent',
@@ -1582,7 +1776,6 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                             fdc3Version: expectedVersion,
                             provider: 'Morgan Stanley',
                             optionalFeatures: {
-                                OriginatingAppMetadata: true,
                                 UserChannelMembershipAPIs: true,
                                 DesktopAgentBridging: false,
                             },
@@ -1788,6 +1981,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };
@@ -1820,6 +2014,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };
@@ -1858,7 +2053,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(
                     mockEventHandler.withFunction('handler').withParametersEqualTo({
                         type: 'userChannelChanged',
-                        details: { newChannelId: mockedChannelId },
+                        details: { currentChannelId: mockedChannelId },
                     }),
                 ).wasCalledOnce();
             });
@@ -1876,6 +2071,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         type: 'USER_CHANNEL_CHANGED',
+                        channelId: null,
                     },
                     type: 'addEventListenerRequest',
                 };
@@ -1955,6 +2151,23 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
         });
 
         describe(`findIntentsByContextRequest`, () => {
+            it('should pass the resultType filter to the directory', async () => {
+                createInstance();
+                await postRequestMessage(
+                    {
+                        type: 'findIntentsByContextRequest',
+                        meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
+                        payload: { context: contact, resultType: 'fdc3.currency' },
+                    },
+                    source,
+                );
+                expect(
+                    mockAppDirectory
+                        .withFunction('getAppIntentsForContext')
+                        .withParametersEqualTo(contact, 'fdc3.currency'),
+                ).wasCalledOnce();
+            });
+
             it(`should publish findIntentsByContextResponse containing appIntents for possible intents that can handle given context`, async () => {
                 createInstance();
 
@@ -2169,144 +2382,61 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 );
             });
 
-            it.each(['absent', 'without source', 'spoofed source'] as const)(
-                `should open app using IOpenApplicationStrategy if applicable one is provided (payload metadata: %s)`,
-                async metadataMode => {
-                    const withMetadata = metadataMode !== 'absent';
-                    const metadata = {
-                        ...(metadataMode === 'spoofed source'
-                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
-                            : {}),
-                        traceId: 'test-trace',
-                        custom: { workspace: 'test-workspace' },
-                    };
-                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
-                    const instance = createInstance([mockOpenStrategy.mock]);
+            it(`should open app using IOpenApplicationStrategy if applicable one is provided`, async () => {
+                const instance = createInstance([mockOpenStrategy.mock]);
 
-                    const openMessage: BrowserTypes.OpenRequest = {
-                        meta: {
-                            requestUuid: mockedRequestUuid,
-                            timestamp: currentDate,
-                            source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
-                        },
-                        payload: {
-                            app: { appId: mockedTargetAppId },
-                            context: contact,
-                        },
-                        type: 'openRequest',
-                    };
+                const openMessage: BrowserTypes.OpenRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        app: { appId: mockedTargetAppId },
+                        context: contact,
+                        metadata: {},
+                    },
+                    type: 'openRequest',
+                };
 
-                    if (withMetadata) {
-                        Object.assign(openMessage.payload, { metadata });
-                    }
-                    await postRequestMessage(openMessage, source);
+                await postRequestMessage(openMessage, source);
 
-                    const recordWithNoManifests = { ...mockedApplication };
-                    delete recordWithNoManifests.hostManifests;
+                const expectedContextMetadata = {
+                    source,
+                    timestamp: currentDate,
+                    traceId: mockedGeneratedUuid,
+                };
+                const recordWithNoManifests = { ...mockedApplication };
+                delete recordWithNoManifests.hostManifests;
 
-                    expect(
-                        mockOpenStrategy.withFunction('canOpen').withParametersEqualTo({
-                            appDirectoryRecord: recordWithNoManifests,
-                            agent: instance,
-                            manifest: mockedApplication.hostManifests?.['mock-application'],
-                            context: contact,
-                            contextMetadata: expectedMetadata,
-                        }),
-                    ).wasCalledOnce();
+                expect(
+                    mockOpenStrategy.withFunction('canOpen').withParametersEqualTo({
+                        appDirectoryRecord: recordWithNoManifests,
+                        agent: instance,
+                        manifest: mockedApplication.hostManifests?.['mock-application'],
+                        context: contact,
+                        contextMetadata: expectedContextMetadata,
+                    }),
+                ).wasCalledOnce();
 
-                    expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
+                expect(mockOpenStrategy.withFunction('open')).wasCalledOnce();
 
-                    expect(mockDisabledOpenStrategy.withFunction('open')).wasNotCalled();
+                expect(mockDisabledOpenStrategy.withFunction('open')).wasNotCalled();
 
-                    const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
+                const openParams = mockOpenStrategy.functionCallLookup['open']?.[0][0];
 
-                    expect(openParams?.appDirectoryRecord).toEqual(recordWithNoManifests);
-                    expect(openParams?.agent).toEqual(instance);
-                    expect(openParams?.manifest).toEqual(mockedApplication.hostManifests?.['mock-application']);
-                    expect(openParams?.context).toEqual(contact);
-                    expect(openParams?.contextMetadata).toEqual(expectedMetadata);
+                expect(openParams?.appDirectoryRecord).toEqual(recordWithNoManifests);
+                expect(openParams?.agent).toEqual(instance);
+                expect(openParams?.manifest).toEqual(mockedApplication.hostManifests?.['mock-application']);
+                expect(openParams?.context).toEqual(contact);
+                expect(openParams?.contextMetadata).toEqual(expectedContextMetadata);
 
-                    const resolvedApp = await mockOpenStrategy.functionCallLookup['open']?.[0][0].appReadyPromise;
+                const resolvedApp = await mockOpenStrategy.functionCallLookup['open']?.[0][0].appReadyPromise;
 
-                    expect(resolvedApp).toBeDefined();
-                    expect(resolvedApp?.appId).toBe(mockedTargetAppId);
-                    expect(resolvedApp?.instanceId).toBe(mockedGeneratedUuid);
-                },
-            );
-
-            it.each(
-                (['raiseIntentRequest', 'raiseIntentForContextRequest'] as const).flatMap(type =>
-                    (['absent', 'without source', 'spoofed source'] as const).map(
-                        metadataMode => [type, metadataMode] as const,
-                    ),
-                ),
-            )(
-                'preserves metadata when %s launches an app without leaking it to later opens (payload metadata: %s)',
-                async (type, metadataMode) => {
-                    const withMetadata = metadataMode !== 'absent';
-                    const metadata = {
-                        ...(metadataMode === 'spoofed source'
-                            ? { source: { appId: 'spoofed-app', instanceId: 'spoofed-instance' } }
-                            : {}),
-                        traceId: 'intent-trace',
-                        custom: { workspace: 'intent-workspace' },
-                    };
-                    const metadataPayload = withMetadata ? { metadata } : {};
-                    const expectedMetadata = withMetadata ? { ...metadata, source } : { source };
-                    mockRootPublisher.setupFunction('awaitAppIdentity', async () => source);
-                    const target = { appId: mockedTargetAppId };
-                    mockAppDirectory.setupFunction('resolveAppForIntent', async () => target);
-                    mockAppDirectory.setupFunction('resolveAppForContext', async () => ({
-                        intent: 'StartChat',
-                        app: target,
-                    }));
-                    createInstance([mockOpenStrategy.mock]);
-                    await postRequestMessage(
-                        {
-                            type: 'addIntentListenerRequest',
-                            meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
-                            payload: { intent: 'StartChat' },
-                        },
-                        source,
-                    );
-                    await postRequestMessage(
-                        type === 'raiseIntentRequest'
-                            ? {
-                                  type,
-                                  meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
-                                  payload: { intent: 'StartChat', context: contact, ...metadataPayload },
-                              }
-                            : {
-                                  type,
-                                  meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source },
-                                  payload: { context: contact, ...metadataPayload },
-                              },
-                        source,
-                    );
-
-                    expect(mockRootPublisher.withFunction('sendMessage')).wasNotCalled();
-                    for (const method of ['canOpen', 'open'] as const) {
-                        expect(mockOpenStrategy.functionCallLookup[method]?.[0][0]).toMatchObject({
-                            context: contact,
-                            contextMetadata: expectedMetadata,
-                        });
-                    }
-
-                    // A later direct open by the root must not inherit the intent metadata.
-                    await postRequestMessage(
-                        {
-                            type: 'openRequest',
-                            meta: { requestUuid: mockedRequestUuid, timestamp: currentDate, source: appIdentifier },
-                            payload: { app: target },
-                        },
-                        appIdentifier,
-                    );
-                    expect(mockOpenStrategy.functionCallLookup.open?.[1][0].contextMetadata).toEqual({
-                        source: appIdentifier,
-                    });
-                    expect(mockOpenStrategy.functionCallLookup.open?.[1][0].context).toBeUndefined();
-                },
-            );
+                expect(resolvedApp).toBeDefined();
+                expect(resolvedApp?.appId).toBe(mockedTargetAppId);
+                expect(resolvedApp?.instanceId).toBe(mockedGeneratedUuid);
+            });
 
             it(`should not call open on a strategy that returns false for canOpen`, async () => {
                 createInstance([mockDisabledOpenStrategy.mock, mockOpenStrategy.mock]);
@@ -2319,6 +2449,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: mockedTargetAppId },
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2344,6 +2475,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: mockedTargetAppId },
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2364,6 +2496,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: mockedTargetAppId },
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2402,6 +2535,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         app: { appId: mockedTargetAppId },
                         context: contact,
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2423,7 +2557,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         channelId: null,
                         context: contact,
-                        originatingApp: source,
+                        metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                     },
                     type: 'broadcastEvent',
                 };
@@ -2448,6 +2582,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: `app-not-in-directory` },
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2479,6 +2614,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         app: { appId: mockedTargetAppId },
                         context: `not-context` as any,
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2509,6 +2645,39 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: mockedTargetAppId },
+                        metadata: {},
+                    },
+                    type: 'openRequest',
+                };
+
+                await postRequestMessage(openMessage, source);
+
+                const expectedMessage: BrowserTypes.OpenResponse = {
+                    meta: { ...openMessage.meta, responseUuid: mockedResponseUuid },
+                    payload: { error: OpenError.ErrorOnLaunch },
+                    type: 'openResponse',
+                };
+
+                expect(
+                    mockRootPublisher
+                        .withFunction('publishResponseMessage')
+                        .withParametersEqualTo(expectedMessage, source),
+                ).wasCalledOnce();
+            });
+
+            it.each([null, undefined])(`should reject a launch with connection UUID %s`, async uuid => {
+                mockErrorOpenStrategy.setupFunction('open', () => Promise.resolve(uuid as unknown as string));
+                createInstance([mockErrorOpenStrategy.mock]);
+
+                const openMessage: BrowserTypes.OpenRequest = {
+                    meta: {
+                        requestUuid: mockedRequestUuid,
+                        timestamp: currentDate,
+                        source: { appId: mockedTargetAppId, instanceId: mockedTargetInstanceId },
+                    },
+                    payload: {
+                        app: { appId: mockedTargetAppId },
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2539,6 +2708,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     },
                     payload: {
                         app: { appId: `unopenable-app` },
+                        metadata: {},
                     },
                     type: 'openRequest',
                 };
@@ -2559,13 +2729,12 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
             });
         });
 
-        // TEMPORARY (FDC3 3.0): remove when close is part of the released spec. See ../fdc3-next/close.ts
         describe(`closeRequest`, () => {
             let mockCloseStrategy: IMocked<ICloseApplicationStrategy>;
             let mockDisabledCloseStrategy: IMocked<ICloseApplicationStrategy>;
             let mockErrorCloseStrategy: IMocked<ICloseApplicationStrategy>;
 
-            let closeMessage: CloseRequest;
+            let closeMessage: BrowserTypes.CloseRequest;
 
             beforeEach(() => {
                 mockCloseStrategy = Mock.create<ICloseApplicationStrategy>().setup(
@@ -2616,27 +2785,11 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(mockDisabledCloseStrategy.withFunction('closeApp')).wasNotCalled();
             });
 
-            it(`should publish a success closeResponse when the app is closed`, async () => {
+            it('closes the app without publishing a success response', async () => {
                 createInstance([mockCloseStrategy.mock]);
-
                 await postRequestMessage(closeMessage, source);
-
-                const expectedMessage: CloseResponse = {
-                    meta: {
-                        requestUuid: mockedRequestUuid,
-                        timestamp: currentDate,
-                        responseUuid: mockedGeneratedUuid,
-                        source,
-                    },
-                    payload: {},
-                    type: 'closeResponse',
-                };
-
-                expect(
-                    mockRootPublisher
-                        .withFunction('publishResponseMessage')
-                        .withParametersEqualTo(expectedMessage, source),
-                ).wasCalledOnce();
+                expect(mockCloseStrategy.withFunction('closeApp')).wasCalledOnce();
+                expect(mockRootPublisher.withFunction('publishResponseMessage')).wasNotCalled();
             });
 
             it(`should publish closeResponse with CloseError.ErrorOnClose when no strategy can close the app`, async () => {
@@ -2644,15 +2797,17 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 await postRequestMessage(closeMessage, source);
 
-                const expectedMessage: CloseResponse = {
+                const expectedMessage: BrowserTypes.CloseResponse = {
                     meta: {
                         requestUuid: mockedRequestUuid,
                         timestamp: currentDate,
-                        responseUuid: mockedGeneratedUuid,
+                        responseUuid: mockedResponseUuid,
                         source,
                     },
                     payload: {
-                        error: CloseError.ErrorOnClose,
+                        // fdc3-schema 3.0-alpha types CloseResponsePayload.error as only 'ApiTimeout';
+                        // ErrorOnClose is a valid CloseError per the spec, so cast until the schema widens.
+                        error: CloseError.ErrorOnClose as unknown as BrowserTypes.CloseResponsePayload['error'],
                     },
                     type: 'closeResponse',
                 };
@@ -2669,15 +2824,17 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
                 await postRequestMessage(closeMessage, source);
 
-                const expectedMessage: CloseResponse = {
+                const expectedMessage: BrowserTypes.CloseResponse = {
                     meta: {
                         requestUuid: mockedRequestUuid,
                         timestamp: currentDate,
-                        responseUuid: mockedGeneratedUuid,
+                        responseUuid: mockedResponseUuid,
                         source,
                     },
                     payload: {
-                        error: CloseError.ErrorOnClose,
+                        // fdc3-schema 3.0-alpha types CloseResponsePayload.error as only 'ApiTimeout';
+                        // ErrorOnClose is a valid CloseError per the spec, so cast until the schema widens.
+                        error: CloseError.ErrorOnClose as unknown as BrowserTypes.CloseResponsePayload['error'],
                     },
                     type: 'closeResponse',
                 };
@@ -2874,6 +3031,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                     payload: {
                         context: contact,
                         channelId: mockedChannelId,
+                        metadata: {},
                     },
                     type: 'broadcastRequest',
                 };
@@ -3457,6 +3615,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                                 type: 'context',
                             },
                             app: source,
+                            metadata: {},
                         },
                     };
 
@@ -3477,6 +3636,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                                 type: 'context',
                             },
                             app: secondSource,
+                            metadata: {},
                         },
                     };
 

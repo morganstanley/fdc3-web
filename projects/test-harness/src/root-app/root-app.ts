@@ -376,7 +376,7 @@ export class RootApp
         const agent = await getAgent();
 
         await agent
-            .addIntentListener(SelectableAppsIntent, async context => {
+            .addIntentListenerWithContext(SelectableAppsIntent, SelectableAppsRequestContextType, async context => {
                 if (context.type === SelectableAppsRequestContextType) {
                     const selectableAppsContext: ISelectableAppsResponseContext = {
                         type: SelectableAppsResponseContextType,

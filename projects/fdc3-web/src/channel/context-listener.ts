@@ -8,15 +8,8 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
-import type {
-    AppIdentifier,
-    BrowserTypes,
-    Channel,
-    ContextHandler,
-    ContextMetadata,
-    ContextType,
-    Listener,
-} from '@finos/fdc3';
+import type { BrowserTypes, Channel, ContextHandler, ContextType, ContextWithMetadata, Listener } from '@finos/fdc3';
+import { ChannelError, ResolveError } from '@finos/fdc3';
 import { FullyQualifiedAppIdentifier, IProxyMessagingProvider } from '../contracts.js';
 import {
     createRequestMessage,
@@ -25,12 +18,32 @@ import {
     isBroadcastEvent,
     isChannelChangedEvent,
     isContextListenerUnsubscribeResponse,
+    isEventListenerUnsubscribeResponse,
     isGetCurrentChannelResponse,
     isGetCurrentContextResponse,
-    resolveContextType,
 } from '../helpers/index.js';
 import { MessagingBase } from '../messaging/index.js';
 import { IChannelFactory } from './channel.contracts.js';
+
+function parseCurrentContextResponse(
+    response: BrowserTypes.GetCurrentContextResponsePayload,
+): ContextWithMetadata | null {
+    const { context, metadata } = response;
+
+    if (context === null) {
+        if (metadata !== null) {
+            throw new Error(ChannelError.MalformedContext);
+        }
+
+        return null;
+    }
+
+    if (context === undefined || metadata == null) {
+        throw new Error(ChannelError.MalformedContext);
+    }
+
+    return { context, metadata };
+}
 
 /**
 Listens to broadcast events.
@@ -56,18 +69,16 @@ export class ContextListener extends MessagingBase implements ContextListener {
 
     private _id: string | null | undefined;
 
-    public addContextListener(
-        contextType: string | null | string | ContextHandler,
-        handler: ContextHandler,
-    ): Promise<Listener>;
-
-    public addContextListener(handler: ContextHandler): Promise<Listener>;
     public async addContextListener(
-        handlerOrContextType: string | null | ContextHandler,
-        optionalContextHandler?: ContextHandler,
+        contextType: ContextType | ContextType[] | null,
+        contextHandler: ContextHandler,
     ): Promise<Listener> {
-        const { contextType, contextHandler } = resolveContextType(handlerOrContextType, optionalContextHandler);
-
+        if (Array.isArray(contextType)) {
+            if (contextType.length === 0 || contextType.some(type => typeof type !== 'string')) {
+                throw new Error(ResolveError.InvalidArguments);
+            }
+            contextType = [...new Set(contextType)];
+        }
         const response = await this.getAddContextListenerResponse(contextType);
 
         const listenerUUID = response.payload.listenerUUID;
@@ -80,21 +91,19 @@ export class ContextListener extends MessagingBase implements ContextListener {
 
         this.addBroadcastEventListener(listenerUUID, contextType, contextHandler);
 
+        let channelListenerUUID: string | undefined;
         //if contextListener is for current user channel and fdc3.open() calls
         if (this.channelDetails == null) {
             //adds listener for userChannelChanged events
-            await this.getAddEventListenerResponse(contextType, contextHandler);
+            channelListenerUUID = (await this.getAddEventListenerResponse(contextType, contextHandler)).payload
+                .listenerUUID;
 
             const currentChannel = await this.getCurrentChannel();
 
             this._id = currentChannel?.id ?? null;
 
             //gets current context for channel
-            const context = await this.getCurrentContext(contextType);
-
-            if (context != null) {
-                contextHandler(context);
-            }
+            await this.replayCurrentContext(contextType, contextHandler);
         }
 
         const unsubscribe: () => Promise<void> = async () => {
@@ -105,9 +114,39 @@ export class ContextListener extends MessagingBase implements ContextListener {
                     { listenerUUID },
                 );
 
-            await this.getResponse(contextListenerUnsubscribeRequest, isContextListenerUnsubscribeResponse);
-
-            this.removeMessageCallback(listenerUUID);
+            // Attempt both remote removals even when one fails, and always remove local callbacks.
+            const results = await Promise.allSettled([
+                (async () => {
+                    try {
+                        const result = await this.getResponse(
+                            contextListenerUnsubscribeRequest,
+                            isContextListenerUnsubscribeResponse,
+                        );
+                        if (result.payload.error != null) throw new Error(result.payload.error);
+                    } finally {
+                        await this.removeMessageCallback(listenerUUID);
+                    }
+                })(),
+                (async () => {
+                    if (channelListenerUUID == null) return;
+                    try {
+                        const result = await this.getResponse(
+                            createRequestMessage<BrowserTypes.EventListenerUnsubscribeRequest>(
+                                'eventListenerUnsubscribeRequest',
+                                this.appIdentifier,
+                                { listenerUUID: channelListenerUUID },
+                            ),
+                            isEventListenerUnsubscribeResponse,
+                        );
+                        if (result.payload.error != null) throw new Error(result.payload.error);
+                    } finally {
+                        await this.removeMessageCallback(channelListenerUUID);
+                    }
+                })(),
+            ]);
+            for (const result of results) {
+                if (result.status === 'rejected') throw result.reason;
+            }
         };
 
         return { unsubscribe };
@@ -145,6 +184,27 @@ export class ContextListener extends MessagingBase implements ContextListener {
             return Promise.resolve(null);
         }
 
+        const response = await this.requestCurrentContext(channelId, contextType);
+
+        return parseCurrentContextResponse(response)?.context ?? null;
+    }
+
+    public async getCurrentContextWithMetadata(contextType?: string | null): Promise<ContextWithMetadata | null> {
+        const channelId = this._id;
+
+        if (channelId == null) {
+            return Promise.resolve(null);
+        }
+
+        const response = await this.requestCurrentContext(channelId, contextType);
+
+        return parseCurrentContextResponse(response);
+    }
+
+    private async requestCurrentContext(
+        channelId: string,
+        contextType?: string | null,
+    ): Promise<BrowserTypes.GetCurrentContextResponsePayload> {
         const message = createRequestMessage<BrowserTypes.GetCurrentContextRequest>(
             'getCurrentContextRequest',
             this.appIdentifier,
@@ -157,31 +217,34 @@ export class ContextListener extends MessagingBase implements ContextListener {
             return Promise.reject(response.payload.error);
         }
 
-        return response.payload.context ?? null;
+        return response.payload;
     }
 
     private getAddContextListenerResponse(
-        contextType: ContextType | null,
+        contextType: ContextType | ContextType[] | null,
     ): Promise<BrowserTypes.AddContextListenerResponse> {
         //if channel is user channel, contextListener should change as app's user channel changes
         const channelId = this.listenOnCurrentChannel ? null : this._id;
         const message = createRequestMessage<BrowserTypes.AddContextListenerRequest>(
             'addContextListenerRequest',
             this.appIdentifier,
-            { channelId: channelId ?? null, contextType },
+            {
+                channelId: channelId ?? null,
+                ...(Array.isArray(contextType) ? { contextTypes: contextType } : { contextType }),
+            },
         );
 
         return this.getResponse(message, isAddContextListenerResponse);
     }
 
     private async getAddEventListenerResponse(
-        contextType: ContextType | null,
+        contextType: ContextType | ContextType[] | null,
         contextHandler: ContextHandler,
     ): Promise<BrowserTypes.AddEventListenerResponse> {
         const message = createRequestMessage<BrowserTypes.AddEventListenerRequest>(
             'addEventListenerRequest',
             this.appIdentifier,
-            { type: 'USER_CHANNEL_CHANGED' },
+            { type: 'USER_CHANNEL_CHANGED', channelId: null },
         );
 
         const response = await this.getResponse(message, isAddEventListenerResponse);
@@ -195,40 +258,49 @@ export class ContextListener extends MessagingBase implements ContextListener {
 
     private addBroadcastEventListener(
         listenerUUID: string,
-        contextType: ContextType | null,
+        contextType: ContextType | ContextType[] | null,
         contextHandler: ContextHandler,
     ): void {
         this.addMessageCallback(listenerUUID, message => {
             if (
                 isBroadcastEvent(message) &&
-                (contextType === null || message.payload.context.type === contextType) &&
+                (contextType === null ||
+                    (Array.isArray(contextType)
+                        ? contextType.includes(message.payload.context.type)
+                        : message.payload.context.type === contextType)) &&
                 message.payload.channelId === this._id
             ) {
-                contextHandler(message.payload.context, createContextMetadata(message.payload.originatingApp));
+                contextHandler(message.payload.context, message.payload.metadata);
             }
         });
     }
 
-    // Todo: unsubscribe. This doesn't currently seem possible. Issue raised: https://github.com/finos/FDC3/issues/1315
+    private async replayCurrentContext(
+        contextType: ContextType | ContextType[] | null,
+        contextHandler: ContextHandler,
+    ): Promise<void> {
+        const contexts = await Promise.all(
+            (Array.isArray(contextType) ? contextType : [contextType]).map(type =>
+                this.getCurrentContextWithMetadata(type),
+            ),
+        );
+        for (const current of contexts) {
+            if (current != null) contextHandler(current.context, current.metadata);
+        }
+    }
+
     private addChannelChangedEventListener(
         listenerUUID: string,
-        contextType: ContextType | null,
+        contextType: ContextType | ContextType[] | null,
         contextHandler: ContextHandler,
     ): void {
         this.addMessageCallback(listenerUUID, async message => {
             //TODO: filter by appIdentifier?? https://github.com/finos/FDC3/issues/1313
             if (isChannelChangedEvent(message)) {
-                this._id = message.payload.newChannelId;
+                this._id = message.payload.currentChannelId ?? message.payload.newChannelId ?? null;
                 //gets current context for channel whenever app joins new user channel
-                const context = await this.getCurrentContext(contextType);
-                if (context != null) {
-                    contextHandler(context);
-                }
+                await this.replayCurrentContext(contextType, contextHandler);
             }
         });
     }
-}
-
-function createContextMetadata(identifier?: AppIdentifier): ContextMetadata | undefined {
-    return identifier != null ? { source: identifier } : undefined;
 }

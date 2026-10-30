@@ -179,18 +179,40 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         this._forContextPopupState = null;
     }
 
+    private matchesRequestedApp(
+        app: AppMetadata,
+        payload: ResolveForIntentPayload | ResolveForContextPayload,
+    ): boolean {
+        const requested = payload.appIdentifier;
+        return (
+            requested?.appId == null ||
+            (appIdsMatch(app.appId, requested.appId) &&
+                (payload.newInstance === true ||
+                    requested.instanceId == null ||
+                    app.instanceId === requested.instanceId))
+        );
+    }
+
+    private partitionApps(
+        apps: AppMetadata[],
+        payload: ResolveForIntentPayload | ResolveForContextPayload,
+        runningInstances: AppMetadata[],
+    ): { activeInstances: AppMetadata[]; inactiveApps: AppMetadata[] } {
+        return {
+            activeInstances: payload.newInstance === true ? [] : apps.filter(filterActiveApps),
+            inactiveApps:
+                payload.newInstance === false
+                    ? []
+                    : apps.filter(app => filterInactiveApps(app, runningInstances, payload.appManifests)),
+        };
+    }
+
     public async resolveAppForIntent(payload: ResolveForIntentPayload): Promise<AppIdentifier> {
         const agent = await this.desktopAgent;
 
         const appIntent = payload.appIntent ?? (await agent.findIntent(payload.intent, payload.context));
-        let apps: AppMetadata[] = appIntent.apps;
-        const requestedAppId = payload.appIdentifier?.appId;
-        if (requestedAppId != null) {
-            apps = apps.filter(app => appIdsMatch(app.appId, requestedAppId));
-        }
-
-        const activeInstances = apps.filter(app => app.instanceId != null);
-        const inactiveApps = apps.filter(app => filterInactiveApps(app, activeInstances, payload.appManifests));
+        const apps = appIntent.apps.filter(app => this.matchesRequestedApp(app, payload));
+        const { activeInstances, inactiveApps } = this.partitionApps(apps, payload, apps.filter(filterActiveApps));
 
         // active and inactive apps. If we only have 1 then we can return it straight away
         const candidates = [...activeInstances, ...inactiveApps];
@@ -200,7 +222,9 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
         }
 
         if (candidates.length === 0) {
-            return Promise.reject(ResolveError.NoAppsFound);
+            return Promise.reject(
+                payload.newInstance === false ? ResolveError.TargetInstanceUnavailable : ResolveError.NoAppsFound,
+            );
         }
 
         this._forIntentPopupState = {
@@ -227,21 +251,16 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
             appIntents
                 //filters out intents which cannot be handled by given AppIdentifier if one is provided
                 .map(appIntent => {
-                    const requestedAppId = payload.appIdentifier?.appId;
-                    const apps =
-                        requestedAppId != null
-                            ? appIntent.apps.filter(app => appIdsMatch(app.appId, requestedAppId))
-                            : appIntent.apps;
+                    const apps = appIntent.apps.filter(app => this.matchesRequestedApp(app, payload));
 
                     return { ...appIntent, apps };
                 })
                 .filter(appIntent => appIntent.apps.length > 0)
                 .reduce<ContextPopupState>((lookup, appIntent) => {
-                    //active app instances that can handle given intent
-                    const activeInstances = appIntent.apps.filter(filterActiveApps);
-                    //apps that can handle given intent (excluding singletons which already have an active instance)
-                    const inactiveApps = appIntent.apps.filter(app =>
-                        filterInactiveApps(app, globalActiveInstances, payload.appManifests),
+                    const { activeInstances, inactiveApps } = this.partitionApps(
+                        appIntent.apps,
+                        payload,
+                        globalActiveInstances,
                     );
 
                     return {
@@ -264,7 +283,9 @@ export class AppResolverComponent extends LitElement implements IAppResolver {
                 app: appCandidates[0].app,
             };
         } else if (appCandidates.length === 0) {
-            return Promise.reject(ResolveError.NoAppsFound);
+            return Promise.reject(
+                payload.newInstance === false ? ResolveError.TargetInstanceUnavailable : ResolveError.NoAppsFound,
+            );
         }
 
         this._passedContext = payload.context;

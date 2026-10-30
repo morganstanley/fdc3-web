@@ -6,6 +6,7 @@
         "lib": ["ES2022", "dom"],
         "target": "ES2022",
         "typeRoots": ["node_modules/@types"],
+        "types": ["node"],
         "baseUrl": ".",
         "sourceMap": true,
         "declaration": true,
@@ -26,7 +27,6 @@
         "resolveJsonModule": true,
         "paths": {
             "@morgan-stanley/fdc3-web": ["./dist/@morgan-stanley/fdc3-web/"],
-            "@morgan-stanley/fdc3-web-messaging-provider": ["./dist/@morgan-stanley/fdc3-web-messaging-provider"],
             "@morgan-stanley/fdc3-web-ui-provider": ["./dist/@morgan-stanley/fdc3-web-ui-provider"]
         }
     }

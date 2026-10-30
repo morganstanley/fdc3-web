@@ -8,6 +8,7 @@
  * or implied. See the License for the specific language governing permissions
  * and limitations under the License. */
 
+import '../utils/api-explorer.js';
 import '../utils/list-component.js';
 import '../utils/header-component.js';
 import '../root-app/app-container.js';
@@ -48,6 +49,7 @@ import {
     ISelectableAppsRequestContext,
     ISelectableAppsResponseContext,
     type ISelectAppContext,
+    OpenAppContextType,
     OpenAppIntent,
     SelectableAppsIntent,
     SelectableAppsRequestContextType,
@@ -176,6 +178,7 @@ export class DefaultApp extends LitElement {
                     ${this.renderAddIntentListenerSection()} ${this.renderAppAndInstanceInfoSection()}
                     ${this.renderAddEventListenerSection()} ${this.renderGetInfoSection()}
                     ${this.renderChannelsSection()} ${this.renderConsole()}
+                    <api-explorer .agent=${this.agent}></api-explorer>
                 </main>
                 ${this.renderChannelSelector()} ${this.renderNestedApps()}
             </div>
@@ -607,7 +610,9 @@ export class DefaultApp extends LitElement {
     private async subscribeToOpenAppIntent(agent: DesktopAgent): Promise<void> {
         // listens for open app intents
         await agent
-            .addIntentListener(OpenAppIntent, context => this.openChildApp(context as IOpenAppContext))
+            .addIntentListenerWithContext(OpenAppIntent, OpenAppContextType, context =>
+                this.openChildApp(context as IOpenAppContext),
+            )
             .then(() => this.log(`'${OpenAppIntent}' intent listener added`))
             .catch(err => this.log(`Error adding intent listener for '${OpenAppIntent}'`, err, 'error'));
     }

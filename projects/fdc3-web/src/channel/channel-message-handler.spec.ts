@@ -111,6 +111,16 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                         meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                     }) as any,
             ),
+            setupFunction(
+                'createContextMetadata',
+                (source, appMetadata) =>
+                    ({
+                        ...appMetadata,
+                        source,
+                        timestamp: mockedDate,
+                        traceId: mockedGeneratedUuid,
+                    }) as any,
+            ),
         );
         registerMock(helpersImport, mockedHelpers.mock);
     });
@@ -229,7 +239,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                userChannelChanged: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                userChannelChanged: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             const joinUserChannelRequest: BrowserTypes.JoinUserChannelRequest = {
@@ -250,7 +260,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: recommendedChannels[1].id,
+                    currentChannelId: recommendedChannels[1].id,
                 },
             };
 
@@ -263,7 +273,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                allEvents: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                allEvents: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             const joinUserChannelRequest: BrowserTypes.JoinUserChannelRequest = {
@@ -284,7 +294,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: recommendedChannels[1].id,
+                    currentChannelId: recommendedChannels[1].id,
                 },
             };
 
@@ -316,7 +326,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: recommendedChannels[1].id,
+                    currentChannelId: recommendedChannels[1].id,
                 },
             };
 
@@ -401,7 +411,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                userChannelChanged: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                userChannelChanged: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             mockJoinChannel(recommendedChannels[1], instance);
@@ -424,7 +434,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: null,
+                    currentChannelId: null,
                 },
             };
 
@@ -437,7 +447,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             const instance = createInstance();
 
             eventListeners = {
-                allEvents: [{ appIdentifier: source, listenerUUID: `mocked-listener-uuid` }],
+                allEvents: [{ appIdentifier: source, channelId: null, listenerUUID: `mocked-listener-uuid` }],
             };
 
             mockJoinChannel(recommendedChannels[1], instance);
@@ -460,7 +470,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: null,
+                    currentChannelId: null,
                 },
             };
 
@@ -494,7 +504,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 type: 'channelChangedEvent',
                 meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
                 payload: {
-                    newChannelId: null,
+                    currentChannelId: null,
                 },
             };
 
@@ -1321,6 +1331,31 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
     });
 
     describe(`broadcastRequest`, () => {
+        it('should send only one event per app instance with overlapping channel and current-channel listeners', () => {
+            const instance = createInstance();
+            const channelId = recommendedChannels[1].id;
+            mockJoinChannel(recommendedChannels[1], instance, sourceTwo);
+            mockAddContextListener(null, 'fdc3.contact', sourceTwo, instance);
+            mockAddContextListener(channelId, null, { ...sourceTwo }, instance);
+            mockAddContextListener(channelId, 'fdc3.contact', sourceTwo, instance);
+            mockAddContextListener(channelId, null, sourceThree, instance);
+
+            instance.onBroadcastRequest(
+                {
+                    type: 'broadcastRequest',
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId, context: contact, metadata: {} },
+                },
+                source,
+            );
+
+            const broadcasts = mockRootMessagingProvider.functionCallLookup.publishEvent?.filter(
+                ([event]) => event.type === 'broadcastEvent',
+            );
+            expect(broadcasts).toHaveLength(1);
+            expect(broadcasts?.[0][1]).toEqual([sourceTwo, sourceThree]);
+        });
+
         it(`should publish broadcastResponse`, async () => {
             const instance = createInstance();
 
@@ -1335,6 +1370,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1368,6 +1404,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedGeneratedUuid,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1401,6 +1438,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: `not-a-context` as any,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1437,6 +1475,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1448,7 +1487,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: mockedChannelId,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1477,6 +1516,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: recommendedChannels[1].id,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1488,7 +1528,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: recommendedChannels[1].id,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1516,6 +1556,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1527,7 +1568,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: mockedChannelId,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1553,6 +1594,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: contact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -1564,7 +1606,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     channelId: mockedChannelId,
                     context: contact,
-                    originatingApp: source,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -1604,6 +1646,110 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
+                },
+                type: 'getCurrentContextResponse',
+            };
+
+            expect(
+                mockRootMessagingProvider
+                    .withFunction('publishResponseMessage')
+                    .withParametersEqualTo(expectedMessage, source),
+            ).wasCalledOnce();
+        });
+
+        it('should retain broadcast recency after clearing the latest context', async () => {
+            const instance = createInstance();
+
+            mockGetOrCreateChannel(mockedChannelId, instance);
+
+            mockBroadcast(mockedChannelId, contact, instance);
+            mockBroadcast(mockedChannelId, { type: '2' }, instance);
+            mockBroadcast(mockedChannelId, { type: 'other' }, instance);
+            mockBroadcast(mockedChannelId, contact, instance);
+            mockBroadcast(mockedChannelId, { type: 'latest' }, instance);
+            instance.onClearContextRequest(
+                {
+                    type: 'clearContextRequest',
+                    meta: { requestUuid: 'clear', timestamp: mockedDate, source },
+                    payload: { channelId: mockedChannelId, contextType: 'latest' },
+                },
+                source,
+                {},
+            );
+
+            const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                meta: {
+                    requestUuid: mockedRequestUuid,
+                    timestamp: mockedDate,
+                    source,
+                },
+                payload: {
+                    channelId: mockedChannelId,
+                    contextType: null,
+                },
+                type: 'getCurrentContextRequest',
+            };
+
+            instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+
+            const expectedMessage: BrowserTypes.GetCurrentContextResponse = {
+                meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                payload: {
+                    context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
+                },
+                type: 'getCurrentContextResponse',
+            };
+
+            expect(
+                mockRootMessagingProvider
+                    .withFunction('publishResponseMessage')
+                    .withParametersEqualTo(expectedMessage, source),
+            ).wasCalledOnce();
+        });
+
+        it('should retain broadcast recency after its latest broadcaster disconnects', async () => {
+            const otherSource = { appId: 'other-app', instanceId: 'other-instance' };
+            const instance = createInstance();
+
+            mockJoinChannel({ id: 'fdc3.channel.1', type: 'user' }, instance, source);
+            mockJoinChannel({ id: 'fdc3.channel.1', type: 'user' }, instance, otherSource);
+
+            mockBroadcast('fdc3.channel.1', contact, instance);
+            mockBroadcast('fdc3.channel.1', { type: '2' }, instance);
+            mockBroadcast('fdc3.channel.1', { type: 'other' }, instance);
+            mockBroadcast('fdc3.channel.1', contact, instance);
+            instance.onBroadcastRequest(
+                {
+                    type: 'broadcastRequest',
+                    meta: { requestUuid: 'last', timestamp: mockedDate, source: otherSource },
+                    payload: { channelId: 'fdc3.channel.1', context: { type: 'latest' }, metadata: {} },
+                },
+                otherSource,
+            );
+            instance.cleanupDisconnectedProxy(otherSource);
+
+            const getCurrentContextRequest: BrowserTypes.GetCurrentContextRequest = {
+                meta: {
+                    requestUuid: mockedRequestUuid,
+                    timestamp: mockedDate,
+                    source,
+                },
+                payload: {
+                    channelId: 'fdc3.channel.1',
+                    contextType: null,
+                },
+                type: 'getCurrentContextRequest',
+            };
+
+            instance.onGetCurrentContextRequest(getCurrentContextRequest, source);
+
+            const expectedMessage: BrowserTypes.GetCurrentContextResponse = {
+                meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
+                payload: {
+                    context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -1641,6 +1787,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: contact,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -1676,6 +1823,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: null,
+                    metadata: null,
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -1713,6 +1861,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 meta: { ...getCurrentContextRequest.meta, responseUuid: mockedResponseUuid },
                 payload: {
                     context: null,
+                    metadata: null,
                 },
                 type: 'getCurrentContextResponse',
             };
@@ -2105,6 +2254,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: testContact,
                     channelId: mockedChannelId,
+                    metadata: { source, timestamp: mockedDate, traceId: mockedGeneratedUuid },
                 },
                 type: 'broadcastEvent',
             };
@@ -2125,6 +2275,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: testContact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -2163,6 +2314,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context: testContact,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -2214,6 +2366,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
                 payload: {
                     context,
                     channelId: mockedChannelId,
+                    metadata: {},
                 },
                 type: 'broadcastRequest',
             };
@@ -2474,6 +2627,7 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             payload: {
                 channelId,
                 context,
+                metadata: {},
             },
             type: 'broadcastRequest',
         };

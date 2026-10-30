@@ -7,7 +7,11 @@
                 "lint",
                 "test",
                 "type-check-specs",
-                "generate-docs"
+                "generate-docs",
+                {
+                    "projects": ["test-harness-e2e"],
+                    "target": "e2e"
+                }
             ]
         },
         "clean": {},
@@ -82,7 +86,6 @@
             "preserveLocalDependencyProtocols": false,
             "manifestRootsToUpdate": [
                 "projects/fdc3-web/",
-                "projects/messaging-provider/",
                 "projects/ui-provider/"
             ]
         }

@@ -26,6 +26,7 @@ export default defineConfig(() => ({
                 rootApp: resolve(__dirname, 'index.html'),
                 appA: resolve(__dirname, 'app-a.html'),
                 appB: resolve(__dirname, 'app-b.html'),
+                connection: resolve(__dirname, 'connection.html'),
             },
         },
     },
