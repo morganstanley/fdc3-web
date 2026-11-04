@@ -1594,6 +1594,41 @@ describe(`${AppDirectory.name} (directory)`, () => {
         });
     });
 
+    describe('resolveAppIdFromIdentityUrl', () => {
+        it('should resolve the appId that registerNewInstance assigns for the same identity url', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            const resolvedAppId = await instance.resolveAppIdFromIdentityUrl('https://mock-url-two');
+            const { identifier } = await instance.registerNewInstance('https://mock-url-two');
+
+            expect(resolvedAppId).toBeDefined();
+            expect(resolvedAppId).toBe(identifier.appId);
+        });
+
+        it('should resolve an identity url that carries extra query params', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            const resolvedAppId = await instance.resolveAppIdFromIdentityUrl('https://mock-url-two?extra=param#hash');
+            const { identifier } = await instance.registerNewInstance('https://mock-url-two?extra=param#hash');
+
+            expect(resolvedAppId).toBe(identifier.appId);
+        });
+
+        it('should resolve undefined for an identity url matching no directory entry', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            expect(await instance.resolveAppIdFromIdentityUrl('https://unknown.example.com')).toBeUndefined();
+        });
+
+        it('should not register an instance', async () => {
+            const instance = createInstance([mockedAppDirectoryUrl]);
+
+            await instance.resolveAppIdFromIdentityUrl('https://mock-url-two');
+
+            expect(await instance.getAppInstances(mockedAppIdTwo)).toEqual([]);
+        });
+    });
+
     describe('registerNewInstance', () => {
         it('should copy intents from app directory into new instance lookup so instance resolves those intents', async () => {
             const instance = createInstance([mockedAppDirectoryUrl]);

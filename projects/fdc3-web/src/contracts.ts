@@ -370,6 +370,12 @@ export type ApplicationStrategyParams = {
 
 export type OpenApplicationStrategyResolverParams = ApplicationStrategyParams & {
     appReadyPromise: Promise<FullyQualifiedAppIdentifier>;
+    /**
+     * Resolves the appId that the desktop agent will assign to a connection that identifies itself with the given identity url
+     * (for example the `payload.identityUrl` of a WCP hello), or undefined if it matches no directory entry.
+     * Lets a strategy that opens a host page wait for the hello of the app inside that page, rather than the host page's own.
+     */
+    resolveAppIdFromIdentityUrl: (identityUrl: string) => Promise<FullyQualifiedAppId | undefined>;
 };
 
 export type DesktopAgentStrategies =

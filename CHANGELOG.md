@@ -1,3 +1,9 @@
+## Unreleased
+
+### Changed
+
+- Open strategies receive `resolveAppIdFromIdentityUrl(identityUrl)`, which resolves the appId the agent will assign to a connection with that identity url using the same lookup applied to new connections. A strategy that opens a host page can use it to wait for the hello of the app inside that page rather than the host page's own.
+
 ## 3.0.0 (2026-10-30)
 
 ### Changed
