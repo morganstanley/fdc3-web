@@ -2,7 +2,7 @@
 
 ### 🚀 Features
 
-- `OpenApplicationStrategyResolverParams` now includes `resolveAppIdFromIdentityUrl(identityUrl)`. It resolves to the appId the desktop agent will assign to a connection that identifies itself with that url, or `undefined` when no app directory entry matches. It uses the same app directory lookup that the agent applies when a new connection registers, so a strategy does not need to reimplement url matching. ([f25c209](https://github.com/Roaders/fdc3-web/commit/f25c209))
+- `OpenApplicationStrategyResolverParams` now includes `resolveAppIdFromIdentityUrl(identityUrl)`. It resolves to the appId the desktop agent will assign to a connection that identifies itself with that url, or `undefined` when no app directory entry matches. It uses the same app directory lookup that the agent applies when a new connection registers, so a strategy does not need to reimplement url matching.
 
   This supports open strategies that open a host page which then loads the target app in an iframe. The app's `WCP1Hello` arrives with `event.source` set to the iframe rather than the window the strategy opened, so `subscribeToConnectionAttemptUuids` does not match it, and the host page may send a hello of its own. To find the app's hello, pass each hello's `payload.identityUrl` to `resolveAppIdFromIdentityUrl` and compare the result with `appDirectoryRecord.appId`. Two instances of the same app connecting at the same time resolve to the same appId, so also check that `event.source` is the opened window or a frame inside it. `parent` and `top` can be read across origins.
 
