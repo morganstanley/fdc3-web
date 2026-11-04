@@ -340,11 +340,24 @@ export class AppDirectory {
     }
 
     /**
+     * Resolves the appId an app connecting with the given identity url will be assigned, using exactly the
+     * lookup that {@link registerNewInstance} applies to a new connection. Resolves undefined when no directory entry matches.
+     */
+    public async resolveAppIdFromIdentityUrl(identityUrl: string): Promise<FullyQualifiedAppId | undefined> {
+        const application = await this.resolveAppIdentity(identityUrl, false);
+
+        return isFullyQualifiedAppId(application?.appId) ? application.appId : undefined;
+    }
+
+    /**
      * Determines an app identity by looking up the identity url in the app directory. If the identity could not be determined an error message is returned
      * @param appDetails
      * @returns
      */
-    private async resolveAppIdentity(identityUrl: string): Promise<AppDirectoryApplication | undefined> {
+    private async resolveAppIdentity(
+        identityUrl: string,
+        logIfNotFound = true,
+    ): Promise<AppDirectoryApplication | undefined> {
         //ensures app directory has finished loading before intentListeners can be added dynamically
         await this.loadDirectoryPromise;
 
@@ -367,7 +380,9 @@ export class AppDirectory {
             return matchingApp;
         }
 
-        this.log('No App Identity found', LogLevel.ERROR, identityUrl, this.directory);
+        if (logIfNotFound) {
+            this.log('No App Identity found', LogLevel.ERROR, identityUrl, this.directory);
+        }
 
         return undefined;
     }

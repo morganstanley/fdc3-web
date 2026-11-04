@@ -144,6 +144,7 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
 
         mockAppDirectory = Mock.create<AppDirectory>().setup(
             setupFunction('unregisterIntentListener'),
+            setupFunction('resolveAppIdFromIdentityUrl', async () => 'resolved-app@mock-app-directory'),
             setupFunction('registerIntentListener', async app => {
                 if (app.appId === 'unqualified-app-id') {
                     return Promise.reject(ResolveError.TargetInstanceUnavailable);
@@ -2430,6 +2431,14 @@ describe(`${DesktopAgentImpl.name} (desktop-agent)`, () => {
                 expect(openParams?.manifest).toEqual(mockedApplication.hostManifests?.['mock-application']);
                 expect(openParams?.context).toEqual(contact);
                 expect(openParams?.contextMetadata).toEqual(expectedContextMetadata);
+
+                // delegates to the directory, so a strategy resolves identities exactly as new connections are
+                expect(await openParams?.resolveAppIdFromIdentityUrl('https://mock-url')).toBe(
+                    'resolved-app@mock-app-directory',
+                );
+                expect(
+                    mockAppDirectory.withFunction('resolveAppIdFromIdentityUrl').withParameters('https://mock-url'),
+                ).wasCalledOnce();
 
                 const resolvedApp = await mockOpenStrategy.functionCallLookup['open']?.[0][0].appReadyPromise;
 

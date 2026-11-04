@@ -172,6 +172,7 @@ describe(`${FallbackOpenStrategy.name} (fallback-open-strategy)`, () => {
             agent: mockDesktopAgent.mock,
             contextMetadata: testContextMetadata,
             appReadyPromise,
+            resolveAppIdFromIdentityUrl: async () => undefined,
         };
     }
 

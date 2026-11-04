@@ -1170,6 +1170,7 @@ export class DesktopAgentImpl extends DesktopAgentProxy implements DesktopAgentN
             context,
             contextMetadata,
             appReadyPromise,
+            resolveAppIdFromIdentityUrl: identityUrl => this.directory.resolveAppIdFromIdentityUrl(identityUrl),
         });
 
         if (newAppConnectionAttemptUuid == null) {
