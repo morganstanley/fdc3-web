@@ -3,3 +3,5 @@
 /coverage
 /.nx/cache
 /.nx/workspace-data
+/site/dist
+/site/src/api

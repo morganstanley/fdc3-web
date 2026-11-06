@@ -7,7 +7,7 @@
 /tmp
 /out-tsc
 /bazel-out
-/docs
+!/docs - source guides are versioned; TypeDoc output goes to site/src/api
 /dist
 /reports
 
