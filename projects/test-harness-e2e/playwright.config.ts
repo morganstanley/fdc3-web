@@ -38,13 +38,22 @@ export default defineConfig({
         viewport: { width: 1600, height: 1200 },
     },
     projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
-    // serve-e2e is identical to serve but does not open a browser window
-    webServer: {
-        command: 'npx nx serve-e2e test-harness',
-        url: 'http://localhost:4299/v2/apps',
-        timeout: 180_000,
-        cwd: fileURLToPath(new URL('../../', import.meta.url)),
-        reuseExistingServer: !process.env.CI,
-        env: { NX_DAEMON: 'false' },
-    },
+    webServer: [
+        {
+            command: 'npx nx serve-node test-harness',
+            url: 'http://localhost:4299/v2/apps',
+            timeout: 180_000,
+            cwd: fileURLToPath(new URL('../../', import.meta.url)),
+            reuseExistingServer: !process.env.CI,
+            env: { NX_DAEMON: 'false' },
+        },
+        {
+            command: 'npx nx serve-ui test-harness --configuration=e2e',
+            url: 'http://localhost:4200/index.html',
+            timeout: 180_000,
+            cwd: fileURLToPath(new URL('../../', import.meta.url)),
+            reuseExistingServer: !process.env.CI,
+            env: { NX_DAEMON: 'false' },
+        },
+    ],
 });
