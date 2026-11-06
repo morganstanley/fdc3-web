@@ -1,3 +1,10 @@
+## 3.1.1 (2026-11-06)
+
+### 🩹 Fixes
+
+- publish private channel disconnect events correctly ([dfbad0b](https://github.com/Roaders/fdc3-web/commit/dfbad0b))
+- accept addEventListenerRequest without channelId from FDC3 2.x proxies ([b699674](https://github.com/Roaders/fdc3-web/commit/b699674))
+
 ## 3.1.0 (2026-11-04)
 
 ### 🚀 Features
