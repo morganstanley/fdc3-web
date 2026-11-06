@@ -1029,7 +1029,7 @@ export class ChannelMessageHandler {
         );
 
         //publish privateChannelOnDisconnectEvent to all apps listening for them on given private channel
-        this.publishPrivateChannelOnDisconnectEvent(requestMessage, source);
+        this.publishPrivateChannelOnDisconnectEvent(requestMessage.payload.channelId, source);
 
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.PrivateChannelDisconnectResponse>(
@@ -1063,14 +1063,11 @@ export class ChannelMessageHandler {
     /**
      * Publish privateChannelOnDisconnectEvent to all apps who are listening for them on given private channel, excluding app which is disconnecting from channel
      */
-    private publishPrivateChannelOnDisconnectEvent(
-        requestMessage: BrowserTypes.PrivateChannelDisconnectRequest,
-        source: FullyQualifiedAppIdentifier,
-    ): void {
+    private publishPrivateChannelOnDisconnectEvent(channelId: string, source: FullyQualifiedAppIdentifier): void {
         //get all appIdentifiers for apps which are listening for PrivateChannelDisconnectEvents on this private channel
         //does not publish privateChannelOnDisconnectEvent to source app
         const listenerCriteria: (listener: PrivateChannelEventListener) => boolean = listener =>
-            listener.channelId === requestMessage.payload.channelId || appInstanceEquals(listener.source, source);
+            listener.channelId === channelId && !appInstanceEquals(listener.source, source);
         const appIdentifiers = [
             ...this.getAppsListeningForPrivateChannelEvent('disconnect', listenerCriteria),
             ...this.getAppsListeningForPrivateChannelEvent('allEvents', listenerCriteria),
@@ -1080,7 +1077,7 @@ export class ChannelMessageHandler {
         if (isNonEmptyArray(appIdentifiers)) {
             this.messagingProvider.publishEvent(
                 createEvent<BrowserTypes.PrivateChannelOnDisconnectEvent>('privateChannelOnDisconnectEvent', {
-                    privateChannelId: requestMessage.payload.channelId,
+                    privateChannelId: channelId,
                 }),
                 appIdentifiers,
             );
@@ -1088,10 +1085,32 @@ export class ChannelMessageHandler {
     }
 
     /**
+     * Returns ids of private channels the given app has joined: it has a context listener or an event listener on it,
+     * or it is in the channel's allowed list
+     */
+    private getPrivateChannelIdsForApp(appId: FullyQualifiedAppIdentifier): string[] {
+        const eventListenerChannelIds = Object.values(this.privateChannelEventListeners).flatMap(listeners =>
+            (listeners ?? []).filter(listener => appInstanceEquals(listener.source, appId)).map(l => l.channelId),
+        );
+        return Object.entries(this.privateChannels)
+            .filter(
+                ([channelId, channel]) =>
+                    channel != null &&
+                    (channel.allowedList.some(app => appInstanceEquals(app, appId)) ||
+                        eventListenerChannelIds.includes(channelId) ||
+                        this.contextListeners[channelId]?.some(l => appInstanceEquals(l.source, appId))),
+            )
+            .map(([channelId]) => channelId);
+    }
+
+    /**
      * Clean up all channel subscriptions for a disconnected proxy
      * @param appId The app ID of the disconnected proxy
      */
     public cleanupDisconnectedProxy(appId: FullyQualifiedAppIdentifier): void {
+        // Work out which private channels the app was on before its listeners are removed.
+        const privateChannelIds = this.getPrivateChannelIdsForApp(appId);
+
         // Remove the app from the currentUserChannels mapping if it exists.
         this.removeFromCurrentUserChannels(appId);
 
@@ -1106,6 +1125,11 @@ export class ChannelMessageHandler {
 
         // Clean up user channel context history for the disconnected app.
         this.cleanupUserChannelContexts(appId);
+
+        // Tell remaining listeners that the terminated app has disconnected from each private channel it was on.
+        for (const channelId of privateChannelIds) {
+            this.publishPrivateChannelOnDisconnectEvent(channelId, appId);
+        }
     }
 
     /**

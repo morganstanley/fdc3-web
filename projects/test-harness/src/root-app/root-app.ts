@@ -38,6 +38,7 @@ import {
 import { AppResolverComponent } from '@morgan-stanley/fdc3-web-ui-provider';
 import { html, LitElement, TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { repeat } from 'lit/directives/repeat.js';
 import { NEW_WINDOW_PUBLIC_CHANNEL, SELECT_APP_PUBLIC_CHANNEL } from '../constants.js';
 import {
     type AddApp,
@@ -423,7 +424,9 @@ export class RootApp
      */
     private renderApps(): TemplateResult {
         return html`<div class="root-apps-container hstack flex-grow-1 gap-5 p-4 overflow-auto">
-            ${this.appDetails.map(
+            ${repeat(
+                this.appDetails,
+                details => details,
                 details => html`
                     <app-container
                         @onIframeCreated="${(event: CustomEvent<{ window: WindowProxy; app: WebAppDetails }>) =>

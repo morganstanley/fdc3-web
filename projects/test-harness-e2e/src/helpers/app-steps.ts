@@ -81,10 +81,10 @@ export class AppSteps {
         });
     }
 
-    public async received(listener: string, args: unknown[]): Promise<void> {
+    public async received(listener: string, args: unknown[], timeout?: number): Promise<void> {
         await base.step(`Then ${this.name}'s ${listener} handler receives ${JSON.stringify(args)}`, async () => {
             await expect
-                .poll(() => this.events(listener))
+                .poll(() => this.events(listener), { timeout })
                 .toEqual(expect.arrayContaining([expect.objectContaining({ args })]));
         });
     }
