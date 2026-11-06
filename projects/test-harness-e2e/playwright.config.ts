@@ -48,7 +48,7 @@ export default defineConfig({
             env: { NX_DAEMON: 'false' },
         },
         {
-            command: 'npx nx serve-ui test-harness --open=false',
+            command: 'npx nx serve-ui test-harness --configuration=e2e',
             url: 'http://localhost:4200/index.html',
             timeout: 180_000,
             cwd: fileURLToPath(new URL('../../', import.meta.url)),

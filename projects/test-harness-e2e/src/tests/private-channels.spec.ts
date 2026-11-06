@@ -52,6 +52,25 @@ for (const eventType of [null, 'addContextListener', 'unsubscribe', 'disconnect'
     });
 }
 
+test('PrivateChannel disconnect event fires when the other app is closed without calling disconnect()', async ({
+    sender,
+    receiver,
+}) => {
+    const channel = await receiver.call('createPrivateChannel', [], 'agent', 'private');
+    await receiver.call('addEventListener', ['disconnect', handler('lifecycle')], 'private', 'eventListener');
+    await receiver.call('addIntentListener', ['PrivateStream', handler('intent', ref('private'))]);
+    await sender.call('raiseIntent', ['PrivateStream', instrument, await receiver.identity()], 'agent', 'resolution');
+    await check(
+        'the intent shares the same private channel',
+        await sender.call('getResult', [], 'resolution', 'private'),
+        expect.objectContaining({ id: channel.id, type: 'private' }),
+    );
+    await sender.call('addContextListener', [instrument.type, handler('stream')], 'private', 'contextListener');
+    await sender.start('close');
+    // a closed app is only detected via missed heartbeats, which takes several seconds
+    await receiver.received('lifecycle', [expect.objectContaining({ type: 'disconnect' })], 30_000);
+});
+
 test('createPrivateChannel allocates distinct channels and does not expose them as app channels', async ({
     sender,
     receiver,

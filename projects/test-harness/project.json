@@ -29,6 +29,11 @@
                 "buildTarget": "build-ui",
                 "open": "index.html",
                 "port": 4200
+            },
+            "configurations": {
+                "e2e": {
+                    "open": false
+                }
             }
         },
         "build-ui": {

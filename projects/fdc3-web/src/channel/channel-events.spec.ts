@@ -604,6 +604,27 @@ describe('scoped event registration', () => {
         expect(eventListeners).toEqual({});
     });
 
+    it('treats a missing channelId (sent by FDC3 2.x proxies) the same as null', () => {
+        const { server, publisher, client, eventListeners } = setup();
+        const a = client('a');
+        const response = vi.spyOn(publisher, 'publishResponseMessage');
+        server.onAddEventListenerRequest(
+            createRequestMessage<BrowserTypes.AddEventListenerRequest>('addEventListenerRequest', a.app, {
+                //2.x payloads only contain type
+                type: 'USER_CHANNEL_CHANGED',
+            } as BrowserTypes.AddEventListenerRequestPayload),
+            a.app,
+            eventListeners,
+        );
+        expect(response).toHaveBeenCalledWith(
+            expect.objectContaining({ payload: { listenerUUID: expect.any(String) } }),
+            a.app,
+        );
+        expect(eventListeners.userChannelChanged).toEqual([
+            expect.objectContaining({ appIdentifier: a.app, channelId: null }),
+        ]);
+    });
+
     it('rejects invalid API event types with Error objects for both scopes', async () => {
         const { client } = setup();
         const a = client('a');
