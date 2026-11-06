@@ -17,6 +17,21 @@
                 "parallel": true
             }
         },
+        "serve-e2e": {
+            "executor": "nx:run-commands",
+            "continuous": true,
+            "options": {
+                "commands": [
+                    {
+                        "command": "nx serve-node test-harness"
+                    },
+                    {
+                        "command": "nx serve-ui test-harness --configuration=e2e"
+                    }
+                ],
+                "parallel": true
+            }
+        },
         "build": {
             "dependsOn": [
                 "build-node",
@@ -29,6 +44,11 @@
                 "buildTarget": "build-ui",
                 "open": "index.html",
                 "port": 4200
+            },
+            "configurations": {
+                "e2e": {
+                    "open": false
+                }
             }
         },
         "build-ui": {
