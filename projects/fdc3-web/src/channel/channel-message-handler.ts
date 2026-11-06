@@ -1034,6 +1034,10 @@ export class ChannelMessageHandler {
         //publish privateChannelOnDisconnectEvent to all apps listening for them on given private channel
         this.publishPrivateChannelOnDisconnectEvent(requestMessage.payload.channelId, source);
 
+        //the app has left the channel: remove it from the allowed list and drop its event listeners for the channel so it is
+        //no longer treated as a participant (otherwise terminating it later would publish a second disconnect event)
+        this.removeAppFromPrivateChannel(channelId, source);
+
         this.messagingProvider.publishResponseMessage(
             createResponseMessage<BrowserTypes.PrivateChannelDisconnectResponse>(
                 'privateChannelDisconnectResponse',
@@ -1043,6 +1047,24 @@ export class ChannelMessageHandler {
             ),
             source,
         );
+    }
+
+    /**
+     * Removes app from the allowed list of given private channel and removes the app's event listeners on that channel
+     */
+    private removeAppFromPrivateChannel(channelId: string, app: FullyQualifiedAppIdentifier): void {
+        const channel = this.privateChannels[channelId];
+        if (channel != null) {
+            channel.allowedList = channel.allowedList.filter(allowedApp => !appInstanceEquals(allowedApp, app));
+        }
+
+        for (const [eventType, listeners] of Object.entries(this.privateChannelEventListeners)) {
+            if (listeners) {
+                this.privateChannelEventListeners[eventType as PrivateChannelEventListenerKey] = listeners.filter(
+                    listener => !(listener.channelId === channelId && appInstanceEquals(listener.source, app)),
+                );
+            }
+        }
     }
 
     /**

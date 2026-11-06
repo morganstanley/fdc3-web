@@ -2097,6 +2097,39 @@ describe(`${ChannelMessageHandler.name} (channel-message-handler)`, () => {
             ).wasCalledOnce();
         });
 
+        it(`should not publish privateChannelOnDisconnectEvent again when an app that already called disconnect() is terminated`, () => {
+            const instance = createInstance();
+
+            mockCreatePrivateChannel(instance);
+            instance.addToPrivateChannelAllowedList(mockedGeneratedUuid, source);
+            instance.addToPrivateChannelAllowedList(mockedGeneratedUuid, sourceTwo);
+
+            mockPrivateChannelAddEventListener('disconnect', mockedGeneratedUuid, source, instance);
+            mockPrivateChannelAddEventListener('disconnect', mockedGeneratedUuid, sourceTwo, instance);
+
+            instance.onPrivateChannelDisconnectRequest(
+                {
+                    meta: { requestUuid: mockedRequestUuid, timestamp: mockedDate, source },
+                    payload: { channelId: mockedGeneratedUuid },
+                    type: 'privateChannelDisconnectRequest',
+                },
+                source,
+            );
+            instance.cleanupDisconnectedProxy(source);
+
+            //sourceTwo is told once, when source calls disconnect(), and not again when source is terminated
+            expect(
+                mockRootMessagingProvider.withFunction('publishEvent').withParametersEqualTo(
+                    {
+                        meta: { eventUuid: mockedEventUuid, timestamp: mockedDate },
+                        payload: { privateChannelId: mockedGeneratedUuid },
+                        type: 'privateChannelOnDisconnectEvent',
+                    },
+                    [sourceTwo],
+                ),
+            ).wasCalledOnce();
+        });
+
         it(`should not publish privateChannelOnDisconnectEvent when a terminated app was not on the channel`, () => {
             const instance = createInstance();
 
