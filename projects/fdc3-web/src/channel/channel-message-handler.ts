@@ -65,7 +65,10 @@ export class ChannelMessageHandler {
         source: FullyQualifiedAppIdentifier,
         eventListeners: EventListenerLookup,
     ): void {
-        const { channelId, type } = requestMessage.payload;
+        const { type } = requestMessage.payload;
+        //FDC3 2.x proxies (e.g. getAgent from @finos/fdc3 2.2.x) predate the channelId field and omit it entirely,
+        //whereas 3.0 sends null for Desktop Agent level listeners. Treat omitted the same as null.
+        const channelId = requestMessage.payload.channelId ?? null;
         const error =
             type !== null && type !== 'USER_CHANNEL_CHANGED' && type !== 'CONTEXT_CLEARED'
                 ? ResolveError.InvalidArguments
