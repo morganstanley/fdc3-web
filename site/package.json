@@ -1,0 +1,21 @@
+{
+    "name": "@morgan-stanley/fdc3-web-docs",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "api": "node scripts/generate-api.mjs",
+        "check": "node scripts/check-docs.mjs",
+        "build": "npm run api && npm run check && vite build",
+        "preview": "vite preview"
+    },
+    "devDependencies": {
+        "highlight.js": "^11.11.1",
+        "marked": "^16.3.0",
+        "typedoc": "^0.28.20",
+        "typedoc-plugin-markdown": "^4.14.1",
+        "typescript": "~5.9.3",
+        "vite": "^6.4.5"
+    }
+}

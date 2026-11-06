@@ -9,7 +9,7 @@
         "generate-docs": {
             "executor": "nx:run-commands",
             "options": {
-                "command": "npx typedoc {projectRoot}/src/index.ts --out docs/{projectName} --options typedoc.json --tsconfig {projectRoot}/tsconfig.lib.json"
+                "command": "npx typedoc {projectRoot}/src/index.ts --out tmp/typedoc-html/{projectName} --options typedoc.json --tsconfig {projectRoot}/tsconfig.lib.json"
             },
             "dependsOn": []
         },
