@@ -6,3 +6,8 @@ Copyright 2025 Morgan Stanley
 Copyright OpenFin Inc. (info@openfin.co)
 Copyright FINOS (info@finos.org)
 Copyright Contributors to the FDC3 standards project (fdc3@finos.org)
+
+Documentation site:
+The published site bundles the following third-party packages. Their licence texts are included in the site bundle.
+- marked: MIT License.
+- highlight.js: BSD-3-Clause License.

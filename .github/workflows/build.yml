@@ -25,6 +25,10 @@ jobs:
               with:
                   node-version: ${{ env.NODE_VERSION }}
             - run: npm ci
+            - name: Install documentation dependencies
+              run: npm --prefix site ci
+            - name: Validate the documentation site
+              run: npm run docs:check && npm run docs:build
             - name: Install Playwright Chromium
               run: npx playwright install --with-deps chromium
             - run: npm run build:release
