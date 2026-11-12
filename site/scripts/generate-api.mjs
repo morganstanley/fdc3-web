@@ -76,33 +76,57 @@ const diagnostics = ts.getPreEmitDiagnostics(program);
 if (diagnostics.length) throw new Error('TypeScript could not inspect the public exports');
 const source = program.getSourceFile(apiRoot);
 const registry = [];
+
+/** Follow `export { name } from` to the declaration that introduces the symbol. */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- .mjs cannot declare a return type
+const exportedDeclaration = symbol => {
+    let current = symbol;
+    const seen = new Set();
+    while (current.flags & ts.SymbolFlags.Alias) {
+        if (seen.has(current)) break;
+        seen.add(current);
+        const next = checker.getAliasedSymbol(current);
+        if (!next || next === current) break;
+        current = next;
+    }
+    return current.declarations?.[0];
+};
+
+/**
+ * Classify from the real declaration. A `ts.is*` ladder that treats every
+ * variable as a function (and everything else as a type) mislabels `const`
+ * exports and enums.
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- .mjs cannot declare a return type
+const exportKind = declaration => {
+    if (ts.isClassDeclaration(declaration)) return 'class';
+    if (ts.isInterfaceDeclaration(declaration)) return 'interface';
+    if (ts.isEnumDeclaration(declaration)) return 'enum';
+    if (ts.isFunctionDeclaration(declaration)) return 'function';
+    if (ts.isVariableDeclaration(declaration)) {
+        return ts.getCombinedNodeFlags(declaration) & ts.NodeFlags.Const ? 'const' : 'variable';
+    }
+    if (ts.isTypeAliasDeclaration(declaration)) return 'type';
+    return 'type';
+};
+
 for (const symbol of checker.getExportsOfModule(checker.getSymbolAtLocation(source))) {
-    const declaration = symbol.declarations?.[0];
+    // Re-exports such as getAgent are ExportSpecifiers. Resolving the alias
+    // yields the original const in get-agent.ts, so the route and kind are set once.
+    const declaration = exportedDeclaration(symbol);
     const declarationFile = declaration?.getSourceFile().fileName;
     if (!declarationFile || declarationFile.includes('/contracts.internal.ts')) continue;
     const relative = path.relative(resolve(repository, 'projects/fdc3-web/src'), path.resolve(declarationFile));
     const route = relative.replace(/\.ts$/, '').replace(/\/index$/, '');
-    const kind = ts.isClassDeclaration(declaration)
-        ? 'class'
-        : ts.isInterfaceDeclaration(declaration)
-          ? 'interface'
-          : ts.isFunctionDeclaration(declaration) || ts.isVariableDeclaration(declaration)
-            ? 'function'
-            : 'type';
-    const entry = { name: symbol.name, kind, route, anchor: symbol.name.toLowerCase() };
-    registry.push(entry);
+    const kind = exportKind(declaration);
     const anchor = symbol.name.toLowerCase();
-    if (symbol.name === 'getAgent') {
-        registry[registry.length - 1] = { name: 'getAgent', kind: 'function', route: 'get-agent/get-agent', anchor };
-        const filename = resolve(output, 'get-agent/get-agent.md');
-        const markdown = await readFile(filename, 'utf8');
-        const target = `### ${symbol.name}\n`;
-        await writeFile(filename, markdown.replace(target, `<a id="${anchor}"></a>\n\n${target}`));
-    } else if (kind === 'type' || kind === 'interface') {
+    registry.push({ name: symbol.name, kind, route, anchor });
+    // Shared module pages document these as `### Name` rather than as the page heading.
+    if (kind === 'type' || kind === 'interface' || kind === 'enum' || kind === 'const') {
         const filename = resolve(output, `${route}.md`);
         const markdown = await readFile(filename, 'utf8');
         const target = `### ${symbol.name}\n`;
-        if (markdown.includes(target)) {
+        if (markdown.includes(target) && !markdown.includes(`<a id="${anchor}"></a>`)) {
             await writeFile(filename, markdown.replace(target, `<a id="${anchor}"></a>\n\n${target}`));
         }
     }

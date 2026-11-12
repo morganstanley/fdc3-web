@@ -35,17 +35,22 @@ for (const file of [...sourceFiles, ...apiFiles]) {
     const route = fromDocs
         ? relative.replace(/\.md$/, '')
         : `api/${path.relative(generatedApi, file).replace(/\.md$/, '').replaceAll(path.sep, '/')}`;
+    const seenHeadings = new Map();
     const headings = [...markdown.matchAll(/<a id="([^"]+)"><\/a>/g)]
         .map(match => match[1])
         .concat(
-            (markdown.match(/^#{1,6} (.+)$/gm) ?? []).map(heading =>
-                heading
+            (markdown.match(/^#{1,6} (.+)$/gm) ?? []).map(heading => {
+                const base = heading
                     .replace(/^#{1,6} /, '')
                     .trim()
                     .toLowerCase()
                     .replace(/[^\w\- ]/g, '')
-                    .replace(/ /g, '-'),
-            ),
+                    .replace(/ /g, '-');
+                // Match site/src/main.ts: the first heading keeps the base id, repeats are base-2, base-3, ...
+                const count = seenHeadings.get(base) ?? 0;
+                seenHeadings.set(base, count + 1);
+                return count === 0 ? base : `${base}-${count + 1}`;
+            }),
         );
     routeByFile.set(file, { route, headings, bytes: fileInfo.size });
 }
@@ -90,8 +95,6 @@ for (const entry of registry) {
         errors.push(`Generated registry:${entry.kind} ${entry.name} does not resolve to ${route}#${entry.anchor}`);
     }
 }
-if (registry.length !== 176) console.log(`Generated API registry contains ${registry.length} public exports`);
-
 for (const [file, { bytes }] of routeByFile) {
     if (bytes === 0) errors.push(`${path.relative(repository, file)} is empty`);
 }

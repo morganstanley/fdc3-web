@@ -1,3 +1,6 @@
 /node_modules/
 /dist/
 /src/api/
+# Copied from the repo root by site/scripts/generate-api.mjs during a docs build.
+/public/LICENSE
+/public/NOTICE

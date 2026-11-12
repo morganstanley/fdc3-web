@@ -32,8 +32,6 @@ jobs:
             - name: Install Playwright Chromium
               run: npx playwright install --with-deps chromium
             - run: npm run build:release
-            - name: Rebuild the bundled documentation after the clean step
-              run: npm run docs:build
 
             - name: Codecov
               uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1

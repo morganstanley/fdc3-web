@@ -14,6 +14,6 @@ npm run docs:build
 npm run docs:preview
 ```
 
-The default base path is `/fdc3-web/` for the repository's GitHub Pages URL. `.github/workflows/docs-site.yml` configures and deploys that path after a push to `main`. A repo admin must select **GitHub Actions** as the Pages source before the first deployment.
+The base path defaults to `/fdc3-web/` for the repository's GitHub Pages URL. Set the `DOCS_BASE` environment variable to publish the site at a different path. `.github/workflows/docs-site.yml` configures and deploys the default path after a push to `main`. A repo admin must select **GitHub Actions** as the Pages source before the first deployment.
 
 The site's brand palette follows Morgan Stanley's published design-system blues: Blue `#187ABA`, Navy `#002B51` and their 20%, 40% and 80% tones. Source content lives in `docs/`; `site/src/api/` is generated and never committed.

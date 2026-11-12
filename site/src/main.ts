@@ -41,6 +41,14 @@ const slugify = (text: string): string =>
         .replace(/[^\w\- ]/g, '')
         .trim()
         .replace(/ /g, '-');
+/** Per-page heading ids. Repeated titles such as Parameters/Returns become parameters-2, parameters-3, ... */
+const headingCounts = new Map<string, number>();
+const uniqueSlug = (text: string): string => {
+    const base = slugify(text);
+    const count = headingCounts.get(base) ?? 0;
+    headingCounts.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count + 1}`;
+};
 const highlight = (code: string, language?: string): string =>
     language && hljs.getLanguage(language) ? hljs.highlight(code, { language }).value : escapeHtml(code);
 
@@ -113,6 +121,14 @@ const navigation = [
 ];
 
 const apiEntries = apiRegistry as ApiEntry[];
+const apiCollectionKind: Record<string, string> = {
+    classes: 'class',
+    interfaces: 'interface',
+    functions: 'function',
+    'type-aliases': 'type',
+    enums: 'enum',
+    variables: 'const',
+};
 const findApiEntry = (kind: string, name: string): ApiEntry | undefined =>
     apiEntries.find(entry => entry.kind === kind && entry.name === name);
 
@@ -122,7 +138,7 @@ const marked = new Marked({
             return `<pre><button class="copy" type="button">Copy code</button><code class="hljs">${highlight(text, lang)}</code></pre>`;
         },
         heading({ tokens, depth, text }) {
-            const id = slugify(text);
+            const id = uniqueSlug(text);
             const heading = this.parser.parseInline(tokens);
             if (depth === 1) return `<h1 id="${id}">${heading}</h1>`;
             return `<h${depth} id="${id}">${heading}<a class="anchor" href="#" data-anchor="${id}" aria-label="Link to ${escapeHtml(text)}">#</a></h${depth}>`;
@@ -167,6 +183,10 @@ const marked = new Marked({
         },
     },
 });
+const parseDocument = (markdown: string): string => {
+    headingCounts.clear();
+    return marked.parse(markdown) as string;
+};
 
 const page = document.querySelector<HTMLElement>('#page')!;
 const sidebar = document.querySelector<HTMLElement>('#side')!;
@@ -196,13 +216,13 @@ function closeMenu(): void {
 
 function renderMarkdown(doc: Doc, api: boolean): void {
     currentDocument = doc;
-    page.innerHTML = `${api ? '<div class="breadcrumbs"><a href="#/api/modules">API reference</a> / generated from TypeScript</div>' : ''}<article>${marked.parse(doc.markdown) as string}</article>`;
+    page.innerHTML = `${api ? '<div class="breadcrumbs"><a href="#/api/modules">API reference</a> / generated from TypeScript</div>' : ''}<article>${parseDocument(doc.markdown)}</article>`;
     document.title = `${doc.title.replace(/`/g, '')} · fdc3-web`;
 }
 
 function apiOverview(doc: Doc): void {
     currentDocument = doc;
-    page.innerHTML = `<article>${marked.parse(doc.markdown) as string}</article>
+    page.innerHTML = `<article>${parseDocument(doc.markdown)}</article>
         <p class="api-intro">Regenerated with TypeDoc on every site build from <code>projects/fdc3-web/src/index.ts</code>. Function parameters and return types follow the library's actual public contracts. Standard FDC3 DesktopAgent types are defined by <code>@finos/fdc3</code>.</p>
         <label for="api-search"><strong>Browse the generated reference</strong></label>
         <input id="api-search" class="api-search" type="search" placeholder="Filter by e.g. getAgent, channel or strategy" aria-label="Filter API symbols" />
@@ -274,19 +294,8 @@ function route(): void {
     if (!routeName) home();
     else if (routeName === 'api/modules') apiOverview(apiDocuments.get('modules')!);
     else if (routeName.startsWith('api/')) {
-        const alias = /^api\/(classes|interfaces|functions|type-aliases)\/([^/#]+)$/.exec(routeName);
-        const entry = alias
-            ? findApiEntry(
-                  alias[1] === 'classes'
-                      ? 'class'
-                      : alias[1] === 'interfaces'
-                        ? 'interface'
-                        : alias[1] === 'functions'
-                          ? 'function'
-                          : 'type',
-                  alias[2],
-              )
-            : undefined;
+        const alias = /^api\/(classes|interfaces|functions|type-aliases|enums|variables)\/([^/#]+)$/.exec(routeName);
+        const entry = alias ? findApiEntry(apiCollectionKind[alias[1]], alias[2]) : undefined;
         if (entry && !anchor) anchor = entry.anchor;
         const doc = apiDocuments.get(entry?.route ?? routeName.slice(4));
         if (doc) renderMarkdown(doc, true);
@@ -348,10 +357,11 @@ sidebar.addEventListener('click', (event): void => {
     if ((event.target as HTMLElement).closest('a')) closeMenu();
 });
 menu.addEventListener('click', () => {
-    const open = !sidebar.classList.toggle('open');
-    scrim.classList.toggle('open', !open);
-    menu.setAttribute('aria-expanded', String(!open));
-    menu.setAttribute('aria-label', open ? 'Open documentation menu' : 'Close documentation menu');
+    // toggle() reports the class after the click, so this is true when the menu is now closed.
+    const isClosed = !sidebar.classList.toggle('open');
+    scrim.classList.toggle('open', !isClosed);
+    menu.setAttribute('aria-expanded', String(!isClosed));
+    menu.setAttribute('aria-label', isClosed ? 'Open documentation menu' : 'Close documentation menu');
 });
 scrim.addEventListener('click', closeMenu);
 window.addEventListener('hashchange', route);

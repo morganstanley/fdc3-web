@@ -7,7 +7,7 @@
 /tmp
 /out-tsc
 /bazel-out
-!/docs - source guides are versioned; TypeDoc output goes to site/src/api
+# Source guides in /docs are versioned. Generated TypeDoc Markdown is written under site/src/api.
 /dist
 /reports
 
