@@ -3,7 +3,9 @@
 ![Lifecycle Incubating](https://img.shields.io/badge/Lifecycle-Incubating-yellow)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/morganstanley/fdc3-web/actions/workflows/build.yml/badge.svg)](https://github.com/morganstanley/fdc3-web/actions/workflows/build.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/morganstanley/fdc3-web/badge)](https://securityscorecards.dev/viewer/?uri=github.com/morganstanley/fdc3-web)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/morganstanley/fdc3-web/badge)](https://securityscorecards.dev/viewer/?uri=github.com/morganstanley/fdc3-web) 
+
+<a href="https://www.credly.com/badges/4e3adf5c-bd7e-4b29-86d1-7edddc693cff/public_url"><img src="https://images.credly.com/size/110x110/images/345ac0f8-15f6-47bf-882c-7c3d6fbe8138/blob" alt="FDC3 3.0 Certified Desktop Agent" width="110" height="110"></a>
 
 ## Installation
 
